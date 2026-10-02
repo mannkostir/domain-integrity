@@ -1,12 +1,18 @@
 # domain-integrity
 
-Your aggregates have lifecycles. Nothing checks them.
+[![npm](https://img.shields.io/npm/v/domain-integrity)](https://www.npmjs.com/package/domain-integrity)
+[![CI](https://github.com/mannkostir/domain-integrity/actions/workflows/ci.yml/badge.svg)](https://github.com/mannkostir/domain-integrity/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/domain-integrity)](LICENSE)
 
-`domain-integrity` is a TypeScript CLI that reads your aggregates with the type checker, compares what the code actually allows against the lifecycle you declare, and reports the places where they disagree.
+**Your aggregates have lifecycles. Nothing checks them.**
 
-## The problem, in one example
+Your tests pass and your types check, yet a closed account still accepts deposits and a cancelled order can still be edited. Lifecycle rules live in people's heads, and every new method, whether you or a coding agent wrote it, can quietly break one.
 
-An `Account` can be closed. Once closed, nothing should happen to it. But nobody wrote that down, so nothing stops this:
+`domain-integrity` reads your aggregates with the TypeScript type checker. It works out which states each method can actually run from, compares that with a three-line declaration of what you intended, and fails CI where the two disagree.
+
+## See it catch a bug
+
+A typical aggregate. Once an account is closed, nothing should happen to it, but nothing enforces that:
 
 ```ts
 import { AggregateRoot } from './aggregate-root';
@@ -41,7 +47,7 @@ export class Account extends AggregateRoot<{ balance: number }> {
 }
 ```
 
-Declare the intent: `closedAt` is the lifecycle field, and an account is finished once it is set.
+Write the rule down once:
 
 ```ts
 import { defineDomain, lifecycle } from 'domain-integrity';
@@ -74,11 +80,11 @@ error terminal-state-leak  Account.close()  src/account.ts:26
 4 errors, 0 warnings
 ```
 
-Every method can still run on a closed account. The exit code is `1`.
+Every method still runs on a closed account, including `close()` itself. The exit code is `1`, so CI fails.
 
-## Diagram
+## See the lifecycle
 
-`npx domain-integrity show` prints a Mermaid state diagram per aggregate, merging what the code does with what you declared. Drifted transitions and terminal-state leaks are styled distinctly. Here the red `cancelled` state is a leak: `annotate` still runs after the order is cancelled.
+`npx domain-integrity show` draws each aggregate's real state machine as Mermaid, which renders directly on GitHub. Here is an `Order` whose declaration says `place` runs from `paid` and `cancel` runs only from `pending` or `confirmed`:
 
 ```mermaid
 stateDiagram-v2
@@ -101,7 +107,15 @@ stateDiagram-v2
   class status_4 leak
 ```
 
-## Install and first run
+The picture shows four bugs:
+- **`paid` is unreachable.** No code ever sets it.
+- **`place` skips payment.** It runs straight from `confirmed`.
+- **`cancel` runs too late.** It still works after the order is paid or placed.
+- **`annotate` leaks past the end.** It still changes a cancelled order.
+
+`check` reports each of them, with a fix.
+
+## Quick start
 
 ```bash
 npm i -D domain-integrity
@@ -109,9 +123,79 @@ npx domain-integrity init
 npx domain-integrity check
 ```
 
-`init` discovers aggregates, proposes state fields and terminal values, and writes `domain.config.ts` with real imports. It asks per aggregate in a TTY; pass `--yes` to accept every suggestion. On an existing config it only adds undeclared aggregates and never modifies existing declarations.
+`init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. You review the suggestions once; after that, `check` runs on every commit.
 
-Exit codes: `0` no error-level findings, `1` error-level findings, `2` configuration, project or usage error. `domain.config.ts` is read statically and never executed.
+**Requirements:** Node 20+, a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
+
+## What it checks
+
+| Check | Catches |
+|---|---|
+| `terminal-state-leak` | A public method that can still change the aggregate after it reached a terminal state |
+| `unreachable-state` | A state your type declares but no code ever assigns |
+| `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification |
+| `transition-drift` | A method that can run from states you did not declare (error), or no longer from states you did (warning) |
+
+Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `init [--yes]` | Suggests and writes declarations. On an existing config it only adds new aggregates. |
+| `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error. |
+| `show [Aggregate]` | Prints Mermaid state diagrams. |
+| `context [--write AGENTS.md]` | Writes a lifecycle summary for coding agents. |
+
+Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. The config is read statically and never executed.
+
+## Built for codebases that agents write
+
+Agents produce code that passes tests and still breaks the domain. Give them the rules before they write:
+
+```bash
+npx domain-integrity context --write AGENTS.md
+```
+
+This writes each aggregate's states, terminal values and allowed transitions into a marked section of `AGENTS.md`, or `CLAUDE.md`, and leaves the rest of the file untouched. The agent reads the rules up front, and `check` catches whatever slips through.
+
+## Adopt it in an existing codebase
+
+You don't have to fix everything first. Record today's findings and fail only on new ones:
+
+```bash
+npx domain-integrity check --update-baseline
+npx domain-integrity check --baseline domain-integrity.baseline.json
+```
+
+Baseline entries are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
+
+## CI
+
+```yaml
+name: domain-integrity
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  lifecycles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - uses: mannkostir/domain-integrity@v0
+        with:
+          baseline: domain-integrity.baseline.json
+```
+
+Findings appear as code-scanning alerts on the pull request, and the job fails when `check` does.
 
 ## The declaration
 
@@ -141,96 +225,58 @@ export default defineDomain({
 });
 ```
 
-- `states`: one or more state fields of the aggregate. Each field is analysed independently. Supported types are enum, string-literal union, boolean, and nullable (`T | null` or optional). Name the data field itself: a field that exists only as a getter or setter is rejected, so declare its backing field (for example `_status`) instead.
-- `terminal`: required per state field. The values after which the aggregate should do nothing. For nullable fields use `'set'` (non-null) or `'unset'`.
-- `transitions`: optional. Maps a method name to the values it may run from. Keys are typed as the class's method names, values as the field's values.
-- `allowAfterTerminal`: methods exempt from `terminal-state-leak`, such as a `remove` that is meant to run on a finished aggregate.
-- `aggregateBaseClasses`: base classes that mark a class as an aggregate. Defaults to `['AggregateRoot', 'Entity']`.
-- `auditFields`: fields excluded from `init` suggestions. Defaults to `['createdAt', 'updatedAt', 'version']`. Declaring a field in `states` overrides the exclusion.
-- `eventMethods`: calls that count as emitting a domain event, and therefore as mutation. Defaults to `['addEvent', 'addDomainEvent', 'apply']`.
+| Option | Meaning |
+|---|---|
+| `states` | The aggregate's state fields. Supported: enum, string-literal union, boolean, and nullable (`T \| null` or optional; use `'set'` and `'unset'`). Name the data field itself, e.g. `_status` rather than its getter. |
+| `terminal` | Required. The values after which the aggregate must not change. |
+| `transitions` | Optional. The states each method may run from. Method names are type-checked; values are validated when `check` runs. |
+| `allowAfterTerminal` | Methods allowed on a finished aggregate, such as `remove`. |
+| `aggregateBaseClasses` | Base classes that mark an aggregate. Default: `['AggregateRoot', 'Entity']`. |
+| `auditFields` | Fields `init` never suggests. Default: `['createdAt', 'updatedAt', 'version']`. |
+| `eventMethods` | Calls that emit domain events. Default: `['addEvent', 'addDomainEvent', 'apply']`. |
 
-## Checks
+## Quiet by design
 
-| Id | Requires | Reports | Severity |
-|---|---|---|---|
-| `terminal-state-leak` | `terminal` | A public method that mutates and whose allowed sources for the field include a terminal value, unless listed in `allowAfterTerminal` | error |
-| `unreachable-state` | enum or union state field | A value of the field that is never assigned anywhere (inside or outside the class) and is not the initial value set by a static factory or constructor | error |
-| `outside-mutation` | state field | Any assignment to the state field from outside the aggregate class, detected through the type checker, including in specification and mapper classes | error |
-| `transition-drift` | `transitions` | Code allows a source that is not declared | error |
-| | | Code allows fewer sources than declared | warning |
-| | | A public method sets the field but has no entry in the declared `transitions` | error |
+A lint rule that cries wolf gets switched off. `domain-integrity` reports only what it can prove, and stays silent on code it cannot follow. In practice it says nothing about:
 
-`terminal-state-leak` and `transition-drift` judge only public methods. Private, protected and `#private` methods, such as event-sourcing appliers reached through `apply`, are left to the public command that calls them. Methods inherited from base classes in your project count as the aggregate's own, and a method the aggregate overrides is judged in its overriding form. Methods of the classes listed in `aggregateBaseClasses`, and of classes from libraries, are not judged.
+- **Guards it can't follow.** Examples are rule or policy objects, conditions on local copies of the state, and abstract or library methods. That method is skipped for that field.
+- **Methods that hand out `this`.** That covers fluent `return this`, passing the aggregate to a constructor, and aliasing or destructuring it.
+- **Object fields in aggregates that leak `this` anywhere.** Methods that read those fields are skipped, because a field might hold a callback into the aggregate.
+- **Calls to library base-class methods**, other than the configured event methods, because library code can call back into your overrides. An allowlist is planned: [#9](https://github.com/mannkostir/domain-integrity/issues/9).
+- **Values mentioned elsewhere.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types.
+- **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 
-Findings for a field whose allowed sources cannot be determined are suppressed for that method. Unknown never produces a finding.
+A few rare self-wiring shapes can still produce a false finding; [#10](https://github.com/mannkostir/domain-integrity/issues/10) lists them. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
 
-Output formats: `--format text|json|sarif`.
+<details>
+<summary>The precise rules</summary>
 
-## Existing codebases
+- **Guards.** A guard counts only if it is an early return or throw, or an `if` that wraps the whole method, with conditions built from `===`, `!==`, truthiness, `&&`, `||`, `!`, and getters that return such a condition. Any other read of the state field in the method makes its allowed sources unknown. Unknown never produces a finding.
+- **Members without a body.** A member with no body in the project counts as reading the state field. That includes abstract members, members declared only in `.d.ts` files, and members of base classes that cannot be resolved. There are two exceptions:
+  - configured `eventMethods`, which are assumed not to read it;
+  - library data properties whose type is not callable and cannot hold the field. A `.d.ts` that declares a getter as a plain property is trusted as written.
+- **`this` escapes.** A method that lets `this` or `this.props` escape is not judged. That covers aliasing, destructuring, passing as an argument, returning, and `this.props = { ...this.props }`.
+- **Aggregates that leak `this`.** An aggregate leaks `this` when anywhere in its project base classes or subclasses either of these happens:
+  - `this` or `this.props` escapes;
+  - an arrow function captures `this`, other than as a direct callback of `filter`, `map`, `some`, `every`, `find`, `findIndex`, `forEach`, `reduce`, `flatMap` or `sort` on a built-in array.
 
-Adopt it without fixing everything first. Record the current findings, then fail only on new ones:
+  These do not count as leaks:
+  - a discarded `Object.assign(this, …)`;
+  - an object spread of `this` or `this.props`;
+  - a static factory's plain `return v;`.
 
-```bash
-npx domain-integrity check --update-baseline
-npx domain-integrity check --baseline domain-integrity.baseline.json
-```
+  Inside static members, locals and parameters typed as the aggregate are tracked like `this`. In a leaking aggregate, every non-primitive project field counts as reading the state field. In an aggregate that does not leak, project fields are plain data.
+- **Unreachable values.** `unreachable-state` is skipped for a field if any of these holds:
+  - the field has an assignment whose value cannot be resolved;
+  - a method may write the field through an escaping `this`;
+  - the value is mentioned anywhere outside comparisons and type positions.
+- **Imports.** With `NodeNext` module resolution, add `.js` to the imports that `init` generates.
 
-`--update-baseline` writes `domain-integrity.baseline.json` unless you pass a path with `--baseline`. Findings are keyed by check id, aggregate, method and field, not by line number, so unrelated edits do not invalidate the baseline. Findings in the baseline are reported as known and do not affect the exit code.
+</details>
 
-## CI
+## Status
 
-```yaml
-name: domain-integrity
-on:
-  push:
-    branches: [main]
-  pull_request:
-permissions:
-  contents: read
-  security-events: write
-jobs:
-  lifecycles:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - uses: mannkostir/domain-integrity@v0
-        with:
-          project: tsconfig.json
-          config: domain.config.ts
-          baseline: domain-integrity.baseline.json
-```
-
-The action uploads findings as SARIF, so they show up as code scanning alerts, and fails the job when `check` exits non-zero.
-
-## Agents
-
-```bash
-npx domain-integrity context --write AGENTS.md
-```
-
-This writes a compact summary per aggregate (states, terminal values, allowed transitions) into a delimited section of `AGENTS.md`. Content outside the section is never touched. Agents read the lifecycle rules before writing code, so they stop adding methods that run on finished aggregates.
-
-## What it does not see
-
-The analyzer prefers silence to a wrong finding. These cases produce no finding:
-
-- **Guards it cannot interpret.** If a guard on a state field cannot be interpreted, nothing is reported for that method and field. Examples are rule objects, policy objects, conditions built from local aliases, and calls to members whose body cannot be read, such as abstract methods, methods declared only in `.d.ts` files, and members of base classes that cannot be resolved. Any such member, and any other method or accessor without a body in the project, is treated as reading the state field, because library code can call back into methods the project overrides. The one exception is a data property declared in a library whose type is not callable and cannot hold the state field (not `any`, not the aggregate, without that field directly or under `props`, without a string index signature): data properties run no code. A function-typed property that is invoked counts as a read.
-- **`this` escaping.** Any method that lets `this` or `this.props` escape is not judged. That includes aliasing, destructuring, passing `this` as an argument, returning `this`, and immutable updates such as `this.props = { ...this.props }`.
-- **Fluent methods.** Methods that `return this`, or pass `this` along, are not judged, and are not asked to declare a transition.
-- **Values that might be assigned elsewhere.** `unreachable-state` stays silent for any value that is mentioned anywhere in the analysed code outside comparisons and types, and for any field that has an assignment whose value cannot be resolved or that a method may write through an escaping `this`.
-- **Event methods.** The analyzer assumes that the configured `eventMethods` (by default `addEvent`, `addDomainEvent` and `apply`) do not read the state field when their body is not in the project, and it does not judge the event handlers they dispatch to as guards.
-- **Fields that may hold the aggregate.** If the aggregate leaks `this` anywhere in its project base classes or subclasses, by letting `this` or `this.props` escape (copying values with a discarded `Object.assign(this, …)` or an object spread of `this` or `this.props` does not count) or by an arrow function that references `this` other than a direct callback of `filter`, `map`, `some`, `every`, `find`, `findIndex`, `forEach`, `reduce`, `flatMap` or `sort` called on a built-in array or tuple, or by a static factory that lets a local variable or parameter typed as the aggregate escape or be captured by a closure (a plain `return v;` does not count), then every project field whose type is not primitive (string, number, boolean, bigint, symbol, literal, enum, or a built-in library type such as `Date`) is treated as reading the state field, and methods that read such fields are not judged. In an aggregate that does not leak `this`, project fields are treated as plain data whatever their type. Inside static members, only locals and parameters typed as the aggregate or a class in its family are tracked. A back-reference wired in any of these ways is not seen and can produce a false leak: from outside the class, such as `agg.policy = new Policy(agg)`; a static-member local typed through an interface the aggregate implements, typed `any`, typed as an intersection, or left untyped (`let o; o = new X()`); the instance held inside another object (`box.o.policy.owner = box.o`); wiring inside an instance-method factory such as `clone()`; and a module-level factory function. Data properties declared in a library count as reads when their type is callable, contains something callable, has an index signature or could hold the state field. A `.d.ts` file that declares a getter as a plain property is trusted as written and treated as data.
-- **Direct database writes.** State changed by direct database writes, such as an `UPDATE` statement or a query builder, is invisible.
-
-Project requirements:
-
-- Projects using `NodeNext` module resolution must add `.js` to the imports that `init` generates.
-- `strictNullChecks` is required for nullable state fields.
-- TypeScript 6 users with deprecated tsconfig options are fine. Diagnostics outside `domain.config.ts` are ignored.
+Early: version 0.x. The analysis is validated against nine public TypeScript DDD repositories. Known gaps and the roadmap, including an event and saga flow analyzer, are in the [issues](https://github.com/mannkostir/domain-integrity/issues).
 
 ## License
 
