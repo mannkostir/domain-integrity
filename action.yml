@@ -1,0 +1,39 @@
+name: domain-integrity
+description: Check that aggregate lifecycles match their declared intent.
+inputs:
+  project:
+    description: Path to tsconfig.json
+    default: tsconfig.json
+  config:
+    description: Path to domain.config.ts
+    default: domain.config.ts
+  baseline:
+    description: Optional baseline file
+    default: ''
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_BASELINE: ${{ inputs.baseline }}
+      run: |
+        set +e
+        baseline_args=()
+        if [ -n "$INPUT_BASELINE" ]; then baseline_args=(--baseline "$INPUT_BASELINE"); fi
+        npx --yes domain-integrity@0 check --project "$INPUT_PROJECT" --config "$INPUT_CONFIG" "${baseline_args[@]}" --format sarif > domain-integrity.sarif
+        code=$?
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+        if [ -s domain-integrity.sarif ]; then echo "sarif=true" >> "$GITHUB_OUTPUT"; else echo "sarif=false" >> "$GITHUB_OUTPUT"; fi
+    - uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52
+      if: always() && steps.check.outputs.sarif == 'true'
+      with:
+        sarif_file: domain-integrity.sarif
+        category: domain-integrity
+    - if: always()
+      shell: bash
+      env:
+        CHECK_CODE: ${{ steps.check.outputs.code }}
+      run: exit "${CHECK_CODE:-2}"
