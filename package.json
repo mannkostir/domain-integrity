@@ -4,6 +4,27 @@
   "description": "Checks that a TypeScript domain's aggregate lifecycles match their declared intent.",
   "type": "module",
   "license": "MIT",
+  "author": "mannkostir",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannkostir/domain-integrity.git"
+  },
+  "homepage": "https://github.com/mannkostir/domain-integrity#readme",
+  "bugs": {
+    "url": "https://github.com/mannkostir/domain-integrity/issues"
+  },
+  "keywords": [
+    "ddd",
+    "domain-driven-design",
+    "aggregate",
+    "lifecycle",
+    "state-machine",
+    "typescript",
+    "static-analysis",
+    "ts-morph",
+    "cli",
+    "ci"
+  ],
   "engines": {
     "node": ">=20"
   },
