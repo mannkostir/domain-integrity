@@ -10,6 +10,16 @@ inputs:
   baseline:
     description: Optional baseline file
     default: ''
+  upload:
+    description: Upload the SARIF report to code scanning
+    default: 'true'
+outputs:
+  exit-code:
+    description: Exit code of domain-integrity check
+    value: ${{ steps.check.outputs.code }}
+  sarif-file:
+    description: Path to the SARIF report
+    value: ${{ steps.check.outputs.sarif-file }}
 runs:
   using: composite
   steps:
@@ -26,9 +36,10 @@ runs:
         npx --yes domain-integrity@0 check --project "$INPUT_PROJECT" --config "$INPUT_CONFIG" "${baseline_args[@]}" --format sarif > domain-integrity.sarif
         code=$?
         echo "code=$code" >> "$GITHUB_OUTPUT"
+        echo "sarif-file=domain-integrity.sarif" >> "$GITHUB_OUTPUT"
         if [ -s domain-integrity.sarif ]; then echo "sarif=true" >> "$GITHUB_OUTPUT"; else echo "sarif=false" >> "$GITHUB_OUTPUT"; fi
     - uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52
-      if: always() && steps.check.outputs.sarif == 'true'
+      if: always() && inputs.upload == 'true' && steps.check.outputs.sarif == 'true'
       with:
         sarif_file: domain-integrity.sarif
         category: domain-integrity

@@ -18,3 +18,27 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: node dist/cli.js --help
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - id: check
+        uses: ./repo
+        continue-on-error: true
+        with:
+          project: repo/test/fixtures/outside-spec/tsconfig.json
+          config: repo/test/fixtures/outside-spec/domain.config.ts
+          upload: 'false'
+      - shell: bash
+        env:
+          EXIT_CODE: ${{ steps.check.outputs.exit-code }}
+          SARIF_FILE: ${{ steps.check.outputs.sarif-file }}
+        run: |
+          test "$EXIT_CODE" = 1
+          test -s "$SARIF_FILE"
+          node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); if (s.version !== "2.1.0" || s.runs[0].results.length === 0) process.exit(1)' "$SARIF_FILE"
