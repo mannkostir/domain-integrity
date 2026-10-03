@@ -197,6 +197,15 @@ jobs:
 
 Findings appear as code-scanning alerts on the pull request, and the job fails when `check` does.
 
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `project` | `tsconfig.json` | path to the project's `tsconfig.json` |
+| `config` | `domain.config.ts` | path to the declaration |
+| `baseline` | none | baseline file to apply |
+| `upload` | `true` | upload the SARIF report to code scanning; set `false` when code scanning is unavailable |
+
+The step exposes `exit-code`, the exit code of `check`, and `sarif-file`, the path to the SARIF report.
+
 ## The declaration
 
 ```ts
