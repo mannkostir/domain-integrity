@@ -1,0 +1,56 @@
+name: release
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          expected="v$(node -p 'require("./package.json").version')"
+          if [ "$TAG" != "$expected" ]; then
+            echo "::error::release tag $TAG does not match package.json version $expected"
+            exit 1
+          fi
+  ci:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global npm@^11.5.1
+      - run: npm ci
+      - run: npm run build
+      - shell: bash
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          dist_tag=latest
+          if [ "$PRERELEASE" = true ]; then dist_tag=next; fi
+          npm publish --provenance --access public --tag "$dist_tag"
+  move-major-tag:
+    needs: publish
+    if: startsWith(github.event.release.tag_name, 'v0.') && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git tag --force v0 "$GITHUB_SHA"
+          git push --force origin refs/tags/v0
