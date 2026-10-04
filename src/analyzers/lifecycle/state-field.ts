@@ -20,7 +20,7 @@ const propsMember = (cls: ClassDeclaration, name: string): MorphSymbol | undefin
 const fieldType = (cls: ClassDeclaration, name: string): Type | undefined =>
   (cls.getType().getProperty(name) ?? propsMember(cls, name))?.getTypeAtLocation(cls);
 
-const isAccessor = (node: Node): boolean => Node.isGetAccessorDeclaration(node) || Node.isSetAccessorDeclaration(node);
+export const isAccessor = (node: Node): boolean => Node.isGetAccessorDeclaration(node) || Node.isSetAccessorDeclaration(node);
 
 const isAccessorOnly = (cls: ClassDeclaration, name: string): boolean => {
   const own = cls.getType().getProperty(name);
