@@ -1,4 +1,13 @@
-import { ClassDeclaration, Identifier, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
+import {
+  BinaryExpression,
+  ClassDeclaration,
+  Identifier,
+  Node,
+  SourceFile,
+  Symbol as MorphSymbol,
+  SyntaxKind,
+  Type,
+} from 'ts-morph';
 import {
   escapesStateHolder,
   hasForeignThis,
@@ -20,6 +29,13 @@ const NON_RETAINING_CALLBACKS = new Set([
   'reduce',
   'flatMap',
   'sort',
+]);
+
+const FAMILY_ASSIGNMENT_OPERATORS: ReadonlySet<SyntaxKind> = new Set([
+  SyntaxKind.EqualsToken,
+  SyntaxKind.QuestionQuestionEqualsToken,
+  SyntaxKind.BarBarEqualsToken,
+  SyntaxKind.AmpersandAmpersandEqualsToken,
 ]);
 
 const isAssignmentTarget = (node: Node): boolean => {
@@ -91,15 +107,46 @@ const refersToFamily = (type: Type, family: ReadonlySet<Node>): boolean =>
     (member.getSymbol()?.getDeclarations() ?? []).some((declaration) => family.has(declaration)),
   );
 
-const instanceReferences = (member: Node, family: ReadonlySet<Node>): readonly Identifier[] => {
-  const symbols = new Set(
-    [...member.getDescendantsOfKind(SyntaxKind.VariableDeclaration), ...member.getDescendantsOfKind(SyntaxKind.Parameter)]
-      .filter((declaration) => refersToFamily(declaration.getType(), family))
-      .flatMap((declaration) => {
-        const symbol = declaration.getSymbol();
-        return symbol === undefined ? [] : [symbol];
-      }),
+const isFamilyConstruction = (node: Node | undefined, family: ReadonlySet<Node>): boolean => {
+  const target = node === undefined ? undefined : unwrap(node);
+  return Node.isNewExpression(target) && refersToFamily(target.getType(), family);
+};
+
+const constructsFamily = (member: Node, family: ReadonlySet<Node>): boolean =>
+  member.getDescendantsOfKind(SyntaxKind.NewExpression).some((expression) => isFamilyConstruction(expression, family));
+
+const isFactoryMember = (member: Node, family: ReadonlySet<Node>): boolean =>
+  isStaticMember(member) || constructsFamily(member, family);
+
+const symbolsOf = (nodes: readonly Node[]): readonly MorphSymbol[] =>
+  nodes.flatMap((node) => {
+    const symbol = node.getSymbol();
+    return symbol === undefined ? [] : [symbol];
+  });
+
+const declaredInstances = (member: Node, family: ReadonlySet<Node>): readonly MorphSymbol[] =>
+  symbolsOf(
+    [...member.getDescendantsOfKind(SyntaxKind.VariableDeclaration), ...member.getDescendantsOfKind(SyntaxKind.Parameter)].filter(
+      (declaration) =>
+        refersToFamily(declaration.getType(), family) || isFamilyConstruction(declaration.getInitializer(), family),
+    ),
   );
+
+const isFamilyAssignment = (expression: BinaryExpression, family: ReadonlySet<Node>): boolean =>
+  FAMILY_ASSIGNMENT_OPERATORS.has(expression.getOperatorToken().getKind()) &&
+  isFamilyConstruction(expression.getRight(), family);
+
+const assignedInstances = (member: Node, family: ReadonlySet<Node>): readonly MorphSymbol[] =>
+  symbolsOf(
+    member
+      .getDescendantsOfKind(SyntaxKind.BinaryExpression)
+      .filter((expression) => isFamilyAssignment(expression, family))
+      .map((expression) => unwrap(expression.getLeft()))
+      .filter(Node.isIdentifier),
+  );
+
+const instanceReferences = (member: Node, family: ReadonlySet<Node>): readonly Identifier[] => {
+  const symbols = new Set([...declaredInstances(member, family), ...assignedInstances(member, family)]);
   return member
     .getDescendantsOfKind(SyntaxKind.Identifier)
     .filter((identifier) => {
@@ -144,10 +191,10 @@ const capturedInClosure = (reference: Node, member: Node): boolean => {
     .some((ancestor) => isClosure(ancestor) && !isNonRetainingCallback(ancestor));
 };
 
-const staticMembersLeak = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
+const factoryMembersLeak = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
   cls
     .getMembers()
-    .filter(isStaticMember)
+    .filter((member) => isFactoryMember(member, family))
     .some((member) =>
       instanceReferences(member, family).some(
         (reference) => instanceEscapes(reference) || capturedInClosure(reference, member),
@@ -156,7 +203,7 @@ const staticMembersLeak = (cls: ClassDeclaration, family: ReadonlySet<Node>): bo
 
 const leaksFrom = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
   cls.getDescendants().some((node) => escapesAggregate(node) || capturesAggregate(node)) ||
-  staticMembersLeak(cls, family);
+  factoryMembersLeak(cls, family);
 
 const projectSubclasses = (cls: ClassDeclaration, files: readonly SourceFile[]): readonly ClassDeclaration[] =>
   files

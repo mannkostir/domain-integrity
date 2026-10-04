@@ -247,6 +247,138 @@ export class S8<T extends { canEdit(): boolean }> {
   edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
 }
 `,
+  '/probe14/s4.ts': `
+import { P, Status } from './p';
+export class S4 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S4 { const o: any = new S4(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s5.ts': `
+import { P, Status } from './p';
+interface Holder { policy: P }
+export class S5 implements Holder {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S5 { const o: Holder = new S5(); o.policy.owner = o as S5; return o as S5; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s6.ts': `
+import { P, Status } from './p';
+export class S6 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S6 { const o: S6 & { x?: number } = new S6(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s7.ts': `
+import { P, Status } from './p';
+export class S7 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S7 { let o; o = new S7(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s9.ts': `
+import { P, Status } from './p';
+export class S9 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S9 { let o: any; o = new S9(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s15.ts': `
+import { P, Status } from './p';
+export class S15 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); constructor(seed = true) { if (seed) { const o = new S15(false); o.policy.owner = o; } }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s16.ts': `
+import { P, Status } from './p';
+export class S16 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); get twin(): S16 { const o = new S16(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s17.ts': `
+import { P, Status } from './p';
+export class S17 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); twin = (() => { const o = new S17(false); o.policy.owner = o; return o; })(); constructor(_seed = true) {}
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s10.ts': `
+import { P, Status } from './p';
+export class S10 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); clone(): S10 { const o = new S10(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s11.ts': `
+import { P, Status } from './p';
+export class S11 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); clone(): S11 { const o = new S11(); o.policy = new P(o); return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s12.ts': `
+import { P, Status } from './p';
+export class S12 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S12 { let o: any; o ??= new S12(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s13.ts': `
+import { P, Status } from './p';
+export class S13 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S13 { let o: any; o ||= new S13(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s14.ts': `
+import { P, Status } from './p';
+const register = (s: S14): void => { void s; };
+export class S14 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); merge(other: S14): S14 { const o = new S14(); register(other); return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
   '/plain/name.ts': `
 export type Status = 'open' | 'closed';
 class Name {
@@ -267,6 +399,28 @@ export class Built {
   status: Status = 'open';
   private _name!: Name;
   static create(): Built { const o = new Built(); o._name = Name.create('a'); return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+}
+export class Cloned {
+  status: Status = 'open';
+  private _name!: Name;
+  clone(): Cloned { const o = new Cloned(); o._name = this._name; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+}
+const compare = (other: Compared): boolean => other.status === 'open';
+export class Compared {
+  status: Status = 'open';
+  private _name!: Name;
+  same(other: Compared): boolean { return compare(other); }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+}
+export class AnyBuilt {
+  status: Status = 'open';
+  private _name!: Name;
+  static create(): AnyBuilt { const o: any = new AnyBuilt(); o._name = Name.create('a'); return o; }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
   rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
 }
@@ -353,8 +507,29 @@ describe('aggregates that leak this', () => {
     ['/probe14/s2.ts', 'S2', 'edit'],
     ['/probe14/s3.ts', 'S3', 'edit'],
     ['/probe14/s8.ts', 'S8', 'edit'],
+    ['/probe14/s4.ts', 'S4', 'edit'],
+    ['/probe14/s5.ts', 'S5', 'edit'],
+    ['/probe14/s6.ts', 'S6', 'edit'],
+    ['/probe14/s7.ts', 'S7', 'edit'],
+    ['/probe14/s9.ts', 'S9', 'edit'],
+    ['/probe14/s10.ts', 'S10', 'edit'],
+    ['/probe14/s11.ts', 'S11', 'edit'],
+    ['/probe14/s12.ts', 'S12', 'edit'],
+    ['/probe14/s13.ts', 'S13', 'edit'],
   ])('%s %s.%s reports no leak', (path, className, method) => {
     expect(leaks(classNamed(path, className))).not.toContain(method);
+  });
+
+  it.each([
+    ['a constructor', '/probe14/s15.ts', 'S15'],
+    ['an accessor', '/probe14/s16.ts', 'S16'],
+    ['a property initializer', '/probe14/s17.ts', 'S17'],
+  ])('tracks instances built inside %s', (_, path, className) => {
+    expect(leaks(classNamed(path, className))).not.toContain('edit');
+  });
+
+  it('tracks an aggregate-typed parameter of an instance member that builds an instance', () => {
+    expect(leaks(classNamed('/probe14/s14.ts', 'S14'))).not.toContain('edit');
   });
 });
 
@@ -375,6 +550,18 @@ describe('copying values into or out of the aggregate', () => {
 describe('aggregates that do not leak this', () => {
   it('do not leak through a static factory that only returns the built instance', () => {
     expect(leaks(classNamed('/plain/name.ts', 'Built'))).toContain('rename');
+  });
+
+  it('do not leak through an instance factory that only copies a field into the built instance', () => {
+    expect(leaks(classNamed('/plain/name.ts', 'Cloned'))).toContain('rename');
+  });
+
+  it('do not leak through an instance method that passes a parameter of its own type to a function', () => {
+    expect(leaks(classNamed('/plain/name.ts', 'Compared'))).toContain('rename');
+  });
+
+  it('do not leak through a static factory that only returns an instance built into an any-typed local', () => {
+    expect(leaks(classNamed('/plain/name.ts', 'AnyBuilt'))).toContain('rename');
   });
 
   it('do not leak through a this reference inside a filter callback on an array', () => {
