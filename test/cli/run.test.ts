@@ -52,8 +52,9 @@ describe('check', () => {
 
     expect({
       code: await run(['check'], io),
+      searched: stderr().includes('Searched for classes extending or implementing: AggregateRoot, Entity'),
       example: stderr().includes("export default defineDomain({ aggregateBaseClasses: ['MyAggregateBase'] })"),
-    }).toEqual({ code: 2, example: true });
+    }).toEqual({ code: 2, searched: true, example: true });
   });
 });
 
