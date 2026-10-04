@@ -26,6 +26,33 @@ export class Accessed extends AggregateRoot {
 export class AccessedProps extends AggregateRoot<{ status: Status }> {
   get status(): Status { return this.props.status; }
 }
+export class Owner { name = 'owner'; }
+export interface Shape { readonly corners: number }
+export class Nullables<T, U extends object> extends AggregateRoot {
+  at: Date | null = null;
+  owner: Owner | null = null;
+  shape: Shape | undefined = undefined;
+  tags: string[] | null = null;
+  pair: [string, number] | null = null;
+  callback: (() => void) | null = null;
+  bag: object | null = null;
+  both: (Date & { tag: 'x' }) | null = null;
+  count: number | null = null;
+  label: string | null | undefined = null;
+  big: bigint | null = null;
+  empty: {} | null = null;
+  boxed: Object | null = null;
+  lengthy: { length: number } | null = null;
+  branded: (string & { __brand: 'id' }) | null = null;
+  value: T | null = null;
+  key: symbol | null = null;
+  mixed: Date | string | null = null;
+  indexed: { [key: string]: number } | null = null;
+  weak: { note?: string } | null = null;
+  lookup: Map<string, number> | null = null;
+  pending: Promise<number> | null = null;
+  bounded: U | null = null;
+}
 `,
 });
 
@@ -44,6 +71,7 @@ describe('resolveStateField', () => {
         ],
         enumReference: { name: 'Status', file: '/src/samples.ts' },
         unsetForms: [],
+        setMayBeFalsy: false,
       },
     });
   });
@@ -66,6 +94,42 @@ describe('resolveStateField', () => {
     ['status', []],
   ])('records the unset forms of InProps.%s', (field, unsetForms) => {
     expect(resolveStateField(cls('InProps'), field)).toMatchObject({ kind: 'resolved', field: { unsetForms } });
+  });
+
+  it.each([
+    ['at', false],
+    ['owner', false],
+    ['shape', false],
+    ['tags', false],
+    ['pair', false],
+    ['callback', false],
+    ['bag', false],
+    ['both', false],
+    ['indexed', false],
+    ['weak', false],
+    ['lookup', false],
+    ['pending', false],
+    ['count', true],
+    ['label', true],
+    ['big', true],
+    ['empty', true],
+    ['boxed', true],
+    ['lengthy', true],
+    ['branded', true],
+    ['value', true],
+    ['key', true],
+    ['mixed', true],
+    ['bounded', true],
+  ])('records whether a set value of Nullables.%s may be falsy', (field, setMayBeFalsy) => {
+    expect(resolveStateField(cls('Nullables'), field)).toMatchObject({ kind: 'resolved', field: { kind: 'nullable', setMayBeFalsy } });
+  });
+
+  it.each([
+    ['OwnFields', 'deleted'],
+    ['OwnFields', 'phase'],
+    ['OwnFields', 'priority'],
+  ])('never treats a set value of %s.%s as possibly falsy', (className, field) => {
+    expect(resolveStateField(cls(className), field)).toMatchObject({ kind: 'resolved', field: { setMayBeFalsy: false } });
   });
 
   it('resolves a private boolean field', () => {

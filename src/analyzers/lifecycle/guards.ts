@@ -28,9 +28,12 @@ const STRICT = new Set<SyntaxKind>([SyntaxKind.EqualsEqualsEqualsToken, SyntaxKi
 const negate = (evaluation: Evaluation): Evaluation =>
   evaluation === 'unknown' ? evaluation : { whenTrue: evaluation.whenFalse, whenFalse: evaluation.whenTrue };
 
+const falsyGuardTokens = (field: StateField): ReadonlySet<string> =>
+  field.setMayBeFalsy ? guardUniverse(field) : unsetGuardTokens(field);
+
 const truthiness = (field: StateField): Evaluation => {
   if (field.kind === 'boolean') return { whenTrue: new Set(['true']), whenFalse: new Set(['false']) };
-  if (field.kind === 'nullable') return { whenTrue: new Set([SET]), whenFalse: unsetGuardTokens(field) };
+  if (field.kind === 'nullable') return { whenTrue: new Set([SET]), whenFalse: falsyGuardTokens(field) };
   return 'unknown';
 };
 

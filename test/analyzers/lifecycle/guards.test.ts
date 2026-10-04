@@ -137,6 +137,35 @@ export class Shift extends AggregateRoot<{ endedAt: Date | null | undefined; pau
   archivedStrictUndefinedReturn(): void { if (this.props.archivedAt === undefined) return; this.props.note = 'x'; }
 }
 `,
+  '/src/meter.ts': `
+import { AggregateRoot } from './aggregate-root';
+export class Meter extends AggregateRoot<{ reading: number | null; code: string | null | undefined; closedAt: Date | null; endedAt: Date | null | undefined; note: string }> {
+  private get hasReading(): boolean { return !!this.props.reading; }
+  private get hasClosed(): boolean { return !!this.props.closedAt; }
+  private get currentReading(): number | null { return this.props.reading; }
+  readingTruthyThrow(): void { if (this.props.reading) throw new Error('x'); this.props.note = 'x'; }
+  readingFalsyReturn(): void { if (!this.props.reading) return; this.props.note = 'x'; }
+  readingTruthyAndFlag(flag: boolean): void { if (flag && this.props.reading) return; this.props.note = 'x'; }
+  readingTruthyOrNull(): void { if (this.props.reading || this.props.reading === null) return; this.props.note = 'x'; }
+  readingWrapper(): void { if (this.props.reading) { this.props.note = 'x'; } }
+  readingViaGetter(): void { if (this.hasReading) return; this.props.note = 'x'; }
+  readingViaValueGetter(): void { if (!this.currentReading) return; this.props.note = 'x'; }
+  readingStrictNullReturn(): void { if (this.props.reading === null) return; this.props.note = 'x'; }
+  readingStrictNotNullWrapper(): void { if (this.props.reading !== null) { this.props.note = 'x'; } }
+  codeTruthyThrow(): void { if (this.props.code) throw new Error('x'); this.props.note = 'x'; }
+  codeFalsyReturn(): void { if (!this.props.code) return; this.props.note = 'x'; }
+  codeLooseNullReturn(): void { if (this.props.code == null) return; this.props.note = 'x'; }
+  closedTruthyThrow(): void { if (this.props.closedAt) throw new Error('x'); this.props.note = 'x'; }
+  closedFalsyReturn(): void { if (!this.props.closedAt) return; this.props.note = 'x'; }
+  closedTruthyAndFlag(flag: boolean): void { if (flag && this.props.closedAt) return; this.props.note = 'x'; }
+  closedFalsyOrNote(): void { if (!this.props.closedAt || this.props.note === 'x') return; this.props.note = 'x'; }
+  closedWrapper(): void { if (this.props.closedAt) { this.props.note = 'x'; } }
+  closedViaGetter(): void { if (!this.hasClosed) return; this.props.note = 'x'; }
+  endedTruthyThrow(): void { if (this.props.endedAt) throw new Error('x'); this.props.note = 'x'; }
+  endedFalsyReturn(): void { if (!this.props.endedAt) return; this.props.note = 'x'; }
+  endedWrapper(): void { if (this.props.endedAt) { this.props.note = 'x'; } }
+}
+`,
 });
 
 const ticket = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('Ticket');
@@ -295,5 +324,52 @@ describe('methodSources for a nullable field', () => {
 
   it('treats a strict undefined check as covering an optional field', () => {
     expect(sourcesOf('archivedStrictUndefinedReturn', 'archivedAt')).toEqual(['set']);
+  });
+});
+
+describe('methodSources for a nullable field whose set values may be falsy', () => {
+  const meter = project.getSourceFileOrThrow('/src/meter.ts').getClassOrThrow('Meter');
+  const sourcesOf = (method: string, field: string) =>
+    describeSources(methodSources(meter.getMethodOrThrow(method), resolvedField(meter, field), defaultScope(meter)));
+
+  it.each([
+    ['readingTruthyThrow', ['set', 'unset']],
+    ['readingFalsyReturn', ['set']],
+    ['readingTruthyAndFlag', ['set', 'unset']],
+    ['readingTruthyOrNull', ['set']],
+    ['readingWrapper', ['set']],
+    ['readingViaGetter', ['set', 'unset']],
+    ['readingViaValueGetter', ['set']],
+    ['readingStrictNullReturn', ['set']],
+    ['readingStrictNotNullWrapper', ['set']],
+  ])('%s can run from %j when a number field may hold zero', (method, expected) => {
+    expect(sourcesOf(method, 'reading')).toEqual(expected);
+  });
+
+  it.each([
+    ['codeTruthyThrow', ['set', 'unset']],
+    ['codeFalsyReturn', ['set']],
+    ['codeLooseNullReturn', ['set']],
+  ])('%s can run from %j when a string field may hold an empty string', (method, expected) => {
+    expect(sourcesOf(method, 'code')).toEqual(expected);
+  });
+
+  it.each([
+    ['closedTruthyThrow', ['unset']],
+    ['closedFalsyReturn', ['set']],
+    ['closedTruthyAndFlag', ['set', 'unset']],
+    ['closedFalsyOrNote', ['set']],
+    ['closedWrapper', ['set']],
+    ['closedViaGetter', ['set']],
+  ])('%s can run from %j when a date field cannot be falsy', (method, expected) => {
+    expect(sourcesOf(method, 'closedAt')).toEqual(expected);
+  });
+
+  it.each([
+    ['endedTruthyThrow', ['unset']],
+    ['endedFalsyReturn', ['set']],
+    ['endedWrapper', ['set']],
+  ])('%s can run from %j when a date field includes null and undefined', (method, expected) => {
+    expect(sourcesOf(method, 'endedAt')).toEqual(expected);
   });
 });

@@ -57,6 +57,57 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
     expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak pay']);
   });
 
+  it('a truthy exit on a number field keeps set as a source', () => {
+    const meterProject = inMemoryProject({
+      '/src/meter.ts': `
+export class Meter {
+  private reading: number | null = null;
+  record(): void { if (this.reading) throw new Error(); this.reading = 1; }
+}
+`,
+    });
+    const meter = meterProject.getSourceFileOrThrow('/src/meter.ts').getClassOrThrow('Meter');
+
+    const result = analyse(lifecycleAnalyzer, {
+      declaration: {
+        ...DEFAULT_DECLARATION,
+        lifecycles: [
+          {
+            target: meter,
+            fields: [{ name: 'reading', terminal: [], transitions: new Map([['record', ['set', 'unset']]]) }],
+            allowAfterTerminal: [],
+          },
+        ],
+      },
+      files: meterProject.getSourceFiles(),
+    });
+
+    expect(result.findings.filter((finding) => finding.checkId === 'transition-drift')).toEqual([]);
+  });
+
+  it('reports a terminal leak when a falsy exit on a string field lets set values through', () => {
+    const accountProject = inMemoryProject({
+      '/src/account.ts': `
+export class Account {
+  private label: string | null | undefined = undefined;
+  private note = '';
+  rename(): void { if (!this.label) return; this.note = 'x'; }
+}
+`,
+    });
+    const account = accountProject.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('Account');
+
+    const result = analyse(lifecycleAnalyzer, {
+      declaration: {
+        ...DEFAULT_DECLARATION,
+        lifecycles: [{ target: account, fields: [{ name: 'label', terminal: ['set'], transitions: undefined }], allowAfterTerminal: [] }],
+      },
+      files: accountProject.getSourceFiles(),
+    });
+
+    expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
+  });
+
   it('describes its four rules', () => {
     expect(lifecycleAnalyzer.rules.map((rule) => rule.id)).toEqual([
       'terminal-state-leak',
