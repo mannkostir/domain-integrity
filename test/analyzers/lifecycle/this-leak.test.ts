@@ -298,6 +298,36 @@ export class S9 {
   edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
 }
 `,
+  '/probe14/s15.ts': `
+import { P, Status } from './p';
+export class S15 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); constructor(seed = true) { if (seed) { const o = new S15(false); o.policy.owner = o; } }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s16.ts': `
+import { P, Status } from './p';
+export class S16 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); get twin(): S16 { const o = new S16(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s17.ts': `
+import { P, Status } from './p';
+export class S17 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); twin = (() => { const o = new S17(false); o.policy.owner = o; return o; })(); constructor(_seed = true) {}
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
   '/probe14/s10.ts': `
 import { P, Status } from './p';
 export class S10 {
@@ -488,6 +518,14 @@ describe('aggregates that leak this', () => {
     ['/probe14/s13.ts', 'S13', 'edit'],
   ])('%s %s.%s reports no leak', (path, className, method) => {
     expect(leaks(classNamed(path, className))).not.toContain(method);
+  });
+
+  it.each([
+    ['a constructor', '/probe14/s15.ts', 'S15'],
+    ['an accessor', '/probe14/s16.ts', 'S16'],
+    ['a property initializer', '/probe14/s17.ts', 'S17'],
+  ])('tracks instances built inside %s', (_, path, className) => {
+    expect(leaks(classNamed(path, className))).not.toContain('edit');
   });
 
   it('tracks an aggregate-typed parameter of an instance member that builds an instance', () => {
