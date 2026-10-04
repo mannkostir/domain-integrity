@@ -269,7 +269,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 
-A few rare self-wiring shapes can still produce a false finding; [#10](https://github.com/mannkostir/domain-integrity/issues/10) lists them. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
+A few rare self-wiring shapes can still produce a false finding: a factory or service outside the class (`agg.policy = new Policy(agg)`), the instance held inside another object (`box.o.policy.owner = box.o`), and a module-level factory function. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
 
 <details>
 <summary>The precise rules</summary>
@@ -286,9 +286,9 @@ A few rare self-wiring shapes can still produce a false finding; [#10](https://g
   These do not count as leaks:
   - a discarded `Object.assign(this, …)`;
   - an object spread of `this` or `this.props`;
-  - a static factory's plain `return v;`.
+  - a factory's plain `return v;`.
 
-  Inside static members, locals and parameters typed as the aggregate are tracked like `this`. In a leaking aggregate, every non-primitive project field counts as reading the state field. In an aggregate that does not leak, project fields are plain data.
+  Inside static members, and inside instance members that call `new` on a class in the family, such as `clone()`, locals and parameters are tracked like `this` when they are typed as the aggregate, initialized with `new` on a class in the family, or assigned from one. A local declared as `any`, as an interface or as an intersection is tracked when it holds such a `new`. In a leaking aggregate, every non-primitive project field counts as reading the state field. In an aggregate that does not leak, project fields are plain data.
 - **Unreachable values.** `unreachable-state` is skipped for a field if any of these holds:
   - the field has an assignment whose value cannot be resolved;
   - a method may write the field through an escaping `this`;
