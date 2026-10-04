@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { outsideMutation } from '../../../../src/analyzers/lifecycle/checks/outside-mutation';
 import { aggregate, assigned } from '../../../helpers/model';
 
-const ASSIGNMENT = { field: 'status', file: '/app/src/spec.ts', line: 7, scope: 'WithStatus.mutate', value: assigned('CANCELLED') };
+const ASSIGNMENT = { field: 'status', file: '/app/src/spec.ts', line: 7, scope: 'WithStatus.mutate', value: assigned('CANCELLED'), throughOwnSetter: false };
 
 describe('outsideMutation', () => {
   it('flags an assignment to a declared state field outside the aggregate', () => {
@@ -24,5 +24,9 @@ describe('outsideMutation', () => {
 
   it('ignores fields that are not declared', () => {
     expect(outsideMutation(aggregate({ outside: [{ ...ASSIGNMENT, field: 'note' }] }))).toEqual([]);
+  });
+
+  it('ignores an assignment made through the aggregate setter', () => {
+    expect(outsideMutation(aggregate({ outside: [{ ...ASSIGNMENT, throughOwnSetter: true }] }))).toEqual([]);
   });
 });

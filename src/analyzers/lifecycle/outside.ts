@@ -1,6 +1,7 @@
 import { CallExpression, ClassDeclaration, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
 import { assignedValue, isAssignmentOperator } from './assigned';
-import { unwrap } from './field-ref';
+import { inheritanceChain, unwrap } from './field-ref';
+import { isLibraryNode } from './library';
 import { OutsideAssignment, StateField } from './model';
 import { UNRESOLVED } from './values';
 
@@ -18,6 +19,24 @@ const isAggregateOrItsProps = (node: Node, cls: ClassDeclaration): boolean => {
 
 const targetsField = (left: Node, cls: ClassDeclaration, field: string): boolean =>
   Node.isPropertyAccessExpression(left) && left.getName() === field && isAggregateOrItsProps(left.getExpression(), cls);
+
+const isOwnSetter = (node: Node, cls: ClassDeclaration): boolean =>
+  Node.isSetAccessorDeclaration(node) &&
+  inheritanceChain(cls)
+    .filter((candidate) => !isLibraryNode(candidate))
+    .some((candidate) => candidate === node.getParent());
+
+const hasOwnSetter = (cls: ClassDeclaration, field: string): boolean =>
+  cls
+    .getType()
+    .getProperty(field)
+    ?.getDeclarations()
+    .some((declaration) => isOwnSetter(declaration, cls)) ?? false;
+
+const writesThroughOwnSetter = (receiver: Node | undefined, cls: ClassDeclaration, field: string): boolean =>
+  receiver !== undefined && hasAggregateType(receiver, cls) && hasOwnSetter(cls, field);
+
+const receiverOf = (left: Node): Node => (Node.isPropertyAccessExpression(left) ? left.getExpression() : left);
 
 const carriesField = (type: Type, field: string): boolean =>
   type.getProperty(field) !== undefined ||
@@ -79,6 +98,7 @@ const directAssignments = (file: SourceFile, cls: ClassDeclaration, field: State
         binary.getOperatorToken().getKind() === SyntaxKind.EqualsToken
           ? assignedValue(binary.getRight(), field)
           : UNRESOLVED,
+      throughOwnSetter: writesThroughOwnSetter(receiverOf(binary.getLeft()), cls, field.name),
     }));
 
 const objectAssignments = (file: SourceFile, cls: ClassDeclaration, field: StateField): OutsideAssignment[] =>
@@ -86,7 +106,11 @@ const objectAssignments = (file: SourceFile, cls: ClassDeclaration, field: State
     .getDescendantsOfKind(SyntaxKind.CallExpression)
     .filter((call) => isOutside(call, cls))
     .filter((call) => objectAssignTargetsField(call, cls, field.name))
-    .map((call) => ({ ...located(call, field), value: UNRESOLVED }));
+    .map((call) => ({
+      ...located(call, field),
+      value: UNRESOLVED,
+      throughOwnSetter: writesThroughOwnSetter(call.getArguments()[0], cls, field.name),
+    }));
 
 export const outsideAssignments = (
   files: readonly SourceFile[],

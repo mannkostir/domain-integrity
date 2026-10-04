@@ -133,10 +133,23 @@ npx domain-integrity check
 |---|---|
 | `terminal-state-leak` | A public method that can still change the aggregate after it reached a terminal state |
 | `unreachable-state` | A state your type declares but no code ever assigns |
-| `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification |
+| `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. |
 | `transition-drift` | A method that can run from states you did not declare (error), or no longer from states you did (warning) |
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
+
+Every file your tsconfig includes is scanned, tests too, so an assignment in a test is reported as `outside-mutation`. To leave tests out, give `check` a tsconfig that excludes them:
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "test", "**/*.spec.ts", "**/*.test.ts"]
+}
+```
+
+```bash
+npx domain-integrity check -p tsconfig.domain.json
+```
 
 ## Commands
 
@@ -253,6 +266,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Object fields in aggregates that leak `this` anywhere.** Methods that read those fields are skipped, because a field might hold a callback into the aggregate.
 - **Calls to library base-class methods**, other than the configured event methods, because library code can call back into your overrides. An allowlist is planned: [#9](https://github.com/mannkostir/domain-integrity/issues/9).
 - **Values mentioned elsewhere.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types.
+- **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 
 A few rare self-wiring shapes can still produce a false finding; [#10](https://github.com/mannkostir/domain-integrity/issues/10) lists them. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
