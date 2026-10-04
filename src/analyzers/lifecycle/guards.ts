@@ -11,6 +11,7 @@ import {
 import { SET, UNSET, literalToken } from '../../engine/value-token';
 import { AggregateScope, fieldNameOf, referencesField, referencesFieldDirectly, thisGetterExpression } from './field-ref';
 import { Sources, StateField } from './model';
+import { isLibraryNode } from './library';
 import { isAccessor } from './state-field';
 import { allTokens, difference, intersect, union } from './values';
 
@@ -166,13 +167,21 @@ const assignedMember = (target: Expression): MorphSymbol | undefined => {
 
 const isPlainDataMember = (symbol: MorphSymbol | undefined): boolean => {
   const declarations = symbol?.getDeclarations() ?? [];
-  return declarations.length > 0 && !declarations.some(isAccessor);
+  return declarations.length > 0 && !declarations.some(isAccessor) && !declarations.some(isLibraryNode);
+};
+
+const isPlainDataPathFromThis = (target: Expression): boolean => {
+  if (!Node.isPropertyAccessExpression(target) && !Node.isElementAccessExpression(target)) return false;
+  const holder = target.getExpression();
+  return (
+    isPlainDataMember(assignedMember(target)) && (Node.isThisExpression(holder) || isPlainDataPathFromThis(holder))
+  );
 };
 
 const overwritesField = (statement: Statement, field: StateField): boolean => {
   if (!Node.isExpressionStatement(statement)) return false;
   const expression = unwrapParentheses(statement.getExpression());
-  return isFieldAssignment(expression, field) && isPlainDataMember(assignedMember(expression.getLeft()));
+  return isFieldAssignment(expression, field) && isPlainDataPathFromThis(expression.getLeft());
 };
 
 const statementsUntilOverwrite = (statements: readonly Statement[], field: StateField): readonly Statement[] => {
