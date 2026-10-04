@@ -34,8 +34,7 @@ const resolved = (
   kind: StateFieldKind,
   values: readonly StateValue[],
   enumReference: EnumReference | undefined = undefined,
-  unsetForms: readonly UnsetForm[] = [],
-): FieldResolution => ({ kind: 'resolved', field: { name, kind, values, enumReference, unsetForms } });
+): FieldResolution => ({ kind: 'resolved', field: { name, kind, values, enumReference, unsetForms: [] } });
 
 const unsetFormsOf = (members: readonly Type[]): readonly UnsetForm[] => [
   ...(members.some((member) => member.isNull()) ? (['null'] as const) : []),
@@ -75,6 +74,11 @@ const NULLABLE_VALUES: readonly StateValue[] = [
   { token: UNSET, label: UNSET, source: `'${UNSET}'` },
 ];
 
+const resolvedNullable = (name: string, members: readonly Type[]): FieldResolution => ({
+  kind: 'resolved',
+  field: { name, kind: 'nullable', values: NULLABLE_VALUES, enumReference: undefined, unsetForms: unsetFormsOf(members) },
+});
+
 export const resolveStateField = (cls: ClassDeclaration, name: string): FieldResolution => {
   if (isAccessorOnly(cls, name)) {
     return { kind: 'problem', message: `${aggregateName(cls)}.${name} is an accessor; declare its backing field instead` };
@@ -94,7 +98,7 @@ export const resolveStateField = (cls: ClassDeclaration, name: string): FieldRes
     return resolved(name, 'union', present.map(literalValue));
   }
   if (nullable && present.length > 0 && present.every((member) => literalToken(member) === undefined)) {
-    return resolved(name, 'nullable', NULLABLE_VALUES, undefined, unsetFormsOf(members));
+    return resolvedNullable(name, members);
   }
   return {
     kind: 'problem',
