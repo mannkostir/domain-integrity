@@ -10,7 +10,7 @@ const project = inMemoryProject({
 import { AggregateRoot } from './aggregate-root';
 export enum Status { open = 'OPEN', closed = 'CLOSED' }
 export enum Priority { low, high }
-export class InProps extends AggregateRoot<{ status: Status; closedAt: Date | null; archivedAt?: Date; note: string }> {}
+export class InProps extends AggregateRoot<{ status: Status; closedAt: Date | null; archivedAt?: Date; endedAt?: Date | null; stoppedAt: Date | null | undefined; note: string }> {}
 export class OwnFields extends AggregateRoot {
   private deleted = false;
   phase: 'draft' | 'live' = 'draft';
@@ -43,6 +43,7 @@ describe('resolveStateField', () => {
           { token: 'CLOSED', label: 'closed', source: 'Status.closed' },
         ],
         enumReference: { name: 'Status', file: '/src/samples.ts' },
+        unsetForms: [],
       },
     });
   });
@@ -55,6 +56,16 @@ describe('resolveStateField', () => {
       kind: 'resolved',
       field: { kind: 'nullable', values: [{ token: 'set' }, { token: 'unset' }] },
     });
+  });
+
+  it.each([
+    ['closedAt', ['null']],
+    ['archivedAt', ['undefined']],
+    ['endedAt', ['null', 'undefined']],
+    ['stoppedAt', ['null', 'undefined']],
+    ['status', []],
+  ])('records the unset forms of InProps.%s', (field, unsetForms) => {
+    expect(resolveStateField(cls('InProps'), field)).toMatchObject({ kind: 'resolved', field: { unsetForms } });
   });
 
   it('resolves a private boolean field', () => {

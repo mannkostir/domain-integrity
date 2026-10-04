@@ -16,6 +16,7 @@ export const stateField = (name: string, kind: StateFieldKind, tokens: readonly 
   kind,
   values: tokens.map((token) => ({ token, label: token.toLowerCase(), source: `'${token}'` })),
   enumReference: undefined,
+  unsetForms: [],
 });
 
 export const STATUS = stateField('status', 'enum', ['PENDING', 'CONFIRMED', 'CANCELLED']);
