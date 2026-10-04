@@ -99,7 +99,7 @@ export const resolveStateField = (cls: ClassDeclaration, name: string): FieldRes
     return resolved(name, 'union', present.map(literalValue));
   }
   if (nullable && present.length > 0 && present.every((member) => literalToken(member) === undefined)) {
-    return resolvedNullable(name, members, mayBeFalsy(cls, present));
+    return resolvedNullable(name, members, mayBeFalsy(cls.getProject().getTypeChecker().compilerObject, present));
   }
   return {
     kind: 'problem',

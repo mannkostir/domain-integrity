@@ -28,7 +28,7 @@ export class AccessedProps extends AggregateRoot<{ status: Status }> {
 }
 export class Owner { name = 'owner'; }
 export interface Shape { readonly corners: number }
-export class Nullables<T> extends AggregateRoot {
+export class Nullables<T, U extends object> extends AggregateRoot {
   at: Date | null = null;
   owner: Owner | null = null;
   shape: Shape | undefined = undefined;
@@ -47,6 +47,11 @@ export class Nullables<T> extends AggregateRoot {
   value: T | null = null;
   key: symbol | null = null;
   mixed: Date | string | null = null;
+  indexed: { [key: string]: number } | null = null;
+  weak: { note?: string } | null = null;
+  lookup: Map<string, number> | null = null;
+  pending: Promise<number> | null = null;
+  bounded: U | null = null;
 }
 `,
 });
@@ -100,6 +105,10 @@ describe('resolveStateField', () => {
     ['callback', false],
     ['bag', false],
     ['both', false],
+    ['indexed', false],
+    ['weak', false],
+    ['lookup', false],
+    ['pending', false],
     ['count', true],
     ['label', true],
     ['big', true],
@@ -110,6 +119,7 @@ describe('resolveStateField', () => {
     ['value', true],
     ['key', true],
     ['mixed', true],
+    ['bounded', true],
   ])('records whether a set value of Nullables.%s may be falsy', (field, setMayBeFalsy) => {
     expect(resolveStateField(cls('Nullables'), field)).toMatchObject({ kind: 'resolved', field: { kind: 'nullable', setMayBeFalsy } });
   });

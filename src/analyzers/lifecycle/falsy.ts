@@ -1,4 +1,4 @@
-import { ClassDeclaration, Type, ts } from 'ts-morph';
+import { Type, ts } from 'ts-morph';
 
 const isNonPrimitive = (type: Type): boolean => (type.getFlags() & ts.TypeFlags.NonPrimitive) !== 0;
 
@@ -12,12 +12,9 @@ const falsyLiteralTypes = (checker: ts.TypeChecker): readonly ts.Type[] => [
   checker.getFalseType(),
 ];
 
-const acceptsFalsyLiteral = (checker: ts.TypeChecker, member: Type): boolean =>
-  falsyLiteralTypes(checker).some((falsy) => checker.isTypeAssignableTo(falsy, member.compilerType));
-
-const cannotBeFalsy = (checker: ts.TypeChecker, member: Type): boolean => isObjectLike(member) && !acceptsFalsyLiteral(checker, member);
-
-export const mayBeFalsy = (cls: ClassDeclaration, present: readonly Type[]): boolean => {
-  const checker = cls.getProject().getTypeChecker().compilerObject;
-  return !present.every((member) => cannotBeFalsy(checker, member));
+export const mayBeFalsy = (checker: ts.TypeChecker, present: readonly Type[]): boolean => {
+  const falsy = falsyLiteralTypes(checker);
+  const acceptsFalsyLiteral = (member: Type): boolean =>
+    falsy.some((literal) => checker.isTypeAssignableTo(literal, member.compilerType));
+  return !present.every((member) => isObjectLike(member) && !acceptsFalsyLiteral(member));
 };
