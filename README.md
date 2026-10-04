@@ -288,7 +288,7 @@ A few rare self-wiring shapes can still produce a false finding: a factory or se
   - an object spread of `this` or `this.props`;
   - a factory's plain `return v;`.
 
-  Inside static members, and inside instance members that call `new` on a class in the family, such as `clone()`, locals and parameters are tracked like `this` when they are typed as the aggregate, initialized with `new` on a class in the family, or assigned from one. A local declared as `any`, as an interface or as an intersection is tracked when it holds such a `new`. In a leaking aggregate, every non-primitive project field counts as reading the state field. In an aggregate that does not leak, project fields are plain data.
+  Factory members are static members and any member that calls `new` on a class in the family, such as `clone()`, including constructors, property initializers and accessors. Inside a factory member, a variable or parameter is tracked like `this` when it is typed as the aggregate, initialized with `new` on a class in the family, or assigned one with `=`, `??=`, `||=` or `&&=`, whatever its declared type: `any`, an interface or an intersection. A tracked variable leaks when it escapes or is captured by any function other than a direct array callback. In a leaking aggregate, every non-primitive project field counts as reading the state field. In an aggregate that does not leak, project fields are plain data.
 - **Unreachable values.** `unreachable-state` is skipped for a field if any of these holds:
   - the field has an assignment whose value cannot be resolved;
   - a method may write the field through an escaping `this`;
