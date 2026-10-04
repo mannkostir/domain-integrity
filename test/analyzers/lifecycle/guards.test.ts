@@ -72,6 +72,18 @@ export class Ticket extends AggregateRoot<{ status: Status; title: string; lines
   throwHelper(): void { if (this.props.status === Status.closed) throwClosed(); this.props.title = 'x'; }
   ruleObject(): void { if (!Rules.notClosed(this.props.status)) return; this.props.title = 'x'; }
   branching(): void { const next = this.props.status === Status.open ? 'a' : 'b'; this.props.title = next; }
+  readsAfterAssignment(): void { this.props.status = Status.closed; this.props.title = String(this.props.status); }
+  escapesAfterAssignment(): void { this.props.status = Status.closed; this.addEvent({ ticket: this }); }
+  serialisesAfterAssignment(): void { this.props.status = Status.closed; this.props.title = JSON.stringify(this); }
+  emitsAssignedStatus(): void { this.props.status = Status.closed; this.addEvent({ status: this.props.status }); }
+  parenthesisedAssignment(): void { (this.props.status = Status.closed); this.addEvent({ status: this.props.status }); }
+  guardedThenReadsAfterAssignment(): void { if (this.props.status === Status.closed) return; this.props.status = Status.open; this.props.title = this.props.status; }
+  aliasBeforeAssignment(): void { const s = this.props.status; this.props.status = Status.open; if (s === Status.closed) throw new Error('closed'); }
+  thisAliasBeforeAssignment(): void { const self = this; this.props.status = Status.open; if (self.props.title === 'x') return; }
+  nestedAssignmentThenRead(flag: boolean): void { if (flag) { this.props.status = Status.open; } this.props.title = this.props.status; }
+  assignmentReadsItself(): void { this.props.status = this.props.status === Status.draft ? Status.open : Status.closed; this.addEvent({}); }
+  readsBeforeAssignment(): void { this.props.title = this.props.status; this.props.status = Status.open; }
+  otherAssignmentDoesNotCut(): void { this.props.title = 'x'; this.props.title = this.props.status; }
   booleanGuard(): void { if (this.archived) return; this.props.title = 'x'; }
 }
 export class ClosableBase extends AggregateRoot<{ status: Status; title: string }> {
@@ -132,6 +144,18 @@ describe('methodSources for an enum field', () => {
     ['parenthesisedReceiver', ['DRAFT', 'OPEN']],
     ['elementProps', ['DRAFT', 'OPEN']],
     ['deepChain', 'unknown'],
+    ['readsAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['escapesAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['serialisesAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['emitsAssignedStatus', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['parenthesisedAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['guardedThenReadsAfterAssignment', ['DRAFT', 'OPEN']],
+    ['aliasBeforeAssignment', 'unknown'],
+    ['thisAliasBeforeAssignment', 'unknown'],
+    ['nestedAssignmentThenRead', 'unknown'],
+    ['assignmentReadsItself', 'unknown'],
+    ['readsBeforeAssignment', 'unknown'],
+    ['otherAssignmentDoesNotCut', 'unknown'],
   ])('%s can run from %j', (method, expected) => {
     expect(describeSources(methodSources(ticket.getMethodOrThrow(method), status, defaultScope(ticket)))).toEqual(expected);
   });

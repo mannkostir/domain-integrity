@@ -153,12 +153,32 @@ const readsFieldOutside = (
   );
 };
 
+const unwrapParentheses = (node: Expression): Expression =>
+  Node.isParenthesizedExpression(node) ? unwrapParentheses(node.getExpression()) : node;
+
+const overwritesField = (statement: Statement, field: StateField): boolean =>
+  Node.isExpressionStatement(statement) && isFieldAssignment(unwrapParentheses(statement.getExpression()), field);
+
+const statementsUntilOverwrite = (statements: readonly Statement[], field: StateField): readonly Statement[] => {
+  const overwrite = statements.findIndex((statement) => overwritesField(statement, field));
+  return overwrite === -1 ? statements : statements.slice(0, overwrite + 1);
+};
+
+const readsFieldBeforeOverwrite = (
+  statements: readonly Statement[],
+  field: StateField,
+  scope: AggregateScope,
+  recognised: ReadonlySet<Node>,
+): boolean =>
+  statementsUntilOverwrite(statements, field).some((statement) => readsFieldOutside(statement, field, scope, recognised));
+
 export const methodSources = (method: MethodDeclaration, field: StateField, scope: AggregateScope): Sources => {
   const body = method.getBody();
   if (!Node.isBlock(body)) return { kind: 'unknown' };
-  const scan = scanStatements(body.getStatements(), field, scope);
+  const statements = body.getStatements();
+  const scan = scanStatements(statements, field, scope);
   if (scan === 'unknown') return { kind: 'unknown' };
-  return readsFieldOutside(body, field, scope, scan.recognised)
+  return readsFieldBeforeOverwrite(statements, field, scope, scan.recognised)
     ? { kind: 'unknown' }
     : { kind: 'known', values: scan.allowed };
 };
