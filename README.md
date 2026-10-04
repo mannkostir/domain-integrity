@@ -133,10 +133,23 @@ npx domain-integrity check
 |---|---|
 | `terminal-state-leak` | A public method that can still change the aggregate after it reached a terminal state |
 | `unreachable-state` | A state your type declares but no code ever assigns |
-| `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification |
+| `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. |
 | `transition-drift` | A method that can run from states you did not declare (error), or no longer from states you did (warning) |
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
+
+Every file your tsconfig includes is scanned, tests too, so an assignment in a test is reported as `outside-mutation`. To leave tests out, give `check` a tsconfig that excludes them:
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "test", "**/*.spec.ts", "**/*.test.ts"]
+}
+```
+
+```bash
+npx domain-integrity check -p tsconfig.domain.json
+```
 
 ## Commands
 
@@ -253,14 +266,15 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Object fields in aggregates that leak `this` anywhere.** Methods that read those fields are skipped, because a field might hold a callback into the aggregate.
 - **Calls to library base-class methods**, other than the configured event methods, because library code can call back into your overrides. An allowlist is planned: [#9](https://github.com/mannkostir/domain-integrity/issues/9).
 - **Values mentioned elsewhere.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types.
+- **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 
-A few rare self-wiring shapes can still produce a false finding; [#10](https://github.com/mannkostir/domain-integrity/issues/10) lists them. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
+A few rare self-wiring shapes can still produce a false finding: a factory or service outside the class (`agg.policy = new Policy(agg)`), the instance held inside another object (`box.o.policy.owner = box.o`), and a module-level factory function. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
 
 <details>
 <summary>The precise rules</summary>
 
-- **Guards.** A guard counts only if it is an early return or throw, or an `if` that wraps the whole method, with conditions built from `===`, `!==`, truthiness, `&&`, `||`, `!`, and getters that return such a condition. Any other read of the state field in the method makes its allowed sources unknown. Unknown never produces a finding.
+- **Guards.** A guard counts only if it is an early return or throw, or an `if` that wraps the whole method, with conditions built from `===`, `!==`, truthiness, `&&`, `||`, `!`, and getters that return such a condition. Any other read of the state field in the method makes its allowed sources unknown. Unknown never produces a finding. After the method's first top-level plain `=` assignment to the field itself, through plain data members declared in your project rather than a setter or a getter-returned copy, later reads and guards of the field are ignored, because by then it holds the assigned value; reads before it, including the assignment's right-hand side, still count.
 - **Members without a body.** A member with no body in the project counts as reading the state field. That includes abstract members, members declared only in `.d.ts` files, and members of base classes that cannot be resolved. There are two exceptions:
   - configured `eventMethods`, which are assumed not to read it;
   - library data properties whose type is not callable and cannot hold the field. A `.d.ts` that declares a getter as a plain property is trusted as written.
@@ -272,9 +286,9 @@ A few rare self-wiring shapes can still produce a false finding; [#10](https://g
   These do not count as leaks:
   - a discarded `Object.assign(this, …)`;
   - an object spread of `this` or `this.props`;
-  - a static factory's plain `return v;`.
+  - a factory's plain `return v;`.
 
-  Inside static members, locals and parameters typed as the aggregate are tracked like `this`. In a leaking aggregate, every non-primitive project field counts as reading the state field. In an aggregate that does not leak, project fields are plain data.
+  Factory members are static members and any member that calls `new` on a class in the family, such as `clone()`, including constructors, property initializers and accessors. Inside a factory member, a variable or parameter is tracked like `this` when it is typed as the aggregate, initialized with `new` on a class in the family, or assigned one with `=`, `??=`, `||=` or `&&=`, whatever its declared type: `any`, an interface or an intersection. A tracked variable leaks when it escapes or is captured by any function other than a direct array callback. Only a bare `return v;` is exempt. Wrapping it counts as an escape: `return Result.ok(v)`, `[a, b]`, `cond ? v : w`, or pushing it into a field all make the aggregate leak. In a leaking aggregate, every non-primitive project field counts as reading the state field. In an aggregate that does not leak, project fields are plain data.
 - **Unreachable values.** `unreachable-state` is skipped for a field if any of these holds:
   - the field has an assignment whose value cannot be resolved;
   - a method may write the field through an escaping `this`;

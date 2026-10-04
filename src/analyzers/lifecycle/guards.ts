@@ -5,11 +5,14 @@ import {
   MethodDeclaration,
   Node,
   Statement,
+  Symbol as MorphSymbol,
   SyntaxKind,
 } from 'ts-morph';
 import { SET, UNSET, literalToken } from '../../engine/value-token';
 import { AggregateScope, fieldNameOf, referencesField, referencesFieldDirectly, thisGetterExpression } from './field-ref';
 import { Sources, StateField } from './model';
+import { isLibraryNode } from './library';
+import { isAccessor } from './state-field';
 import { allTokens, difference, intersect, union } from './values';
 
 type Evaluation = { readonly whenTrue: ReadonlySet<string>; readonly whenFalse: ReadonlySet<string> } | 'unknown';
@@ -153,12 +156,46 @@ const readsFieldOutside = (
   );
 };
 
+const unwrapParentheses = (node: Expression): Expression =>
+  Node.isParenthesizedExpression(node) ? unwrapParentheses(node.getExpression()) : node;
+
+const assignedMember = (target: Expression): MorphSymbol | undefined => {
+  if (Node.isPropertyAccessExpression(target)) return target.getNameNode().getSymbol();
+  if (Node.isElementAccessExpression(target)) return target.getArgumentExpression()?.getSymbol();
+  return undefined;
+};
+
+const isPlainDataMember = (symbol: MorphSymbol | undefined): boolean => {
+  const declarations = symbol?.getDeclarations() ?? [];
+  return declarations.length > 0 && !declarations.some(isAccessor) && !declarations.some(isLibraryNode);
+};
+
+const isPlainDataPathFromThis = (target: Expression): boolean => {
+  if (!Node.isPropertyAccessExpression(target) && !Node.isElementAccessExpression(target)) return false;
+  const holder = target.getExpression();
+  return (
+    isPlainDataMember(assignedMember(target)) && (Node.isThisExpression(holder) || isPlainDataPathFromThis(holder))
+  );
+};
+
+const overwritesField = (statement: Statement, field: StateField): boolean => {
+  if (!Node.isExpressionStatement(statement)) return false;
+  const expression = unwrapParentheses(statement.getExpression());
+  return isFieldAssignment(expression, field) && isPlainDataPathFromThis(expression.getLeft());
+};
+
+const statementsUntilOverwrite = (statements: readonly Statement[], field: StateField): readonly Statement[] => {
+  const overwrite = statements.findIndex((statement) => overwritesField(statement, field));
+  return overwrite === -1 ? statements : statements.slice(0, overwrite + 1);
+};
+
 export const methodSources = (method: MethodDeclaration, field: StateField, scope: AggregateScope): Sources => {
   const body = method.getBody();
   if (!Node.isBlock(body)) return { kind: 'unknown' };
-  const scan = scanStatements(body.getStatements(), field, scope);
+  const considered = statementsUntilOverwrite(body.getStatements(), field);
+  const scan = scanStatements(considered, field, scope);
   if (scan === 'unknown') return { kind: 'unknown' };
-  return readsFieldOutside(body, field, scope, scan.recognised)
+  return considered.some((statement) => readsFieldOutside(statement, field, scope, scan.recognised))
     ? { kind: 'unknown' }
     : { kind: 'known', values: scan.allowed };
 };
