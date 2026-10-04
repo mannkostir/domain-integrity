@@ -318,6 +318,37 @@ export class S11 {
   edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
 }
 `,
+  '/probe14/s12.ts': `
+import { P, Status } from './p';
+export class S12 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S12 { let o: any; o ??= new S12(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s13.ts': `
+import { P, Status } from './p';
+export class S13 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); static create(): S13 { let o: any; o ||= new S13(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s14.ts': `
+import { P, Status } from './p';
+const register = (s: S14): void => { void s; };
+export class S14 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); merge(other: S14): S14 { const o = new S14(); register(other); return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
   '/plain/name.ts': `
 export type Status = 'open' | 'closed';
 class Name {
@@ -453,8 +484,14 @@ describe('aggregates that leak this', () => {
     ['/probe14/s9.ts', 'S9', 'edit'],
     ['/probe14/s10.ts', 'S10', 'edit'],
     ['/probe14/s11.ts', 'S11', 'edit'],
+    ['/probe14/s12.ts', 'S12', 'edit'],
+    ['/probe14/s13.ts', 'S13', 'edit'],
   ])('%s %s.%s reports no leak', (path, className, method) => {
     expect(leaks(classNamed(path, className))).not.toContain(method);
+  });
+
+  it('tracks an aggregate-typed parameter of an instance member that builds an instance', () => {
+    expect(leaks(classNamed('/probe14/s14.ts', 'S14'))).not.toContain('edit');
   });
 });
 

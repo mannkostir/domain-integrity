@@ -31,6 +31,13 @@ const NON_RETAINING_CALLBACKS = new Set([
   'sort',
 ]);
 
+const FAMILY_ASSIGNMENT_OPERATORS: ReadonlySet<SyntaxKind> = new Set([
+  SyntaxKind.EqualsToken,
+  SyntaxKind.QuestionQuestionEqualsToken,
+  SyntaxKind.BarBarEqualsToken,
+  SyntaxKind.AmpersandAmpersandEqualsToken,
+]);
+
 const isAssignmentTarget = (node: Node): boolean => {
   const parent = node.getParent();
   return (
@@ -126,7 +133,7 @@ const declaredInstances = (member: Node, family: ReadonlySet<Node>): readonly Mo
   );
 
 const isFamilyAssignment = (expression: BinaryExpression, family: ReadonlySet<Node>): boolean =>
-  expression.getOperatorToken().getKind() === SyntaxKind.EqualsToken &&
+  FAMILY_ASSIGNMENT_OPERATORS.has(expression.getOperatorToken().getKind()) &&
   isFamilyConstruction(expression.getRight(), family);
 
 const assignedInstances = (member: Node, family: ReadonlySet<Node>): readonly MorphSymbol[] =>
