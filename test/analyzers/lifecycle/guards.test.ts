@@ -333,13 +333,13 @@ describe('methodSources for a nullable field whose set values may be falsy', () 
     describeSources(methodSources(meter.getMethodOrThrow(method), resolvedField(meter, field), defaultScope(meter)));
 
   it.each([
-    ['readingTruthyThrow', 'unknown'],
-    ['readingFalsyReturn', 'unknown'],
-    ['readingTruthyAndFlag', 'unknown'],
-    ['readingTruthyOrNull', 'unknown'],
-    ['readingWrapper', 'unknown'],
-    ['readingViaGetter', 'unknown'],
-    ['readingViaValueGetter', 'unknown'],
+    ['readingTruthyThrow', ['set', 'unset']],
+    ['readingFalsyReturn', ['set']],
+    ['readingTruthyAndFlag', ['set', 'unset']],
+    ['readingTruthyOrNull', ['set']],
+    ['readingWrapper', ['set']],
+    ['readingViaGetter', ['set', 'unset']],
+    ['readingViaValueGetter', ['set']],
     ['readingStrictNullReturn', ['set']],
     ['readingStrictNotNullWrapper', ['set']],
   ])('%s can run from %j when a number field may hold zero', (method, expected) => {
@@ -347,8 +347,8 @@ describe('methodSources for a nullable field whose set values may be falsy', () 
   });
 
   it.each([
-    ['codeTruthyThrow', 'unknown'],
-    ['codeFalsyReturn', 'unknown'],
+    ['codeTruthyThrow', ['set', 'unset']],
+    ['codeFalsyReturn', ['set']],
     ['codeLooseNullReturn', ['set']],
   ])('%s can run from %j when a string field may hold an empty string', (method, expected) => {
     expect(sourcesOf(method, 'code')).toEqual(expected);
