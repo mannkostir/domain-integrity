@@ -1,7 +1,7 @@
 import { ClassDeclaration, Symbol as MorphSymbol, Node, Type } from 'ts-morph';
 import { SET, UNSET, isNullish, literalToken } from '../../engine/value-token';
 import { aggregateName } from './discover';
-import { EnumReference, StateField, StateFieldKind, StateValue } from './model';
+import { EnumReference, StateField, StateFieldKind, StateValue, UnsetForm } from './model';
 
 export type FieldResolution =
   | { readonly kind: 'resolved'; readonly field: StateField }
@@ -34,7 +34,12 @@ const resolved = (
   kind: StateFieldKind,
   values: readonly StateValue[],
   enumReference: EnumReference | undefined = undefined,
-): FieldResolution => ({ kind: 'resolved', field: { name, kind, values, enumReference } });
+): FieldResolution => ({ kind: 'resolved', field: { name, kind, values, enumReference, unsetForms: [] } });
+
+const unsetFormsOf = (members: readonly Type[]): readonly UnsetForm[] => [
+  ...(members.some((member) => member.isNull()) ? (['null'] as const) : []),
+  ...(members.some((member) => member.isUndefined()) ? (['undefined'] as const) : []),
+];
 
 const enumMember = (type: Type) => type.getSymbol()?.getDeclarations().find((node) => Node.isEnumMember(node));
 
@@ -69,6 +74,11 @@ const NULLABLE_VALUES: readonly StateValue[] = [
   { token: UNSET, label: UNSET, source: `'${UNSET}'` },
 ];
 
+const resolvedNullable = (name: string, members: readonly Type[]): FieldResolution => ({
+  kind: 'resolved',
+  field: { name, kind: 'nullable', values: NULLABLE_VALUES, enumReference: undefined, unsetForms: unsetFormsOf(members) },
+});
+
 export const resolveStateField = (cls: ClassDeclaration, name: string): FieldResolution => {
   if (isAccessorOnly(cls, name)) {
     return { kind: 'problem', message: `${aggregateName(cls)}.${name} is an accessor; declare its backing field instead` };
@@ -88,7 +98,7 @@ export const resolveStateField = (cls: ClassDeclaration, name: string): FieldRes
     return resolved(name, 'union', present.map(literalValue));
   }
   if (nullable && present.length > 0 && present.every((member) => literalToken(member) === undefined)) {
-    return resolved(name, 'nullable', NULLABLE_VALUES);
+    return resolvedNullable(name, members);
   }
   return {
     kind: 'problem',

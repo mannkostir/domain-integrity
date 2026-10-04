@@ -1,7 +1,8 @@
 export type StateFieldKind = 'enum' | 'union' | 'boolean' | 'nullable';
 export type StateValue = { readonly token: string; readonly label: string; readonly source: string };
 export type EnumReference = { readonly name: string; readonly file: string };
-export type StateField = { readonly name: string; readonly kind: StateFieldKind; readonly values: readonly StateValue[]; readonly enumReference: EnumReference | undefined };
+export type UnsetForm = 'null' | 'undefined';
+export type StateField = { readonly name: string; readonly kind: StateFieldKind; readonly values: readonly StateValue[]; readonly enumReference: EnumReference | undefined; readonly unsetForms: readonly UnsetForm[] };
 export type Sources = { readonly kind: 'known'; readonly values: ReadonlySet<string> } | { readonly kind: 'unknown' };
 export type AssignedValues = { readonly tokens: ReadonlySet<string>; readonly unresolved: boolean; readonly mayWrite: boolean };
 export type FieldBehaviour = { readonly sources: Sources; readonly sets: AssignedValues };
