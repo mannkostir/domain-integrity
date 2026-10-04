@@ -8,9 +8,10 @@ import {
   Symbol as MorphSymbol,
   SyntaxKind,
 } from 'ts-morph';
-import { SET, UNSET, literalToken } from '../../engine/value-token';
+import { SET, literalToken } from '../../engine/value-token';
 import { AggregateScope, fieldNameOf, referencesField, referencesFieldDirectly, thisGetterExpression } from './field-ref';
-import { Sources, StateField } from './model';
+import { collapseGuardTokens, comparedUnsetTokens, guardUniverse, unsetGuardTokens } from './guard-tokens';
+import { Sources, StateField, UnsetForm } from './model';
 import { isLibraryNode } from './library';
 import { isAccessor } from './state-field';
 import { allTokens, difference, intersect, union } from './values';
@@ -22,20 +23,29 @@ type GuardScan = { readonly allowed: ReadonlySet<string>; readonly recognised: R
 const MAX_GETTER_DEPTH = 5;
 const EQUALITY = new Set<SyntaxKind>([SyntaxKind.EqualsEqualsEqualsToken, SyntaxKind.EqualsEqualsToken]);
 const INEQUALITY = new Set<SyntaxKind>([SyntaxKind.ExclamationEqualsEqualsToken, SyntaxKind.ExclamationEqualsToken]);
+const STRICT = new Set<SyntaxKind>([SyntaxKind.EqualsEqualsEqualsToken, SyntaxKind.ExclamationEqualsEqualsToken]);
 
 const negate = (evaluation: Evaluation): Evaluation =>
   evaluation === 'unknown' ? evaluation : { whenTrue: evaluation.whenFalse, whenFalse: evaluation.whenTrue };
 
 const truthiness = (field: StateField): Evaluation => {
   if (field.kind === 'boolean') return { whenTrue: new Set(['true']), whenFalse: new Set(['false']) };
-  if (field.kind === 'nullable') return { whenTrue: new Set([SET]), whenFalse: new Set([UNSET]) };
+  if (field.kind === 'nullable') return { whenTrue: new Set([SET]), whenFalse: unsetGuardTokens(field) };
   return 'unknown';
 };
 
-const comparedToken = (node: Expression, field: StateField): string | undefined => {
-  if (field.kind === 'nullable') return Node.isNullLiteral(node) || node.getText() === 'undefined' ? UNSET : undefined;
+const unsetFormOf = (node: Expression): UnsetForm | undefined => {
+  if (Node.isNullLiteral(node)) return 'null';
+  return node.getText() === 'undefined' ? 'undefined' : undefined;
+};
+
+const comparedTokens = (node: Expression, field: StateField, strict: boolean): ReadonlySet<string> | undefined => {
+  if (field.kind === 'nullable') {
+    const form = unsetFormOf(node);
+    return form === undefined ? undefined : comparedUnsetTokens(field, form, strict);
+  }
   const token = literalToken(node.getType());
-  return token !== undefined && allTokens(field).has(token) ? token : undefined;
+  return token !== undefined && allTokens(field).has(token) ? new Set([token]) : undefined;
 };
 
 const comparedSide = (left: Expression, right: Expression, field: StateField): Expression | undefined => {
@@ -44,12 +54,11 @@ const comparedSide = (left: Expression, right: Expression, field: StateField): E
   return undefined;
 };
 
-const compare = (left: Expression, right: Expression, field: StateField): Evaluation => {
+const compare = (left: Expression, right: Expression, field: StateField, strict: boolean): Evaluation => {
   const other = comparedSide(left, right, field);
-  const token = other === undefined ? undefined : comparedToken(other, field);
-  if (token === undefined) return 'unknown';
-  const matching = new Set([token]);
-  return { whenTrue: matching, whenFalse: difference(allTokens(field), matching) };
+  const matching = other === undefined ? undefined : comparedTokens(other, field, strict);
+  if (matching === undefined) return 'unknown';
+  return { whenTrue: matching, whenFalse: difference(guardUniverse(field), matching) };
 };
 
 const evaluateBinary = (node: BinaryExpression, field: StateField, scope: AggregateScope, depth: number): Evaluation => {
@@ -62,13 +71,14 @@ const evaluateBinary = (node: BinaryExpression, field: StateField, scope: Aggreg
       ? { whenTrue: intersect(left.whenTrue, right.whenTrue), whenFalse: union(left.whenFalse, right.whenFalse) }
       : { whenTrue: union(left.whenTrue, right.whenTrue), whenFalse: intersect(left.whenFalse, right.whenFalse) };
   }
-  if (EQUALITY.has(operator)) return compare(node.getLeft(), node.getRight(), field);
-  if (INEQUALITY.has(operator)) return negate(compare(node.getLeft(), node.getRight(), field));
+  const strict = STRICT.has(operator);
+  if (EQUALITY.has(operator)) return compare(node.getLeft(), node.getRight(), field, strict);
+  if (INEQUALITY.has(operator)) return negate(compare(node.getLeft(), node.getRight(), field, strict));
   return 'unknown';
 };
 
 const evaluate = (node: Expression, field: StateField, scope: AggregateScope, depth = 0): Evaluation => {
-  if (!referencesField(node, field.name, scope)) return { whenTrue: allTokens(field), whenFalse: allTokens(field) };
+  if (!referencesField(node, field.name, scope)) return { whenTrue: guardUniverse(field), whenFalse: guardUniverse(field) };
   if (Node.isParenthesizedExpression(node)) return evaluate(node.getExpression(), field, scope, depth);
   if (Node.isPrefixUnaryExpression(node) && node.getOperatorToken() === SyntaxKind.ExclamationToken) {
     return negate(evaluate(node.getOperand(), field, scope, depth));
@@ -129,7 +139,7 @@ const scanEarlyExits = (statements: readonly Statement[], field: StateField, sco
           recognised: new Set([...scan.recognised, guard.getExpression()]),
         };
       },
-      { allowed: allTokens(field), recognised: new Set<Node>() },
+      { allowed: guardUniverse(field), recognised: new Set<Node>() },
     );
 
 const scanStatements = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan => {
@@ -197,5 +207,5 @@ export const methodSources = (method: MethodDeclaration, field: StateField, scop
   if (scan === 'unknown') return { kind: 'unknown' };
   return considered.some((statement) => readsFieldOutside(statement, field, scope, scan.recognised))
     ? { kind: 'unknown' }
-    : { kind: 'known', values: scan.allowed };
+    : collapseGuardTokens(field, scan.allowed);
 };

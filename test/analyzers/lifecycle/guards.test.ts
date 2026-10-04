@@ -107,6 +107,28 @@ export class ClosableTicket extends ClosableBase {
   rename(): void { if (this.isClosed) return; this.props.title = 'x'; }
 }
 `,
+  '/src/shift.ts': `
+import { AggregateRoot } from './aggregate-root';
+export class Shift extends AggregateRoot<{ endedAt: Date | null | undefined; pausedAt: Date | null; archivedAt?: Date; note: string }> {
+  strictNullReturn(): void { if (this.props.endedAt === null) return; this.props.note = 'x'; }
+  strictUndefinedThrow(): void { if (this.props.endedAt === undefined) throw new Error('x'); this.props.note = 'x'; }
+  strictNotNullWrapper(): void { if (this.props.endedAt !== null) { this.props.note = 'x'; } }
+  looseNullReturn(): void { if (this.props.endedAt == null) return; this.props.note = 'x'; }
+  looseUndefinedReturn(): void { if (this.props.endedAt == undefined) return; this.props.note = 'x'; }
+  looseNotNullWrapper(): void { if (this.props.endedAt != null) { this.props.note = 'x'; } }
+  bothStrictCombined(): void { if (this.props.endedAt === null || this.props.endedAt === undefined) return; this.props.note = 'x'; }
+  bothStrictSeparate(): void { if (this.props.endedAt === null) return; if (this.props.endedAt === undefined) return; this.props.note = 'x'; }
+  bothStrictWrapper(): void { if (this.props.endedAt !== null && this.props.endedAt !== undefined) { this.props.note = 'x'; } }
+  truthyReturn(): void { if (!this.props.endedAt) return; this.props.note = 'x'; }
+  requiresEnded(): void { if (this.props.endedAt == null) { this.props.note = 'x'; } }
+  requiresStrictNull(): void { if (this.props.endedAt === null) { this.props.note = 'x'; } }
+  unguarded(): void { this.props.note = 'x'; }
+  pausedStrictNullReturn(): void { if (this.props.pausedAt === null) return; this.props.note = 'x'; }
+  pausedStrictUndefinedReturn(): void { if (this.props.pausedAt === undefined) return; this.props.note = 'x'; }
+  pausedStrictNotNullWrapper(): void { if (this.props.pausedAt !== null) { this.props.note = 'x'; } }
+  archivedStrictUndefinedReturn(): void { if (this.props.archivedAt === undefined) return; this.props.note = 'x'; }
+}
+`,
 });
 
 const ticket = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('Ticket');
@@ -216,5 +238,42 @@ describe('methodSources with an inherited getter', () => {
       'DRAFT',
       'OPEN',
     ]);
+  });
+});
+
+describe('methodSources for a nullable field', () => {
+  const shift = project.getSourceFileOrThrow('/src/shift.ts').getClassOrThrow('Shift');
+  const sourcesOf = (method: string, field: string) =>
+    describeSources(methodSources(shift.getMethodOrThrow(method), resolvedField(shift, field), defaultScope(shift)));
+
+  it.each([
+    ['strictNullReturn', 'unknown'],
+    ['strictUndefinedThrow', 'unknown'],
+    ['strictNotNullWrapper', 'unknown'],
+    ['looseNullReturn', ['set']],
+    ['looseUndefinedReturn', ['set']],
+    ['looseNotNullWrapper', ['set']],
+    ['bothStrictCombined', ['set']],
+    ['bothStrictSeparate', ['set']],
+    ['bothStrictWrapper', ['set']],
+    ['truthyReturn', ['set']],
+    ['requiresEnded', ['unset']],
+    ['requiresStrictNull', 'unknown'],
+    ['unguarded', ['set', 'unset']],
+  ])('%s can run from %j when the type includes null and undefined', (method, expected) => {
+    expect(sourcesOf(method, 'endedAt')).toEqual(expected);
+  });
+
+  it.each([
+    ['pausedStrictNullReturn', ['set']],
+    ['pausedStrictUndefinedReturn', ['set']],
+    ['pausedStrictNotNullWrapper', ['set']],
+    ['unguarded', ['set', 'unset']],
+  ])('%s can run from %j when the type includes only null', (method, expected) => {
+    expect(sourcesOf(method, 'pausedAt')).toEqual(expected);
+  });
+
+  it('treats a strict undefined check as covering an optional field', () => {
+    expect(sourcesOf('archivedStrictUndefinedReturn', 'archivedAt')).toEqual(['set']);
   });
 });
