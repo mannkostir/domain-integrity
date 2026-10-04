@@ -4,6 +4,7 @@ import { AggregateModel } from '../model';
 export const outsideMutation = (aggregate: AggregateModel): Finding[] =>
   aggregate.outside
     .filter((assignment) => aggregate.declarations.has(assignment.field))
+    .filter((assignment) => !assignment.throughOwnSetter)
     .map((assignment) => ({
       checkId: 'outside-mutation',
       severity: 'error',
