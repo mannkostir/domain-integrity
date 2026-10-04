@@ -105,6 +105,12 @@ const isFamilyConstruction = (node: Node | undefined, family: ReadonlySet<Node>)
   return Node.isNewExpression(target) && refersToFamily(target.getType(), family);
 };
 
+const constructsFamily = (member: Node, family: ReadonlySet<Node>): boolean =>
+  member.getDescendantsOfKind(SyntaxKind.NewExpression).some((expression) => isFamilyConstruction(expression, family));
+
+const isFactoryMember = (member: Node, family: ReadonlySet<Node>): boolean =>
+  isStaticMember(member) || constructsFamily(member, family);
+
 const symbolsOf = (nodes: readonly Node[]): readonly MorphSymbol[] =>
   nodes.flatMap((node) => {
     const symbol = node.getSymbol();
@@ -178,10 +184,10 @@ const capturedInClosure = (reference: Node, member: Node): boolean => {
     .some((ancestor) => isClosure(ancestor) && !isNonRetainingCallback(ancestor));
 };
 
-const staticMembersLeak = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
+const factoryMembersLeak = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
   cls
     .getMembers()
-    .filter(isStaticMember)
+    .filter((member) => isFactoryMember(member, family))
     .some((member) =>
       instanceReferences(member, family).some(
         (reference) => instanceEscapes(reference) || capturedInClosure(reference, member),
@@ -190,7 +196,7 @@ const staticMembersLeak = (cls: ClassDeclaration, family: ReadonlySet<Node>): bo
 
 const leaksFrom = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
   cls.getDescendants().some((node) => escapesAggregate(node) || capturesAggregate(node)) ||
-  staticMembersLeak(cls, family);
+  factoryMembersLeak(cls, family);
 
 const projectSubclasses = (cls: ClassDeclaration, files: readonly SourceFile[]): readonly ClassDeclaration[] =>
   files

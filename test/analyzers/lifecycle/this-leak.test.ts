@@ -298,6 +298,26 @@ export class S9 {
   edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
 }
 `,
+  '/probe14/s10.ts': `
+import { P, Status } from './p';
+export class S10 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); clone(): S10 { const o = new S10(); o.policy.owner = o; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
+  '/probe14/s11.ts': `
+import { P, Status } from './p';
+export class S11 {
+  status: Status = 'open';
+  private note = '';
+  policy: P = new P(); clone(): S11 { const o = new S11(); o.policy = new P(o); return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  edit(n: string): void { if (!this.policy.canEdit()) return; this.note = n; }
+}
+`,
   '/plain/name.ts': `
 export type Status = 'open' | 'closed';
 class Name {
@@ -318,6 +338,21 @@ export class Built {
   status: Status = 'open';
   private _name!: Name;
   static create(): Built { const o = new Built(); o._name = Name.create('a'); return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+}
+export class Cloned {
+  status: Status = 'open';
+  private _name!: Name;
+  clone(): Cloned { const o = new Cloned(); o._name = this._name; return o; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+}
+const compare = (other: Compared): boolean => other.status === 'open';
+export class Compared {
+  status: Status = 'open';
+  private _name!: Name;
+  same(other: Compared): boolean { return compare(other); }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
   rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
 }
@@ -416,6 +451,8 @@ describe('aggregates that leak this', () => {
     ['/probe14/s6.ts', 'S6', 'edit'],
     ['/probe14/s7.ts', 'S7', 'edit'],
     ['/probe14/s9.ts', 'S9', 'edit'],
+    ['/probe14/s10.ts', 'S10', 'edit'],
+    ['/probe14/s11.ts', 'S11', 'edit'],
   ])('%s %s.%s reports no leak', (path, className, method) => {
     expect(leaks(classNamed(path, className))).not.toContain(method);
   });
@@ -438,6 +475,14 @@ describe('copying values into or out of the aggregate', () => {
 describe('aggregates that do not leak this', () => {
   it('do not leak through a static factory that only returns the built instance', () => {
     expect(leaks(classNamed('/plain/name.ts', 'Built'))).toContain('rename');
+  });
+
+  it('do not leak through an instance factory that only copies a field into the built instance', () => {
+    expect(leaks(classNamed('/plain/name.ts', 'Cloned'))).toContain('rename');
+  });
+
+  it('do not leak through an instance method that passes a parameter of its own type to a function', () => {
+    expect(leaks(classNamed('/plain/name.ts', 'Compared'))).toContain('rename');
   });
 
   it('do not leak through a static factory that only returns an instance built into an any-typed local', () => {
