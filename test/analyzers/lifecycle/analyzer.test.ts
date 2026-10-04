@@ -57,6 +57,34 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
     expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak pay']);
   });
 
+  it('reports no transition drift when a truthiness guard on a number field cannot exclude a falsy set value', () => {
+    const meterProject = inMemoryProject({
+      '/src/meter.ts': `
+export class Meter {
+  private reading: number | null = null;
+  record(): void { if (this.reading) throw new Error(); this.reading = 1; }
+}
+`,
+    });
+    const meter = meterProject.getSourceFileOrThrow('/src/meter.ts').getClassOrThrow('Meter');
+
+    const result = analyse(lifecycleAnalyzer, {
+      declaration: {
+        ...DEFAULT_DECLARATION,
+        lifecycles: [
+          {
+            target: meter,
+            fields: [{ name: 'reading', terminal: [], transitions: new Map([['record', ['set', 'unset']]]) }],
+            allowAfterTerminal: [],
+          },
+        ],
+      },
+      files: meterProject.getSourceFiles(),
+    });
+
+    expect(result.findings.filter((finding) => finding.checkId === 'transition-drift')).toEqual([]);
+  });
+
   it('describes its four rules', () => {
     expect(lifecycleAnalyzer.rules.map((rule) => rule.id)).toEqual([
       'terminal-state-leak',

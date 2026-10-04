@@ -30,7 +30,7 @@ const negate = (evaluation: Evaluation): Evaluation =>
 
 const truthiness = (field: StateField): Evaluation => {
   if (field.kind === 'boolean') return { whenTrue: new Set(['true']), whenFalse: new Set(['false']) };
-  if (field.kind === 'nullable') return { whenTrue: new Set([SET]), whenFalse: unsetGuardTokens(field) };
+  if (field.kind === 'nullable' && !field.setMayBeFalsy) return { whenTrue: new Set([SET]), whenFalse: unsetGuardTokens(field) };
   return 'unknown';
 };
 
