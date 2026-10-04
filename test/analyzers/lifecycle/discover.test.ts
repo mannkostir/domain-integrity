@@ -65,7 +65,8 @@ export class ExternalAccount implements Account {}
 `,
 });
 
-const discoveredByInterface = names(discoverAggregates(interfaceProject.getSourceFiles(), ['Account'], []));
+const discoverByAccountInterface = (): readonly (string | undefined)[] =>
+  names(discoverAggregates(interfaceProject.getSourceFiles(), ['Account'], []));
 
 const DIAMOND_DEPTH = 30;
 
@@ -91,58 +92,82 @@ describe('discoverAggregates', () => {
   });
 
   it('finds a class that directly implements a named interface', () => {
-    expect(discoveredByInterface).toContain('DirectAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('DirectAccount');
   });
 
   it('finds a class that implements an unresolved named interface', () => {
-    expect(discoveredByInterface).toContain('ExternalAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('ExternalAccount');
   });
 
   it('finds a class whose implemented interface transitively extends a named interface', () => {
-    expect(discoveredByInterface).toContain('AuditedAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('AuditedAccount');
   });
 
   it('finds a subclass of an abstract class that implements a named interface', () => {
-    expect(discoveredByInterface).toContain('SavingsAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('SavingsAccount');
   });
 
   it('finds a class that both extends a plain class and implements a named interface', () => {
-    expect(discoveredByInterface).toContain('HybridAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('HybridAccount');
   });
 
   it('skips an abstract class that implements a named interface', () => {
-    expect(discoveredByInterface).not.toContain('BaseAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).not.toContain('BaseAccount');
   });
 
   it('skips a class that implements an unrelated interface', () => {
-    expect(discoveredByInterface).not.toContain('Report');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).not.toContain('Report');
   });
 
   it('skips a class whose implemented interfaces extend each other in a cycle', () => {
-    expect(discoveredByInterface).not.toContain('Tangled');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).not.toContain('Tangled');
   });
 
   it('finds a class that implements a type alias of a named interface', () => {
-    expect(discoveredByInterface).toContain('AliasedAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('AliasedAccount');
   });
 
   it('finds a class that implements a type alias of an interface extending a named interface', () => {
-    expect(discoveredByInterface).toContain('AliasedOwned');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('AliasedOwned');
   });
 
   it('finds a class that implements a named interface imported under another name', () => {
-    expect(discoveredByInterface).toContain('RenamedAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('RenamedAccount');
   });
 
   it('finds a class that implements a namespace-qualified named interface', () => {
-    expect(discoveredByInterface).toContain('QualifiedAccount');
+    const discovered = discoverByAccountInterface();
+
+    expect(discovered).toContain('QualifiedAccount');
   });
 
   it('finds a class that implements a named generic interface with type arguments', () => {
     expect(names(discoverAggregates(interfaceProject.getSourceFiles(), ['Repo'], []))).toEqual(['NumberRepo']);
   });
 
-  it('skips a class implementing a deep diamond of unrelated interfaces without exhaustive path walking', () => {
+  it('finds nothing in a deep diamond-shaped hierarchy of unrelated interfaces without hanging', () => {
     expect(names(discoverAggregates(diamondProject.getSourceFiles(), ['Account'], []))).toEqual([]);
   });
 });
