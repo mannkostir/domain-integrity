@@ -240,7 +240,7 @@ export default defineDomain({
 | `terminal` | Required. The values after which the aggregate must not change. |
 | `transitions` | Optional. The states each method may run from. Method names are type-checked; values are validated when `check` runs. |
 | `allowAfterTerminal` | Methods allowed on a finished aggregate, such as `remove`. |
-| `aggregateBaseClasses` | Base classes that mark an aggregate. Default: `['AggregateRoot', 'Entity']`. |
+| `aggregateBaseClasses` | Base classes or interfaces that mark an aggregate: a class that extends or implements one, directly or through its base classes and interfaces. Abstract classes are skipped. Default: `['AggregateRoot', 'Entity']`. |
 | `auditFields` | Fields `init` never suggests. Default: `['createdAt', 'updatedAt', 'version']`. |
 | `eventMethods` | Calls that emit domain events. Default: `['addEvent', 'addDomainEvent', 'apply']`. |
 

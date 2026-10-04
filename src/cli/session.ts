@@ -9,7 +9,7 @@ import { Paths } from './io';
 export type Session = { readonly results: readonly AnalysisResult[] };
 
 export const noAggregatesMessage = (declaration: DomainDeclaration): string =>
-  `No aggregates found. Searched for classes extending: ${declaration.aggregateBaseClasses.join(', ')}. Set "aggregateBaseClasses" in domain.config.ts to match your base class, for example: export default defineDomain({ aggregateBaseClasses: ['MyAggregateBase'] })`;
+  `No aggregates found. Searched for classes extending or implementing: ${declaration.aggregateBaseClasses.join(', ')}. Set "aggregateBaseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregateBaseClasses: ['MyAggregateBase'] })`;
 
 export const openSession = (paths: Paths): Session => {
   const project = loadProject(paths.tsconfig);
