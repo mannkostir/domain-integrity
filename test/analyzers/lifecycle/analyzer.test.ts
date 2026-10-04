@@ -32,6 +32,31 @@ describe('lifecycleAnalyzer', () => {
     expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
   });
 
+  it('reports the leak for an unguarded method that emits the state it just assigned', () => {
+    const orderProject = inMemoryProject({
+      '/src/aggregate-root.ts': AGGREGATE_ROOT,
+      '/src/order.ts': `
+import { AggregateRoot } from './aggregate-root';
+export enum OrderStatus { pending = 'PENDING', paid = 'PAID' }
+export class Order extends AggregateRoot<{ status: OrderStatus }> {
+  static place(): Order { return new Order({ status: OrderStatus.pending }); }
+  pay(): void { this.props.status = OrderStatus.paid; this.addEvent({ status: this.props.status }); }
+}
+`,
+    });
+    const order = orderProject.getSourceFileOrThrow('/src/order.ts').getClassOrThrow('Order');
+
+    const result = analyse(lifecycleAnalyzer, {
+      declaration: {
+        ...DEFAULT_DECLARATION,
+        lifecycles: [{ target: order, fields: [{ name: 'status', terminal: ['PAID'], transitions: undefined }], allowAfterTerminal: [] }],
+      },
+      files: orderProject.getSourceFiles(),
+    });
+
+    expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak pay']);
+  });
+
   it('describes its four rules', () => {
     expect(lifecycleAnalyzer.rules.map((rule) => rule.id)).toEqual([
       'terminal-state-leak',

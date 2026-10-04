@@ -72,7 +72,33 @@ export class Ticket extends AggregateRoot<{ status: Status; title: string; lines
   throwHelper(): void { if (this.props.status === Status.closed) throwClosed(); this.props.title = 'x'; }
   ruleObject(): void { if (!Rules.notClosed(this.props.status)) return; this.props.title = 'x'; }
   branching(): void { const next = this.props.status === Status.open ? 'a' : 'b'; this.props.title = next; }
+  readsAfterAssignment(): void { this.props.status = Status.closed; this.props.title = String(this.props.status); }
+  escapesAfterAssignment(): void { this.props.status = Status.closed; this.addEvent({ ticket: this }); }
+  serialisesAfterAssignment(): void { this.props.status = Status.closed; this.props.title = JSON.stringify(this); }
+  emitsAssignedStatus(): void { this.props.status = Status.closed; this.addEvent({ status: this.props.status }); }
+  parenthesisedAssignment(): void { (this.props.status = Status.closed); this.addEvent({ status: this.props.status }); }
+  guardedThenReadsAfterAssignment(): void { if (this.props.status === Status.closed) return; this.props.status = Status.open; this.props.title = this.props.status; }
+  aliasBeforeAssignment(): void { const s = this.props.status; this.props.status = Status.open; if (s === Status.closed) throw new Error('closed'); }
+  thisAliasBeforeAssignment(): void { const self = this; this.props.status = Status.open; if (self.props.title === 'x') return; }
+  nestedAssignmentThenRead(flag: boolean): void { if (flag) { this.props.status = Status.open; } this.props.title = this.props.status; }
+  assignmentReadsItself(): void { this.props.status = this.props.status === Status.draft ? Status.open : Status.closed; this.addEvent({}); }
+  readsBeforeAssignment(): void { this.props.title = this.props.status; this.props.status = Status.open; }
+  otherAssignmentDoesNotCut(): void { this.props.title = 'x'; this.props.title = this.props.status; }
+  assertsAfterAssignment(): void { this.props.status = Status.closed; if (this.props.status !== Status.closed) throw new Error('x'); this.addEvent({}); }
+  helperBeforeAssignment(): void { this.assertNotClosed(); this.props.status = Status.open; this.props.title = String(this.props.status); }
+  archives(): void { this.archived = true; this.props.title = String(this.archived); }
   booleanGuard(): void { if (this.archived) return; this.props.title = 'x'; }
+}
+export class GuardedTicket extends AggregateRoot<{ status: Status; title: string }> {
+  get status(): Status { return this.props.status; }
+  set status(value: Status) { if (this.props.status === Status.closed) return; this.props.status = value; }
+  assignsThroughSetter(): void { this.status = Status.open; if (this.props.status === Status.open) this.props.title = 'x'; }
+  assignsProps(): void { this.props.status = Status.open; this.props.title = String(this.props.status); }
+}
+export class CopiedTicket {
+  private _p: { status: Status; title: string } = { status: Status.draft, title: '' };
+  get props(): { status: Status; title: string } { return { ...this._p }; }
+  viaCopyGetter(): void { this.props.status = Status.closed; if (this.props.status === Status.open) { this._p = { ...this._p, title: 'x' }; } }
 }
 export class ClosableBase extends AggregateRoot<{ status: Status; title: string }> {
   protected get isClosed(): boolean { return this.props.status === Status.closed; }
@@ -132,6 +158,20 @@ describe('methodSources for an enum field', () => {
     ['parenthesisedReceiver', ['DRAFT', 'OPEN']],
     ['elementProps', ['DRAFT', 'OPEN']],
     ['deepChain', 'unknown'],
+    ['readsAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['escapesAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['serialisesAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['emitsAssignedStatus', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['parenthesisedAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['guardedThenReadsAfterAssignment', ['DRAFT', 'OPEN']],
+    ['aliasBeforeAssignment', 'unknown'],
+    ['thisAliasBeforeAssignment', 'unknown'],
+    ['nestedAssignmentThenRead', 'unknown'],
+    ['assignmentReadsItself', 'unknown'],
+    ['readsBeforeAssignment', 'unknown'],
+    ['otherAssignmentDoesNotCut', 'unknown'],
+    ['assertsAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
+    ['helperBeforeAssignment', 'unknown'],
   ])('%s can run from %j', (method, expected) => {
     expect(describeSources(methodSources(ticket.getMethodOrThrow(method), status, defaultScope(ticket)))).toEqual(expected);
   });
@@ -142,8 +182,29 @@ describe('methodSources for a boolean field', () => {
     ['booleanGuard', ['false']],
     ['combined', ['false']],
     ['unguarded', ['false', 'true']],
+    ['archives', ['false', 'true']],
   ])('%s can run from %j', (method, expected) => {
     expect(describeSources(methodSources(ticket.getMethodOrThrow(method), archived, defaultScope(ticket)))).toEqual(expected);
+  });
+});
+
+describe('methodSources for a field with a guarding setter', () => {
+  const guarded = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('GuardedTicket');
+  const guardedStatus = resolvedField(guarded, 'status');
+
+  it.each([
+    ['assignsThroughSetter', 'unknown'],
+    ['assignsProps', ['CLOSED', 'DRAFT', 'OPEN']],
+  ])('%s can run from %j', (method, expected) => {
+    expect(describeSources(methodSources(guarded.getMethodOrThrow(method), guardedStatus, defaultScope(guarded)))).toEqual(expected);
+  });
+});
+
+describe('methodSources for a state holder returned by a getter', () => {
+  it('does not treat an assignment to a returned copy as overwriting the field', () => {
+    const copied = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('CopiedTicket');
+    const copiedStatus = resolvedField(copied, 'status');
+    expect(describeSources(methodSources(copied.getMethodOrThrow('viaCopyGetter'), copiedStatus, defaultScope(copied)))).toEqual('unknown');
   });
 });
 
