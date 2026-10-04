@@ -1,6 +1,6 @@
 import { CallExpression, ClassDeclaration, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
 import { assignedValue, isAssignmentOperator } from './assigned';
-import { unwrap } from './field-ref';
+import { inheritanceChain, unwrap } from './field-ref';
 import { isLibraryNode } from './library';
 import { OutsideAssignment, StateField } from './model';
 import { UNRESOLVED } from './values';
@@ -20,15 +20,11 @@ const isAggregateOrItsProps = (node: Node, cls: ClassDeclaration): boolean => {
 const targetsField = (left: Node, cls: ClassDeclaration, field: string): boolean =>
   Node.isPropertyAccessExpression(left) && left.getName() === field && isAggregateOrItsProps(left.getExpression(), cls);
 
-const classChain = (cls: ClassDeclaration): readonly ClassDeclaration[] => {
-  const base = cls.getBaseClass();
-  return base === undefined ? [cls] : [cls, ...classChain(base)];
-};
-
 const isOwnSetter = (node: Node, cls: ClassDeclaration): boolean =>
   Node.isSetAccessorDeclaration(node) &&
-  !isLibraryNode(node) &&
-  classChain(cls).some((member) => member === node.getParent());
+  inheritanceChain(cls)
+    .filter((candidate) => !isLibraryNode(candidate))
+    .some((candidate) => candidate === node.getParent());
 
 const hasOwnSetter = (cls: ClassDeclaration, field: string): boolean =>
   cls
