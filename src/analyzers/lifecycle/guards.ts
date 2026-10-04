@@ -5,11 +5,13 @@ import {
   MethodDeclaration,
   Node,
   Statement,
+  Symbol as MorphSymbol,
   SyntaxKind,
 } from 'ts-morph';
 import { SET, UNSET, literalToken } from '../../engine/value-token';
 import { AggregateScope, fieldNameOf, referencesField, referencesFieldDirectly, thisGetterExpression } from './field-ref';
 import { Sources, StateField } from './model';
+import { isAccessor } from './state-field';
 import { allTokens, difference, intersect, union } from './values';
 
 type Evaluation = { readonly whenTrue: ReadonlySet<string>; readonly whenFalse: ReadonlySet<string> } | 'unknown';
@@ -156,29 +158,35 @@ const readsFieldOutside = (
 const unwrapParentheses = (node: Expression): Expression =>
   Node.isParenthesizedExpression(node) ? unwrapParentheses(node.getExpression()) : node;
 
-const overwritesField = (statement: Statement, field: StateField): boolean =>
-  Node.isExpressionStatement(statement) && isFieldAssignment(unwrapParentheses(statement.getExpression()), field);
+const assignedMember = (target: Expression): MorphSymbol | undefined => {
+  if (Node.isPropertyAccessExpression(target)) return target.getNameNode().getSymbol();
+  if (Node.isElementAccessExpression(target)) return target.getArgumentExpression()?.getSymbol();
+  return undefined;
+};
+
+const isPlainDataMember = (symbol: MorphSymbol | undefined): boolean => {
+  const declarations = symbol?.getDeclarations() ?? [];
+  return declarations.length > 0 && !declarations.some(isAccessor);
+};
+
+const overwritesField = (statement: Statement, field: StateField): boolean => {
+  if (!Node.isExpressionStatement(statement)) return false;
+  const expression = unwrapParentheses(statement.getExpression());
+  return isFieldAssignment(expression, field) && isPlainDataMember(assignedMember(expression.getLeft()));
+};
 
 const statementsUntilOverwrite = (statements: readonly Statement[], field: StateField): readonly Statement[] => {
   const overwrite = statements.findIndex((statement) => overwritesField(statement, field));
   return overwrite === -1 ? statements : statements.slice(0, overwrite + 1);
 };
 
-const readsFieldBeforeOverwrite = (
-  statements: readonly Statement[],
-  field: StateField,
-  scope: AggregateScope,
-  recognised: ReadonlySet<Node>,
-): boolean =>
-  statementsUntilOverwrite(statements, field).some((statement) => readsFieldOutside(statement, field, scope, recognised));
-
 export const methodSources = (method: MethodDeclaration, field: StateField, scope: AggregateScope): Sources => {
   const body = method.getBody();
   if (!Node.isBlock(body)) return { kind: 'unknown' };
-  const statements = body.getStatements();
-  const scan = scanStatements(statements, field, scope);
+  const considered = statementsUntilOverwrite(body.getStatements(), field);
+  const scan = scanStatements(considered, field, scope);
   if (scan === 'unknown') return { kind: 'unknown' };
-  return readsFieldBeforeOverwrite(statements, field, scope, scan.recognised)
+  return considered.some((statement) => readsFieldOutside(statement, field, scope, scan.recognised))
     ? { kind: 'unknown' }
     : { kind: 'known', values: scan.allowed };
 };

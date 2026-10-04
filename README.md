@@ -260,7 +260,7 @@ A few rare self-wiring shapes can still produce a false finding; [#10](https://g
 <details>
 <summary>The precise rules</summary>
 
-- **Guards.** A guard counts only if it is an early return or throw, or an `if` that wraps the whole method, with conditions built from `===`, `!==`, truthiness, `&&`, `||`, `!`, and getters that return such a condition. Any other read of the state field in the method makes its allowed sources unknown. Unknown never produces a finding. Reads after the method's first top-level assignment of the field are ignored, because by then the field holds the assigned value; reads before it, including the assignment's right-hand side, still count.
+- **Guards.** A guard counts only if it is an early return or throw, or an `if` that wraps the whole method, with conditions built from `===`, `!==`, truthiness, `&&`, `||`, `!`, and getters that return such a condition. Any other read of the state field in the method makes its allowed sources unknown. Unknown never produces a finding. After the method's first top-level plain `=` assignment to the field itself, not through a setter, later reads and guards of the field are ignored, because by then it holds the assigned value; reads before it, including the assignment's right-hand side, still count.
 - **Members without a body.** A member with no body in the project counts as reading the state field. That includes abstract members, members declared only in `.d.ts` files, and members of base classes that cannot be resolved. There are two exceptions:
   - configured `eventMethods`, which are assumed not to read it;
   - library data properties whose type is not callable and cannot hold the field. A `.d.ts` that declares a getter as a plain property is trusted as written.

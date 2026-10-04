@@ -84,7 +84,15 @@ export class Ticket extends AggregateRoot<{ status: Status; title: string; lines
   assignmentReadsItself(): void { this.props.status = this.props.status === Status.draft ? Status.open : Status.closed; this.addEvent({}); }
   readsBeforeAssignment(): void { this.props.title = this.props.status; this.props.status = Status.open; }
   otherAssignmentDoesNotCut(): void { this.props.title = 'x'; this.props.title = this.props.status; }
+  assertsAfterAssignment(): void { this.props.status = Status.closed; if (this.props.status !== Status.closed) throw new Error('x'); this.addEvent({}); }
+  archives(): void { this.archived = true; this.props.title = String(this.archived); }
   booleanGuard(): void { if (this.archived) return; this.props.title = 'x'; }
+}
+export class GuardedTicket extends AggregateRoot<{ status: Status; title: string }> {
+  get status(): Status { return this.props.status; }
+  set status(value: Status) { if (this.props.status === Status.closed) return; this.props.status = value; }
+  assignsThroughSetter(): void { this.status = Status.open; if (this.props.status === Status.open) this.props.title = 'x'; }
+  assignsProps(): void { this.props.status = Status.open; this.props.title = String(this.props.status); }
 }
 export class ClosableBase extends AggregateRoot<{ status: Status; title: string }> {
   protected get isClosed(): boolean { return this.props.status === Status.closed; }
@@ -156,6 +164,7 @@ describe('methodSources for an enum field', () => {
     ['assignmentReadsItself', 'unknown'],
     ['readsBeforeAssignment', 'unknown'],
     ['otherAssignmentDoesNotCut', 'unknown'],
+    ['assertsAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
   ])('%s can run from %j', (method, expected) => {
     expect(describeSources(methodSources(ticket.getMethodOrThrow(method), status, defaultScope(ticket)))).toEqual(expected);
   });
@@ -166,8 +175,21 @@ describe('methodSources for a boolean field', () => {
     ['booleanGuard', ['false']],
     ['combined', ['false']],
     ['unguarded', ['false', 'true']],
+    ['archives', ['false', 'true']],
   ])('%s can run from %j', (method, expected) => {
     expect(describeSources(methodSources(ticket.getMethodOrThrow(method), archived, defaultScope(ticket)))).toEqual(expected);
+  });
+});
+
+describe('methodSources for a field with a guarding setter', () => {
+  const guarded = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('GuardedTicket');
+  const guardedStatus = resolvedField(guarded, 'status');
+
+  it.each([
+    ['assignsThroughSetter', 'unknown'],
+    ['assignsProps', ['CLOSED', 'DRAFT', 'OPEN']],
+  ])('%s can run from %j', (method, expected) => {
+    expect(describeSources(methodSources(guarded.getMethodOrThrow(method), guardedStatus, defaultScope(guarded)))).toEqual(expected);
   });
 });
 
