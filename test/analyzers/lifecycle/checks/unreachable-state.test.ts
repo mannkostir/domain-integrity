@@ -23,7 +23,13 @@ describe('unreachableState', () => {
   });
 
   it('counts assignments outside the aggregate as reaching a value', () => {
-    const outside = [{ field: 'status', file: '/app/src/x.ts', line: 1, scope: 'x', value: assigned('CONFIRMED') }];
+    const outside = [{ field: 'status', file: '/app/src/x.ts', line: 1, scope: 'x', value: assigned('CONFIRMED'), throughOwnSetter: false }];
+
+    expect(unreachableState(aggregate({ methods: [CANCEL], outside }))).toEqual([]);
+  });
+
+  it('counts assignments through the aggregate setter as reaching a value', () => {
+    const outside = [{ field: 'status', file: '/app/src/x.ts', line: 1, scope: 'x', value: assigned('CONFIRMED'), throughOwnSetter: true }];
 
     expect(unreachableState(aggregate({ methods: [CANCEL], outside }))).toEqual([]);
   });
