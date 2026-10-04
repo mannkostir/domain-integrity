@@ -28,6 +28,7 @@ export interface Printable {}
 export interface Loop extends Knot {}
 export interface Knot extends Loop {}
 export class Entity {}
+export interface Repo<T> { find(id: T): void }
 `,
   '/src/accounts.ts': `
 import { Account, Audited, Entity, Loop, Printable } from './account';
@@ -39,6 +40,25 @@ export class Report implements Printable {}
 export class Tangled implements Loop {}
 export class HybridAccount extends Entity implements Printable, Account { readonly id = 'd'; }
 `,
+  '/src/aliased.ts': `
+import { Account, Owned } from './account';
+type AccountAlias = Account;
+type OwnedAlias = Owned;
+export class AliasedAccount implements AccountAlias { readonly id = 'e'; }
+export class AliasedOwned implements OwnedAlias { readonly id = 'f'; }
+`,
+  '/src/renamed.ts': `
+import { Account as Acc } from './account';
+export class RenamedAccount implements Acc { readonly id = 'g'; }
+`,
+  '/src/qualified.ts': `
+import * as ns from './account';
+export class QualifiedAccount implements ns.Account { readonly id = 'h'; }
+`,
+  '/src/repos.ts': `
+import { Repo } from './account';
+export class NumberRepo implements Repo<number> { find(): void {} }
+`,
   '/src/external-account.ts': `
 import { Account } from '@unresolved/accounts';
 export class ExternalAccount implements Account {}
@@ -46,6 +66,18 @@ export class ExternalAccount implements Account {}
 });
 
 const discoveredByInterface = names(discoverAggregates(interfaceProject.getSourceFiles(), ['Account'], []));
+
+const DIAMOND_DEPTH = 30;
+
+const diamondLevel = (level: number): string =>
+  `interface D${level} extends L${level}, R${level} {}\ninterface L${level} extends D${level + 1} {}\ninterface R${level} extends D${level + 1} {}\n`;
+
+const diamondSource = (depth: number): string =>
+  `${Array.from({ length: depth }, (_, level) => diamondLevel(level)).join('')}interface D${depth} {}\nexport class Deep implements D0 {}\n`;
+
+const diamondProject = inMemoryProject({
+  '/src/diamond.ts': diamondSource(DIAMOND_DEPTH),
+});
 
 describe('discoverAggregates', () => {
   it('finds direct, transitive and unresolved-base subclasses but not abstract or plain classes', () => {
@@ -88,5 +120,29 @@ describe('discoverAggregates', () => {
 
   it('skips a class whose implemented interfaces extend each other in a cycle', () => {
     expect(discoveredByInterface).not.toContain('Tangled');
+  });
+
+  it('finds a class that implements a type alias of a named interface', () => {
+    expect(discoveredByInterface).toContain('AliasedAccount');
+  });
+
+  it('finds a class that implements a type alias of an interface extending a named interface', () => {
+    expect(discoveredByInterface).toContain('AliasedOwned');
+  });
+
+  it('finds a class that implements a named interface imported under another name', () => {
+    expect(discoveredByInterface).toContain('RenamedAccount');
+  });
+
+  it('finds a class that implements a namespace-qualified named interface', () => {
+    expect(discoveredByInterface).toContain('QualifiedAccount');
+  });
+
+  it('finds a class that implements a named generic interface with type arguments', () => {
+    expect(names(discoverAggregates(interfaceProject.getSourceFiles(), ['Repo'], []))).toEqual(['NumberRepo']);
+  });
+
+  it('skips a class implementing a deep diamond of unrelated interfaces without exhaustive path walking', () => {
+    expect(names(discoverAggregates(diamondProject.getSourceFiles(), ['Account'], []))).toEqual([]);
   });
 });
