@@ -157,8 +157,8 @@ import { Order } from './order';
 export const pay = (order: Order): void => { order.status = 'paid'; };
 export const reopen = (order: Order): void => { order.status ??= 'open'; };
 export const patch = (order: Order): void => { Object.assign(order, { status: 'closed' }); };
-export const rawProps = (order: Order): void => { (order as any).props.status = 'closed'; };
-export const patchProps = (order: Order): void => { Object.assign((order as any).props, { status: 'closed' }); };
+export const rawProps = (order: Order): void => { (order as unknown as { props: { status: string } }).props.status = 'closed'; };
+export const patchProps = (order: Order): void => { Object.assign((order as unknown as { props: object }).props, { status: 'closed' }); };
 `,
   '/src/shipments.ts': `
 import { Shipment } from './shipment';

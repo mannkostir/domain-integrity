@@ -143,7 +143,7 @@ Every file your tsconfig includes is scanned, tests too, so an assignment in a t
 ```json
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts"]
+  "exclude": ["node_modules", "test", "**/*.spec.ts", "**/*.test.ts"]
 }
 ```
 
