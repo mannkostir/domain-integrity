@@ -1,6 +1,7 @@
 import { ClassDeclaration, Symbol as MorphSymbol, Node, Type } from 'ts-morph';
 import { SET, UNSET, isNullish, literalToken } from '../../engine/value-token';
 import { aggregateName } from './discover';
+import { mayBeFalsy } from './falsy';
 import { EnumReference, StateField, StateFieldKind, StateValue, UnsetForm } from './model';
 
 export type FieldResolution =
@@ -34,7 +35,7 @@ const resolved = (
   kind: StateFieldKind,
   values: readonly StateValue[],
   enumReference: EnumReference | undefined = undefined,
-): FieldResolution => ({ kind: 'resolved', field: { name, kind, values, enumReference, unsetForms: [] } });
+): FieldResolution => ({ kind: 'resolved', field: { name, kind, values, enumReference, unsetForms: [], setMayBeFalsy: false } });
 
 const unsetFormsOf = (members: readonly Type[]): readonly UnsetForm[] => [
   ...(members.some((member) => member.isNull()) ? (['null'] as const) : []),
@@ -74,9 +75,9 @@ const NULLABLE_VALUES: readonly StateValue[] = [
   { token: UNSET, label: UNSET, source: `'${UNSET}'` },
 ];
 
-const resolvedNullable = (name: string, members: readonly Type[]): FieldResolution => ({
+const resolvedNullable = (name: string, members: readonly Type[], setMayBeFalsy: boolean): FieldResolution => ({
   kind: 'resolved',
-  field: { name, kind: 'nullable', values: NULLABLE_VALUES, enumReference: undefined, unsetForms: unsetFormsOf(members) },
+  field: { name, kind: 'nullable', values: NULLABLE_VALUES, enumReference: undefined, unsetForms: unsetFormsOf(members), setMayBeFalsy },
 });
 
 export const resolveStateField = (cls: ClassDeclaration, name: string): FieldResolution => {
@@ -98,7 +99,7 @@ export const resolveStateField = (cls: ClassDeclaration, name: string): FieldRes
     return resolved(name, 'union', present.map(literalValue));
   }
   if (nullable && present.length > 0 && present.every((member) => literalToken(member) === undefined)) {
-    return resolvedNullable(name, members);
+    return resolvedNullable(name, members, mayBeFalsy(cls, present));
   }
   return {
     kind: 'problem',
