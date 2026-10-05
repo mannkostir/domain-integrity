@@ -47,6 +47,7 @@ const STATE_HOLDER = 'props';
 export type AggregateScope = {
   readonly cls: ClassDeclaration;
   readonly eventMethods: ReadonlySet<string>;
+  readonly inertMembers: ReadonlySet<string>;
   readonly leaksThis: boolean;
 };
 
@@ -122,9 +123,16 @@ const tracedMember = (cls: ClassDeclaration, access: Node, name: string): Member
   return member === undefined ? absentMember(cls, access, name) : bodyOf(member);
 };
 
+const isLibraryData = (member: MemberLookup): boolean =>
+  member.kind === 'data' && member.declarations.every(isLibraryNode);
+
+const isAssumedInert = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
+  (member.kind === 'untraceable' && (scope.eventMethods.has(name) || scope.inertMembers.has(name))) ||
+  (scope.inertMembers.has(name) && isLibraryData(member));
+
 const lookupMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
   const member = tracedMember(scope.cls, access, name);
-  return member.kind === 'untraceable' && scope.eventMethods.has(name) ? { kind: 'inert' } : member;
+  return isAssumedInert(scope, name, member) ? { kind: 'inert' } : member;
 };
 
 const exposesField = (type: Type, field: string, location: Node): boolean =>

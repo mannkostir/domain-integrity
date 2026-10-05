@@ -6,7 +6,7 @@ import { resolveStateField } from '../../src/analyzers/lifecycle/state-field';
 import { DEFAULT_DECLARATION } from '../../src/engine/declaration';
 
 export const defaultScope = (cls: ClassDeclaration): AggregateScope =>
-  aggregateScope(cls, DEFAULT_DECLARATION.eventMethods, cls.getProject().getSourceFiles());
+  aggregateScope(cls, DEFAULT_DECLARATION, cls.getProject().getSourceFiles());
 
 export const resolvedField = (cls: ClassDeclaration, name: string): StateField => {
   const resolution = resolveStateField(cls, name);
