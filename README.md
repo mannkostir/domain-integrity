@@ -263,7 +263,7 @@ export default defineDomain({
 A lint rule that cries wolf gets switched off. `domain-integrity` reports only what it can prove, and stays silent on code it cannot follow. In practice it says nothing about:
 
 - **Guards it can't follow.** Examples are rule or policy objects, conditions on local copies of the state, and abstract or library methods. That method is skipped for that field.
-- **Methods that hand out `this`.** That covers fluent `return this`, passing the aggregate to a constructor, and aliasing or destructuring it.
+- **Methods that hand out `this`.** That covers fluent `return this`, passing the aggregate to a constructor, and aliasing or destructuring it. The one exception is a plain event handed straight to a library event method, such as `this.apply(new OrderPaid(this))`; see the precise rules.
 - **Object fields in aggregates that leak `this` anywhere.** Methods that read those fields are skipped, because a field might hold a callback into the aggregate.
 - **Library base-class members**, other than the configured `eventMethods` and `inertMembers`, because library code can call back into your overrides. A method that reads a library getter such as `this.id` or calls `this.clearDomainEvents()` is skipped until you list that member in `inertMembers`.
 - **Values mentioned elsewhere.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types.
@@ -280,7 +280,13 @@ A few rare self-wiring shapes can still produce a false finding: a factory or se
   - configured `eventMethods`, which are assumed not to read it;
   - configured `inertMembers`, which are assumed not to read it, whether the library declares them as getters, methods or data properties. A member that a `.ts` file in your project declares, such as an override of a listed getter, is still traced; declarations in `.d.ts` files, including your own, count as library code. A library property with an initializer is still traced too. A wrong entry can produce a false finding;
   - library data properties whose type is not callable and cannot hold the field. A `.d.ts` that declares a getter as a plain property is trusted as written, so a guard through a getter that reads the state field behind such a declaration counts as no guard.
-- **`this` escapes.** A method that lets `this` or `this.props` escape is not judged. That covers aliasing, destructuring, passing as an argument, returning, and `this.props = { ...this.props }`.
+- **`this` escapes.** A method that lets `this` or `this.props` escape is not judged. That covers aliasing, destructuring, passing as an argument, returning, and `this.props = { ...this.props }`. There is one exception: `this` passed to `new E(…)` still lets the method be judged when all of these hold:
+  - the `new` is a direct argument of a configured `eventMethods` call on `this` that is declared only in library code, in a library class that the aggregate extends by name, directly or through your own classes and not through a mixin call, such as `this.apply(new OrderPaid(this))`. An event method declared in your project, such as `addDomainEvent` in your own base class, does not qualify, and neither does an event held in a variable first;
+  - `E` and every class it extends are declared in your project's source files, without `declare`, decorators, getters, setters, `accessor` fields or a field named `__proto__`, and each `extends` names a class directly rather than a mixin call, a variable or a property access;
+  - every constructor has only plain, non-rest parameters, and its statements are `this.f = value` or `super(values)`, where `f` is a field declared in the class chain;
+  - parameter defaults and instance property initializers are literals or `new` of a built-in class such as `Date` with only literal arguments, and constructor statements and `super` arguments may also use constructor parameters.
+
+  Such an escape still makes the aggregate leak `this`, and still counts as a possible write for `unreachable-state`.
 - **Aggregates that leak `this`.** An aggregate leaks `this` when anywhere in its project base classes or subclasses either of these happens:
   - `this` or `this.props` escapes;
   - an arrow function captures `this`, other than as a direct callback of `filter`, `map`, `some`, `every`, `find`, `findIndex`, `forEach`, `reduce`, `flatMap` or `sort` on a built-in array.
