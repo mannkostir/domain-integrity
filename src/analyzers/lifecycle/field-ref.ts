@@ -295,6 +295,7 @@ const isTrustedEventCall = (call: CallExpression, scope: AggregateScope): boolea
     Node.isPropertyAccessExpression(callee) &&
     isThis(callee.getExpression()) &&
     scope.eventMethods.has(callee.getName()) &&
+    isDeclaredOnlyInLibraries(scope.cls, callee.getName()) &&
     lookupMember(scope, callee, callee.getName()).kind === 'inert'
   );
 };

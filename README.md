@@ -282,9 +282,9 @@ A few rare self-wiring shapes can still produce a false finding: a factory or se
   - library data properties whose type is not callable and cannot hold the field. A `.d.ts` that declares a getter as a plain property is trusted as written, so a guard through a getter that reads the state field behind such a declaration counts as no guard.
 - **`this` escapes.** A method that lets `this` or `this.props` escape is not judged. That covers aliasing, destructuring, passing as an argument, returning, and `this.props = { ...this.props }`. There is one exception: `this` passed to `new E(…)` still lets the method be judged when all of these hold:
   - the `new` is a direct argument of a configured `eventMethods` call on `this` that is declared only in library code, such as `this.apply(new OrderPaid(this))`. An event method declared in your project, such as `addDomainEvent` in your own base class, does not qualify, and neither does an event held in a variable first;
-  - `E` and every class it extends are declared in `.ts` files of your project, without `declare`, decorators, getters, setters, `accessor` fields or a field named `__proto__`;
+  - `E` and every class it extends are declared in your project's source files, without `declare`, decorators, getters, setters, `accessor` fields or a field named `__proto__`, and each `extends` names a class directly rather than a mixin call, a variable or a property access;
   - every constructor has only plain, non-rest parameters, and its statements are `this.f = value` or `super(values)`, where `f` is a field declared in the class chain;
-  - every value, including parameter defaults and instance property initializers, is a constructor parameter, a literal, or `new` of a built-in class such as `Date` with only literal arguments.
+  - parameter defaults and instance property initializers are literals or `new` of a built-in class such as `Date` with only literal arguments, and constructor statements and `super` arguments may also use constructor parameters.
 
   Such an escape still makes the aggregate leak `this`, and still counts as a possible write for `unreachable-state`.
 - **Aggregates that leak `this`.** An aggregate leaks `this` when anywhere in its project base classes or subclasses either of these happens:

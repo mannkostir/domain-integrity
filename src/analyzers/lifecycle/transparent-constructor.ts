@@ -126,13 +126,10 @@ const isPlainConstructor = (ctor: ConstructorDeclaration, chain: readonly ClassD
 };
 
 const hasPlainInitializers = (cls: ClassDeclaration): boolean =>
-  cls
-    .getProperties()
-    .filter((property) => !property.isStatic())
-    .every((property) => {
-      const initializer = property.getInitializer();
-      return initializer === undefined || isPlainValue(initializer, NO_PARAMETERS);
-    });
+  instanceProperties(cls).every((property) => {
+    const initializer = property.getInitializer();
+    return initializer === undefined || isPlainValue(initializer, NO_PARAMETERS);
+  });
 
 const isPlainClass = (cls: ClassDeclaration, chain: readonly ClassDeclaration[]): boolean =>
   !cls.hasDeclareKeyword() &&

@@ -41,6 +41,8 @@ export class Ticket extends AggregateRoot {
   peek(n: string): void { this.note = n; this.apply(new Peeking(this)); }
   held(n: string): void { this.note = n; const event = new Opened(this); this.apply(event); }
   handedElsewhere(n: string): void { this.note = n; this.record(new Opened(this)); }
+  computedKey(n: string): void { this.note = n; this['apply'](new Opened(this)); }
+  conditional(n: string, flag: boolean): void { this.note = n; this.apply(flag ? new Opened(this) : {}); }
   private record(event: object): void { void event; }
 }
 export class Ledger extends AggregateRoot {
@@ -54,6 +56,18 @@ export class GuardedTicket extends AggregateRoot {
   private note = '';
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
   touch(n: string): void { this.note = n; this.apply(new GuardedOpened(this)); }
+}
+export class MixinBase {}
+export const Applying = <T extends Ctor>(Base: T) =>
+  class extends Base {
+    apply(event: { source: { isClosed(): boolean } }): void { if (event.source.isClosed()) throw new Error('closed'); }
+  };
+export class MixinTicket extends Applying(MixinBase) {
+  private status: Status = 'open';
+  private note = '';
+  isClosed(): boolean { return this.status === 'closed'; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  touch(n: string): void { this.note = n; this.apply(new Opened(this)); }
 }
 export class ProjectTicket extends ProjectRoot<object> {
   private status: Status = 'open';
@@ -93,6 +107,10 @@ describe('this handed to a transparent event constructor', () => {
 
   it('stays unknown when the event class extends a mixin', () => {
     expect(leaks(classNamed('GuardedTicket'))).toEqual([]);
+  });
+
+  it('stays unknown when the event method comes from a project mixin', () => {
+    expect(leaks(classNamed('MixinTicket'))).toEqual([]);
   });
 
   it('stays unknown when the event method is not configured', () => {
