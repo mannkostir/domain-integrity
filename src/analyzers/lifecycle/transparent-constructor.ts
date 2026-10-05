@@ -9,16 +9,11 @@ import {
   SyntaxKind,
 } from 'ts-morph';
 import { isDefaultLibraryNode, isLibraryNode } from './library';
+import { classNamedBy, declarationsOf, namedClassChain } from './named-chain';
 
 type Store = { readonly field: string; readonly value: Node };
 
 const NO_PARAMETERS: ReadonlySet<MorphSymbol> = new Set();
-
-const declarationsOf = (node: Node): readonly Node[] => {
-  const symbol = node.getSymbol();
-  const target = symbol?.isAlias() ? symbol.getAliasedSymbol() : symbol;
-  return target?.getDeclarations() ?? [];
-};
 
 const isUndefinedKeyword = (node: Node): boolean =>
   Node.isIdentifier(node) && node.getText() === 'undefined' && declarationsOf(node).length === 0;
@@ -140,19 +135,9 @@ const isPlainClass = (cls: ClassDeclaration, chain: readonly ClassDeclaration[])
     .filter((ctor) => ctor.getBody() !== undefined)
     .every((ctor) => isPlainConstructor(ctor, chain));
 
-const classNamedBy = (reference: Node): ClassDeclaration | undefined => {
-  const declarations = Node.isIdentifier(reference) ? declarationsOf(reference) : [];
-  const [only] = declarations;
-  return declarations.length === 1 && Node.isClassDeclaration(only) ? only : undefined;
-};
-
 const constructionChain = (cls: ClassDeclaration): readonly ClassDeclaration[] | undefined => {
-  if (isLibraryNode(cls)) return undefined;
-  const heritage = cls.getExtends();
-  if (heritage === undefined) return [cls];
-  const base = classNamedBy(heritage.getExpression());
-  const rest = base === undefined ? undefined : constructionChain(base);
-  return rest === undefined ? undefined : [cls, ...rest];
+  const chain = namedClassChain(cls);
+  return chain === undefined || chain.some(isLibraryNode) ? undefined : chain;
 };
 
 const constructedClass = (expression: NewExpression): ClassDeclaration | undefined =>

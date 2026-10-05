@@ -69,6 +69,25 @@ export class MixinTicket extends Applying(MixinBase) {
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
   touch(n: string): void { this.note = n; this.apply(new Opened(this)); }
 }
+export function AnnotatedApplying<T extends Ctor>(Base: T): T {
+  return class extends Base {
+    apply(event: { source: { isClosed(): boolean } }): void { if (event.source.isClosed()) throw new Error('closed'); }
+  };
+}
+export class AnnotatedMixinTicket extends AnnotatedApplying(AggregateRoot) {
+  private status: Status = 'open';
+  private note = '';
+  isClosed(): boolean { return this.status === 'closed'; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  touch(n: string): void { this.apply(new Opened(this)); this.note = n; }
+}
+export class Intermediate extends AggregateRoot {}
+export class LayeredTicket extends Intermediate {
+  private status: Status = 'open';
+  private note = '';
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  touch(n: string): void { this.note = n; this.apply(new Opened(this)); }
+}
 export class ProjectTicket extends ProjectRoot<object> {
   private status: Status = 'open';
   private note = '';
@@ -111,6 +130,14 @@ describe('this handed to a transparent event constructor', () => {
 
   it('stays unknown when the event method comes from a project mixin', () => {
     expect(leaks(classNamed('MixinTicket'))).toEqual([]);
+  });
+
+  it('is judged on an aggregate whose project base extends the library root by name', () => {
+    expect(leaks(classNamed('LayeredTicket'))).toEqual(['touch']);
+  });
+
+  it('stays unknown when an annotated mixin hides a project event method', () => {
+    expect(leaks(classNamed('AnnotatedMixinTicket'))).toEqual([]);
   });
 
   it('stays unknown when the event method is not configured', () => {

@@ -336,6 +336,17 @@ export function raise(agg: Agg) { return new Raised(agg); }
     expect(isTransparentConstruction(expression)).toBe(false);
   });
 
+  it('rejects circular extends without throwing', () => {
+    const expression = construction(`
+export class Agg {}
+export class Raised extends Looped {}
+export class Looped extends Raised {}
+export function raise(agg: Agg) { return new Raised(agg); }
+`);
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
   it('rejects a class reached through a variable', () => {
     const expression = construction(`
 export class Agg {}

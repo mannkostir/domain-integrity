@@ -1,5 +1,6 @@
 import { CallExpression, ClassDeclaration, Expression, NewExpression, Node, SyntaxKind, ts, Type } from 'ts-morph';
 import { isDefaultLibraryNode, isLibraryNode } from './library';
+import { namedClassChain } from './named-chain';
 import { isTransparentConstruction } from './transparent-constructor';
 
 const MAX_GETTER_DEPTH = 5;
@@ -289,12 +290,19 @@ const argumentOwner = (node: Node): Node | undefined => {
     : undefined;
 };
 
+const reachesLibraryBaseByName = (cls: ClassDeclaration): boolean => {
+  const chain = namedClassChain(cls);
+  const last = chain?.[chain.length - 1];
+  return last !== undefined && isLibraryNode(last);
+};
+
 const isTrustedEventCall = (call: CallExpression, scope: AggregateScope): boolean => {
   const callee = unwrap(call.getExpression());
   return (
     Node.isPropertyAccessExpression(callee) &&
     isThis(callee.getExpression()) &&
     scope.eventMethods.has(callee.getName()) &&
+    reachesLibraryBaseByName(scope.cls) &&
     isDeclaredOnlyInLibraries(scope.cls, callee.getName()) &&
     lookupMember(scope, callee, callee.getName()).kind === 'inert'
   );
