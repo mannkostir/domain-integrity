@@ -1,5 +1,15 @@
-import { CallExpression, ClassDeclaration, Expression, NewExpression, Node, SyntaxKind, ts, Type } from 'ts-morph';
-import { isPlainArrayPush } from './array-store';
+import {
+  CallExpression,
+  ClassDeclaration,
+  Expression,
+  NewExpression,
+  Node,
+  PropertyAccessExpression,
+  SyntaxKind,
+  ts,
+  Type,
+} from 'ts-morph';
+import { isPlainArrayPush, isPushOnlyMethod } from './array-store';
 import { isDefaultLibraryNode, isLibraryNode } from './library';
 import { namedClassChain } from './named-chain';
 import { isTransparentConstruction } from './transparent-constructor';
@@ -286,15 +296,35 @@ const reachesLibraryBaseByName = (cls: ClassDeclaration): boolean => {
   return last !== undefined && isLibraryNode(last);
 };
 
+const isTrustedLibraryEventCall = (callee: PropertyAccessExpression, scope: AggregateScope): boolean =>
+  reachesLibraryBaseByName(scope.cls) &&
+  isDeclaredOnlyInLibraries(scope.cls, callee.getName()) &&
+  lookupMember(scope, callee, callee.getName()).kind === 'inert';
+
+const isDeclaredOnce = (cls: ClassDeclaration, name: string): boolean =>
+  new Set(declarationsAcrossHierarchy(cls.getType(), name)).size === 1;
+
+const isTrustedProjectEventCall = (callee: PropertyAccessExpression, scope: AggregateScope): boolean => {
+  const chain = namedClassChain(scope.cls);
+  const member = lookupMember(scope, callee, callee.getName());
+  const method = member.kind === 'body' ? member.body.getParent() : undefined;
+  return (
+    chain !== undefined &&
+    Node.isMethodDeclaration(method) &&
+    !isLibraryNode(method) &&
+    chain.some((cls) => cls === method.getParent()) &&
+    isDeclaredOnce(scope.cls, callee.getName()) &&
+    isPushOnlyMethod(method, scope.plainEventArrays)
+  );
+};
+
 const isTrustedEventCall = (call: CallExpression, scope: AggregateScope): boolean => {
   const callee = unwrap(call.getExpression());
   return (
     Node.isPropertyAccessExpression(callee) &&
     isThis(callee.getExpression()) &&
     scope.eventMethods.has(callee.getName()) &&
-    reachesLibraryBaseByName(scope.cls) &&
-    isDeclaredOnlyInLibraries(scope.cls, callee.getName()) &&
-    lookupMember(scope, callee, callee.getName()).kind === 'inert'
+    (isTrustedLibraryEventCall(callee, scope) || isTrustedProjectEventCall(callee, scope))
   );
 };
 

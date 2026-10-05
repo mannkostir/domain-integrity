@@ -144,7 +144,7 @@ describe('this handed to a transparent event constructor', () => {
     expect(leaks(classNamed('Ticket'), [])).toEqual([]);
   });
 
-  it('stays unknown when the event method is declared in the project', () => {
-    expect(leaks(classNamed('ProjectTicket'))).toEqual([]);
+  it('is judged when a project event method only pushes onto a private array', () => {
+    expect(leaks(classNamed('ProjectTicket'))).toEqual(['touch']);
   });
 });

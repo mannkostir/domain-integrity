@@ -46,9 +46,46 @@ export class CheckingOrder extends CheckingRoot {
   register(registry: { add(order: CheckingOrder): void }): void { registry.add(this); }
 }
 `,
+  '/src/handoff.ts': `
+import { Root } from './root';
+export type Status = 'open' | 'closed';
+export class Paid { constructor(readonly order: object) {} }
+export class Peeking { readonly label: string; constructor(source: { label(): string }) { this.label = source.label(); } }
+export class Registry { static mark(order: object): void { void order; } }
+export abstract class MarkingRoot {
+  private events: object[] = [];
+  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
+}
+export class Payment extends Root {
+  private status: Status = 'open';
+  private note = '';
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  label(): string { return this.note; }
+  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
+  settle(n: string): void { this.note = n; super.addDomainEvent(new Paid(this)); }
+  held(n: string): void { this.note = n; const event = new Paid(this); this.addDomainEvent(event); }
+  peek(n: string): void { this.note = n; this.addDomainEvent(new Peeking(this)); }
+}
+export class MarkedPayment extends MarkingRoot {
+  private status: Status = 'open';
+  private note = '';
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
+}
+export class OverridingPayment extends Root {
+  private status: Status = 'open';
+  private note = '';
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  protected addDomainEvent(event: object): void { super.addDomainEvent(event); }
+  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
+}
+`,
 });
 
 const classNamed = (name: string): ClassDeclaration => project.getSourceFileOrThrow('/src/order.ts').getClassOrThrow(name);
+
+const handoffClass = (name: string): ClassDeclaration =>
+  project.getSourceFileOrThrow('/src/handoff.ts').getClassOrThrow(name);
 
 const leaks = (target: ClassDeclaration, eventMethods: readonly string[] = DEFAULT_DECLARATION.eventMethods) => {
   const model = lifecycleAnalyzer.extract({
@@ -77,5 +114,23 @@ describe('push onto a plain event array in an aggregate that leaks this', () => 
 
   it('leaves a method unjudged when the event method also reads the field', () => {
     expect(leaks(classNamed('CheckingOrder'))).toEqual([]);
+  });
+});
+
+describe('this handed to a push-only project event method', () => {
+  it('judges methods that hand this to a transparent event through this or super', () => {
+    expect(leaks(handoffClass('Payment'))).toEqual(['pay', 'settle']);
+  });
+
+  it('leaves methods unjudged when the event method is not configured', () => {
+    expect(leaks(handoffClass('Payment'), [])).toEqual([]);
+  });
+
+  it('leaves methods unjudged when the event method also hands this elsewhere', () => {
+    expect(leaks(handoffClass('MarkedPayment'))).toEqual([]);
+  });
+
+  it('leaves methods unjudged when the event method is overridden', () => {
+    expect(leaks(handoffClass('OverridingPayment'))).toEqual([]);
   });
 });
