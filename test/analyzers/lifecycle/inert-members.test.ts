@@ -36,10 +36,30 @@ export class OverridingTodo extends Entity<{ status: Status }> {
   relabel(): void { this.note = this.label; }
   close(): void { if (this.props.status === 'closed') throw new Error('x'); this.props.status = 'closed'; }
 }
+export class GuardedTodo extends Entity<{ status: Status }> {
+  private note = '';
+  override get active(): boolean { return this.props.status === 'open'; }
+  rename(): void { if (!this.active) return; this.note = 'x'; }
+  close(): void { if (this.props.status === 'closed') throw new Error('x'); this.props.status = 'closed'; }
+}
 export class LeakyTodo extends Entity<{ status: Status }> {
   private note = '';
   private policy: { ok(): boolean } = { ok: () => this.props.status === 'open' };
   viaPolicy(): void { this.note = String(this.policy); }
+  close(): void { if (this.props.status === 'closed') throw new Error('x'); this.props.status = 'closed'; }
+}
+`,
+  '/src/mixed-todo.ts': `
+export type Status = 'open' | 'closed';
+export class Core { protected props: { status: Status } = { status: 'open' }; }
+type Constructor<T> = new (...args: never[]) => T;
+export const WithFlag = <T extends Constructor<Core>>(Base: T) =>
+  class extends Base {
+    get active(): boolean { return this.props.status === 'open'; }
+  };
+export class MixedTodo extends WithFlag(Core) {
+  private note = '';
+  rename(): void { if (!this.active) return; this.note = 'x'; }
   close(): void { if (this.props.status === 'closed') throw new Error('x'); this.props.status = 'closed'; }
 }
 `,
@@ -117,5 +137,13 @@ describe('inertMembers', () => {
 
   it('still counts a listed project data field in an aggregate that leaks this', () => {
     expect(leaks(classNamed('/src/todo.ts', 'LeakyTodo'), ['policy'])).toEqual([]);
+  });
+
+  it('still traces a getter that a project mixin adds', () => {
+    expect(leaks(classNamed('/src/mixed-todo.ts', 'MixedTodo'), ['active'])).toEqual([]);
+  });
+
+  it('still recognises a guard read through a project override of a listed name', () => {
+    expect(leaks(classNamed('/src/todo.ts', 'GuardedTodo'), ['active'])).toEqual([]);
   });
 });

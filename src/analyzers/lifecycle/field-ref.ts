@@ -126,9 +126,22 @@ const tracedMember = (cls: ClassDeclaration, access: Node, name: string): Member
 const isLibraryData = (member: MemberLookup): boolean =>
   member.kind === 'data' && member.declarations.every(isLibraryNode);
 
+const isDeclaredOnlyInLibraries = (cls: ClassDeclaration, name: string): boolean =>
+  (cls.getType().getProperty(name)?.getDeclarations() ?? []).every(isLibraryNode);
+
+const isInertEventMethod = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
+  member.kind === 'untraceable' && scope.eventMethods.has(name);
+
+const isInertUntraceable = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
+  member.kind === 'untraceable' && scope.inertMembers.has(name) && isDeclaredOnlyInLibraries(scope.cls, name);
+
+const isInertLibraryData = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
+  scope.inertMembers.has(name) && isLibraryData(member);
+
 const isAssumedInert = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
-  (member.kind === 'untraceable' && (scope.eventMethods.has(name) || scope.inertMembers.has(name))) ||
-  (scope.inertMembers.has(name) && isLibraryData(member));
+  isInertEventMethod(scope, name, member) ||
+  isInertUntraceable(scope, name, member) ||
+  isInertLibraryData(scope, name, member);
 
 const lookupMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
   const member = tracedMember(scope.cls, access, name);
