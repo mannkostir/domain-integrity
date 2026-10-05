@@ -1,6 +1,6 @@
-import { CompilerOptions } from 'ts-morph';
+import { ClassDeclaration, CompilerOptions, Node } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
-import { isPlainEventArray } from '../../../src/analyzers/lifecycle/array-store';
+import { isPlainArrayPush, isPlainEventArray, isPushOnlyMethod, plainEventArrays } from '../../../src/analyzers/lifecycle/array-store';
 import { classFamily } from '../../../src/analyzers/lifecycle/this-leak';
 import { inMemoryProject } from '../../helpers/in-memory';
 
@@ -142,5 +142,135 @@ describe('plain event array hardening', () => {
 
   it('rejects Object.assign reached through a string key', () => {
     expect(plain(`export class Root { private events: object[] = []; constructor(p: object) { Object['assign'](this, p); } }`)).toBe(false);
+  });
+});
+
+const arraysAndClass = (source: string) => {
+  const project = inMemoryProject({ '/src/root.ts': source });
+  const root = project.getSourceFileOrThrow('/src/root.ts').getClassOrThrow('Root');
+  return { root, arrays: plainEventArrays(classFamily(root, project.getSourceFiles())) };
+};
+
+const firstThisAccess = (root: ClassDeclaration, methodName: string): Node =>
+  root
+    .getMethodOrThrow(methodName)
+    .getFirstDescendantOrThrow((node) => Node.isPropertyAccessExpression(node) && Node.isThisExpression(node.getExpression()));
+
+const isPush = (members: string, fields = 'private events: object[] = [];'): boolean => {
+  const { root, arrays } = arraysAndClass(`export class Root { ${fields} ${members} }`);
+  return isPlainArrayPush(firstThisAccess(root, 'add'), arrays);
+};
+
+const pushOnly = (source: string): boolean => {
+  const { root, arrays } = arraysAndClass(source);
+  return isPushOnlyMethod(root.getMethodOrThrow('add'), arrays);
+};
+
+const pushOnlyBody = (signature: string, body: string, fields = 'private events: object[] = [];'): boolean =>
+  pushOnly(`export class Root { ${fields} ${signature} { ${body} } }`);
+
+describe('plain event arrays set', () => {
+  it('contains a plain property', () => {
+    const { root, arrays } = arraysAndClass(`export class Root { private events: object[] = []; }`);
+    expect(arrays.has(root.getPropertyOrThrow('events'))).toBe(true);
+  });
+
+  it('omits a non-plain property', () => {
+    const { root, arrays } = arraysAndClass(`export class Root { private events: object[] = []; protected other: object[] = []; }`);
+    expect(arrays.has(root.getPropertyOrThrow('other'))).toBe(false);
+  });
+});
+
+describe('plain array push', () => {
+  it('accepts a push onto a plain field', () => {
+    expect(isPush(`add(e: object): void { this.events.push(e); }`)).toBe(true);
+  });
+
+  it('accepts a push through a type assertion', () => {
+    expect(isPush(`add(e: object): void { (this.events as object[]).push(e); }`)).toBe(true);
+  });
+
+  it('rejects an optional access to the field', () => {
+    expect(isPush(`add(e: object): void { this.events?.push(e); }`)).toBe(false);
+  });
+
+  it('rejects an optional push call', () => {
+    expect(isPush(`add(e: object): void { this.events.push?.(e); }`)).toBe(false);
+  });
+
+  it('rejects a read of the field', () => {
+    expect(isPush(`add(e: object): void { this.events.some((x) => x === e); }`)).toBe(false);
+  });
+
+  it('rejects a push onto a non-plain field', () => {
+    expect(isPush(`add(e: object): void { this.other.push(e); }`, 'private events: object[] = []; protected other: object[] = [];')).toBe(false);
+  });
+});
+
+describe('push-only method', () => {
+  it('accepts a single push of the parameter', () => {
+    expect(pushOnlyBody('add(e: object): void', 'this.events.push(e);')).toBe(true);
+  });
+
+  it('accepts several pushes of parameters onto plain fields', () => {
+    expect(
+      pushOnlyBody('add(e: object, f: object): void', 'this.events.push(e, f); this.audit.push(e);', 'private events: object[] = []; private audit: object[] = [];'),
+    ).toBe(true);
+  });
+
+  it('rejects an extra statement', () => {
+    expect(pushOnlyBody('add(e: object): void', 'this.events.push(e); console.info(e);')).toBe(false);
+  });
+
+  it('rejects an empty body', () => {
+    expect(pushOnlyBody('add(e: object): void', '')).toBe(false);
+  });
+
+  it('rejects pushing a non-parameter', () => {
+    expect(pushOnlyBody('add(e: object): void', 'this.events.push({ e });')).toBe(false);
+  });
+
+  it('rejects a spread argument', () => {
+    expect(pushOnlyBody('add(...e: object[]): void', 'this.events.push(...e);')).toBe(false);
+  });
+
+  it('rejects a default parameter', () => {
+    expect(pushOnlyBody('add(e: object = {}): void', 'this.events.push(e);')).toBe(false);
+  });
+
+  it('rejects a destructured parameter', () => {
+    expect(pushOnlyBody('add({ e }: { e: object }): void', 'this.events.push(e);')).toBe(false);
+  });
+
+  it('rejects an async method', () => {
+    expect(pushOnlyBody('async add(e: object): Promise<void>', 'this.events.push(e);')).toBe(false);
+  });
+
+  it('rejects a static method', () => {
+    expect(pushOnlyBody('static add(e: object): void', 'Root.store.push(e);', 'private static store: object[] = [];')).toBe(false);
+  });
+
+  it('rejects an overloaded method', () => {
+    expect(
+      pushOnly(`export class Root { private events: object[] = [];
+  add(e: object): void;
+  add(e: object, f?: object): void;
+  add(e: object): void { this.events.push(e); } }`),
+    ).toBe(false);
+  });
+
+  it('rejects a push onto a non-plain field', () => {
+    expect(
+      pushOnly(`export class Root { private events: object[] = [];
+  add(e: object): void { this.events.push(e); }
+  replace(next: object[]): void { this.events = next; } }`),
+    ).toBe(false);
+  });
+
+  it('rejects a decorated method', () => {
+    expect(
+      pushOnly(`const tag = (_: unknown, __: ClassMethodDecoratorContext) => undefined;
+export class Root { private events: object[] = []; @tag add(e: object): void { this.events.push(e); } }`),
+    ).toBe(false);
   });
 });

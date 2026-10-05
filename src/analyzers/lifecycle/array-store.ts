@@ -1,4 +1,4 @@
-import { ClassDeclaration, Node, PropertyDeclaration, SyntaxKind } from 'ts-morph';
+import { ClassDeclaration, MethodDeclaration, Node, ParameterDeclaration, PropertyDeclaration, Symbol as MorphSymbol, SyntaxKind } from 'ts-morph';
 import { isLibraryNode } from './library';
 import { outermostWrapper, unwrap } from './wrappers';
 
@@ -116,3 +116,72 @@ export const isPlainEventArray = (property: PropertyDeclaration, family: readonl
 
 export const plainEventArrays = (family: readonly ClassDeclaration[]): ReadonlySet<Node> =>
   new Set(family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArray(property, family)));
+
+const declarationsAreIn = (node: Node, arrays: ReadonlySet<Node>): boolean => {
+  const declarations = node.getSymbol()?.getDeclarations() ?? [];
+  return declarations.length > 0 && declarations.every((declaration) => arrays.has(declaration));
+};
+
+export const isPlainArrayPush = (access: Node, arrays: ReadonlySet<Node>): boolean => {
+  if (!Node.isPropertyAccessExpression(access) || !Node.isThisExpression(access.getExpression())) return false;
+  const receiver = outermostWrapper(access);
+  const member = receiver.getParent();
+  const call = member?.getParent();
+  return (
+    !access.hasQuestionDotToken() &&
+    Node.isPropertyAccessExpression(member) &&
+    member.getExpression() === receiver &&
+    member.getName() === 'push' &&
+    !member.hasQuestionDotToken() &&
+    Node.isCallExpression(call) &&
+    call.getExpression() === member &&
+    !call.hasQuestionDotToken() &&
+    declarationsAreIn(access, arrays)
+  );
+};
+
+const isPlainParameter = (parameter: ParameterDeclaration): boolean =>
+  Node.isIdentifier(parameter.getNameNode()) &&
+  !parameter.isRestParameter() &&
+  parameter.getInitializer() === undefined &&
+  parameter.getDecorators().length === 0;
+
+const parameterSymbols = (method: MethodDeclaration): ReadonlySet<MorphSymbol> =>
+  new Set(method.getParameters().flatMap((parameter) => parameter.getSymbol() ?? []));
+
+const isParameterReference = (argument: Node, parameters: ReadonlySet<MorphSymbol>): boolean => {
+  const symbol = Node.isIdentifier(argument) ? argument.getSymbol() : undefined;
+  return symbol !== undefined && parameters.has(symbol);
+};
+
+const isPushOfParameters = (statement: Node, arrays: ReadonlySet<Node>, parameters: ReadonlySet<MorphSymbol>): boolean => {
+  if (!Node.isExpressionStatement(statement)) return false;
+  const call = statement.getExpression();
+  if (!Node.isCallExpression(call)) return false;
+  const member = call.getExpression();
+  return (
+    Node.isPropertyAccessExpression(member) &&
+    isPlainArrayPush(member.getExpression(), arrays) &&
+    call.getArguments().every((argument) => isParameterReference(argument, parameters))
+  );
+};
+
+const bodyStatements = (method: MethodDeclaration): readonly Node[] => {
+  const body = method.getBody();
+  return Node.isBlock(body) ? body.getStatements() : [];
+};
+
+export const isPushOnlyMethod = (method: MethodDeclaration, arrays: ReadonlySet<Node>): boolean => {
+  const statements = bodyStatements(method);
+  const parameters = parameterSymbols(method);
+  return (
+    !method.isStatic() &&
+    !method.isAsync() &&
+    !method.isGenerator() &&
+    method.getOverloads().length === 0 &&
+    method.getDecorators().length === 0 &&
+    method.getParameters().every(isPlainParameter) &&
+    statements.length > 0 &&
+    statements.every((statement) => isPushOfParameters(statement, arrays, parameters))
+  );
+};
