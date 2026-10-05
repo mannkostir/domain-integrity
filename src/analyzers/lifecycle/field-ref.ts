@@ -1,5 +1,6 @@
-import { ClassDeclaration, Expression, Node, SyntaxKind, ts, Type } from 'ts-morph';
+import { CallExpression, ClassDeclaration, Expression, NewExpression, Node, SyntaxKind, ts, Type } from 'ts-morph';
 import { isDefaultLibraryNode, isLibraryNode } from './library';
+import { isTransparentConstruction } from './transparent-constructor';
 
 const MAX_GETTER_DEPTH = 5;
 
@@ -280,6 +281,37 @@ export const isReceiverOfAccess = (node: Node): boolean => {
 export const escapesStateHolder = (node: Node): boolean =>
   (Node.isThisExpression(node) || isThisProps(node)) && !isReceiverOfAccess(outermostWrapper(node));
 
+const argumentOwner = (node: Node): Node | undefined => {
+  const holder = outermostWrapper(node);
+  const parent = holder.getParent();
+  return (Node.isNewExpression(parent) || Node.isCallExpression(parent)) && parent.getArguments().includes(holder)
+    ? parent
+    : undefined;
+};
+
+const isTrustedEventCall = (call: CallExpression, scope: AggregateScope): boolean => {
+  const callee = unwrap(call.getExpression());
+  return (
+    Node.isPropertyAccessExpression(callee) &&
+    isThis(callee.getExpression()) &&
+    scope.eventMethods.has(callee.getName()) &&
+    lookupMember(scope, callee, callee.getName()).kind === 'inert'
+  );
+};
+
+const isEventHandoff = (construction: NewExpression, scope: AggregateScope): boolean => {
+  const call = argumentOwner(construction);
+  return Node.isCallExpression(call) && isTrustedEventCall(call, scope) && isTransparentConstruction(construction);
+};
+
+const isHandedToEventMethod = (node: Node, scope: AggregateScope): boolean => {
+  const construction = Node.isThisExpression(node) ? argumentOwner(node) : undefined;
+  return Node.isNewExpression(construction) && isEventHandoff(construction, scope);
+};
+
+const escapesIntoUnknown = (node: Node, scope: AggregateScope): boolean =>
+  escapesStateHolder(node) && !isHandedToEventMethod(node, scope);
+
 const readsWithComputedKey = (node: Node): boolean =>
   Node.isElementAccessExpression(node) && isStateHolder(node.getExpression()) && memberName(node) === undefined;
 
@@ -302,7 +334,7 @@ const readsThroughMember = (node: Node, field: string, scope: AggregateScope, de
 
 export const referencesFieldDirectly = (node: Node, field: string, scope: AggregateScope, depth = 0): boolean =>
   fieldNameOf(node) === field ||
-  escapesStateHolder(node) ||
+  escapesIntoUnknown(node, scope) ||
   readsWithComputedKey(node) ||
   readsThroughMember(node, field, scope, depth);
 
