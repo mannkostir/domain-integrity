@@ -1,17 +1,21 @@
-import { CallExpression, ClassDeclaration, Expression, NewExpression, Node, SyntaxKind, ts, Type } from 'ts-morph';
+import {
+  CallExpression,
+  ClassDeclaration,
+  Expression,
+  NewExpression,
+  Node,
+  PropertyAccessExpression,
+  SyntaxKind,
+  ts,
+  Type,
+} from 'ts-morph';
+import { isPlainArrayPush, isPushOnlyMethod } from './array-store';
 import { isDefaultLibraryNode, isLibraryNode } from './library';
 import { namedClassChain } from './named-chain';
 import { isTransparentConstruction } from './transparent-constructor';
+import { outermostWrapper, unwrap } from './wrappers';
 
 const MAX_GETTER_DEPTH = 5;
-
-export const unwrap = (node: Node): Node =>
-  Node.isNonNullExpression(node) ||
-  Node.isParenthesizedExpression(node) ||
-  Node.isAsExpression(node) ||
-  Node.isSatisfiesExpression(node)
-    ? unwrap(node.getExpression())
-    : node;
 
 const isThis = (node: Node): boolean => {
   const target = unwrap(node);
@@ -51,6 +55,7 @@ export type AggregateScope = {
   readonly eventMethods: ReadonlySet<string>;
   readonly inertMembers: ReadonlySet<string>;
   readonly leaksThis: boolean;
+  readonly plainEventArrays: ReadonlySet<Node>;
 };
 
 type MemberLookup =
@@ -237,7 +242,7 @@ const isPrimitiveType = (type: Type, depth = 0): boolean =>
         ))));
 
 const projectDataReadsField = (access: Node, scope: AggregateScope): boolean =>
-  scope.leaksThis && !isPrimitiveType(access.getType());
+  scope.leaksThis && !isPrimitiveType(access.getType()) && !isPlainArrayPush(access, scope.plainEventArrays);
 
 const dataReadsField = (access: Node, declarations: readonly Node[], field: string, scope: AggregateScope): boolean => {
   if (isOverwritten(access)) return false;
@@ -266,11 +271,6 @@ export const thisGetterExpression = (node: Node, cls: ClassDeclaration): Express
   return statements.length === 1 && Node.isReturnStatement(only) ? only.getExpression() : undefined;
 };
 
-export const outermostWrapper = (node: Node): Node => {
-  const parent = node.getParent();
-  return parent !== undefined && unwrap(parent) !== parent && unwrap(parent) === unwrap(node) ? outermostWrapper(parent) : node;
-};
-
 export const isReceiverOfAccess = (node: Node): boolean => {
   const parent = node.getParent();
   return (
@@ -296,15 +296,35 @@ const reachesLibraryBaseByName = (cls: ClassDeclaration): boolean => {
   return last !== undefined && isLibraryNode(last);
 };
 
+const isTrustedLibraryEventCall = (callee: PropertyAccessExpression, scope: AggregateScope): boolean =>
+  reachesLibraryBaseByName(scope.cls) &&
+  isDeclaredOnlyInLibraries(scope.cls, callee.getName()) &&
+  lookupMember(scope, callee, callee.getName()).kind === 'inert';
+
+const isDeclaredOnce = (cls: ClassDeclaration, name: string): boolean =>
+  new Set(declarationsAcrossHierarchy(cls.getType(), name)).size === 1;
+
+const isTrustedProjectEventCall = (callee: PropertyAccessExpression, scope: AggregateScope): boolean => {
+  const chain = namedClassChain(scope.cls);
+  const member = lookupMember(scope, callee, callee.getName());
+  const method = member.kind === 'body' ? member.body.getParent() : undefined;
+  return (
+    chain !== undefined &&
+    Node.isMethodDeclaration(method) &&
+    !isLibraryNode(method) &&
+    chain.some((cls) => cls === method.getParent()) &&
+    isDeclaredOnce(scope.cls, callee.getName()) &&
+    isPushOnlyMethod(method, scope.plainEventArrays)
+  );
+};
+
 const isTrustedEventCall = (call: CallExpression, scope: AggregateScope): boolean => {
   const callee = unwrap(call.getExpression());
   return (
     Node.isPropertyAccessExpression(callee) &&
     isThis(callee.getExpression()) &&
     scope.eventMethods.has(callee.getName()) &&
-    reachesLibraryBaseByName(scope.cls) &&
-    isDeclaredOnlyInLibraries(scope.cls, callee.getName()) &&
-    lookupMember(scope, callee, callee.getName()).kind === 'inert'
+    (isTrustedLibraryEventCall(callee, scope) || isTrustedProjectEventCall(callee, scope))
   );
 };
 

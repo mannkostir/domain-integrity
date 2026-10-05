@@ -1,8 +1,9 @@
 import { BinaryExpression, Expression, Node, SyntaxKind } from 'ts-morph';
 import { SET, UNSET, isNullish, literalToken } from '../../engine/value-token';
-import { escapesStateHolder, fieldNameOf, isRootedAtThis, unwrap } from './field-ref';
+import { escapesStateHolder, fieldNameOf, isRootedAtThis } from './field-ref';
 import { AssignedValues, StateField } from './model';
 import { MAY_WRITE, UNRESOLVED, allTokens, assignedToken, mergeAssigned } from './values';
+import { unwrap } from './wrappers';
 
 export const isAssignmentOperator = (node: BinaryExpression): boolean => {
   const kind = node.getOperatorToken().getKind();

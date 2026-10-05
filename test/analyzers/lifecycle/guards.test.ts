@@ -205,7 +205,7 @@ describe('methodSources for an enum field', () => {
     ['destructuredTitle', 'unknown'],
     ['conditionalAlias', 'unknown'],
     ['pushesLine', ['CLOSED', 'DRAFT', 'OPEN']],
-    ['emitsEvent', 'unknown'],
+    ['emitsEvent', ['CLOSED', 'DRAFT', 'OPEN']],
     ['aliasProps', 'unknown'],
     ['destructuredProps', 'unknown'],
     ['nestedDestructure', 'unknown'],
