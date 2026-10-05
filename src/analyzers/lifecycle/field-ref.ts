@@ -123,20 +123,28 @@ const tracedMember = (cls: ClassDeclaration, access: Node, name: string): Member
   return member === undefined ? absentMember(cls, access, name) : bodyOf(member);
 };
 
-const isLibraryData = (member: MemberLookup): boolean =>
-  member.kind === 'data' && member.declarations.every(isLibraryNode);
+const isUninitialisedLibraryData = (member: MemberLookup): boolean =>
+  member.kind === 'data' && member.initializer === undefined && member.declarations.every(isLibraryNode);
+
+const declarationsAcrossHierarchy = (type: Type, name: string): readonly Node[] => [
+  ...(type.getProperty(name)?.getDeclarations() ?? []),
+  ...type.getBaseTypes().flatMap((base) => declarationsAcrossHierarchy(base, name)),
+];
 
 const isDeclaredOnlyInLibraries = (cls: ClassDeclaration, name: string): boolean =>
-  (cls.getType().getProperty(name)?.getDeclarations() ?? []).every(isLibraryNode);
+  declarationsAcrossHierarchy(cls.getType(), name).every(isLibraryNode);
+
+const isListedLibraryMember = (scope: AggregateScope, name: string): boolean =>
+  scope.inertMembers.has(name) && isDeclaredOnlyInLibraries(scope.cls, name);
 
 const isInertEventMethod = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
   member.kind === 'untraceable' && scope.eventMethods.has(name);
 
 const isInertUntraceable = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
-  member.kind === 'untraceable' && scope.inertMembers.has(name) && isDeclaredOnlyInLibraries(scope.cls, name);
+  member.kind === 'untraceable' && isListedLibraryMember(scope, name);
 
 const isInertLibraryData = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
-  scope.inertMembers.has(name) && isLibraryData(member);
+  isUninitialisedLibraryData(member) && isListedLibraryMember(scope, name);
 
 const isAssumedInert = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
   isInertEventMethod(scope, name, member) ||

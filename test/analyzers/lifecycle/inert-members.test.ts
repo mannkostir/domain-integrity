@@ -73,6 +73,48 @@ export class UnresolvedTodo extends Entity {
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
 }
 `,
+  '/src/merged-todo.ts': `
+import { Entity } from '../types/ddd';
+export type Status = 'open' | 'closed';
+export class Flag {
+  declare status: Status;
+  get active(): boolean { return this.status === 'open'; }
+}
+export interface MergedTodo extends Flag {}
+export class MergedTodo extends Entity<object> {
+  status: Status = 'open';
+  private note = '';
+  rename(): void { if (!this.active) return; this.note = 'x'; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+}
+`,
+  '/src/parameter-todo.ts': `
+import { Entity } from '../types/ddd';
+export type Status = 'open' | 'closed';
+export class ParameterTodo extends Entity<object> {
+  status: Status = 'open';
+  private note = '';
+  constructor(public override readonly loose: () => boolean) { super(); }
+  rename(): void { if (!this.loose()) return; this.note = 'x'; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+}
+`,
+  '/node_modules/acme-ddd/src/index.ts': `
+export abstract class Base<S extends string> {
+  abstract status: S;
+  readonly canEdit = (): boolean => this.status !== ('closed' as S);
+}
+`,
+  '/src/workspace-todo.ts': `
+import { Base } from '../node_modules/acme-ddd/src/index';
+export type Status = 'open' | 'closed';
+export class WorkspaceTodo extends Base<Status> {
+  status: Status = 'open';
+  private note = '';
+  rename(): void { if (!this.canEdit()) return; this.note = 'x'; }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+}
+`,
 });
 
 const classNamed = (path: string, name: string): ClassDeclaration =>
@@ -145,5 +187,17 @@ describe('inertMembers', () => {
 
   it('still recognises a guard read through a project override of a listed name', () => {
     expect(leaks(classNamed('/src/todo.ts', 'GuardedTodo'), ['active'])).toEqual([]);
+  });
+
+  it('still traces a listed getter that a project class merges in alongside a library one', () => {
+    expect(leaks(classNamed('/src/merged-todo.ts', 'MergedTodo'), ['active'])).toEqual([]);
+  });
+
+  it('still counts a project parameter property that overrides listed library data', () => {
+    expect(leaks(classNamed('/src/parameter-todo.ts', 'ParameterTodo'), ['loose'])).toEqual([]);
+  });
+
+  it('still traces the initializer of listed library data', () => {
+    expect(leaks(classNamed('/src/workspace-todo.ts', 'WorkspaceTodo'), ['canEdit'])).toEqual([]);
   });
 });
