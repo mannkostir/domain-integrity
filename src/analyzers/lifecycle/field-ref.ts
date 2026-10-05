@@ -2,16 +2,9 @@ import { CallExpression, ClassDeclaration, Expression, NewExpression, Node, Synt
 import { isDefaultLibraryNode, isLibraryNode } from './library';
 import { namedClassChain } from './named-chain';
 import { isTransparentConstruction } from './transparent-constructor';
+import { outermostWrapper, unwrap } from './wrappers';
 
 const MAX_GETTER_DEPTH = 5;
-
-export const unwrap = (node: Node): Node =>
-  Node.isNonNullExpression(node) ||
-  Node.isParenthesizedExpression(node) ||
-  Node.isAsExpression(node) ||
-  Node.isSatisfiesExpression(node)
-    ? unwrap(node.getExpression())
-    : node;
 
 const isThis = (node: Node): boolean => {
   const target = unwrap(node);
@@ -264,11 +257,6 @@ export const thisGetterExpression = (node: Node, cls: ClassDeclaration): Express
   const statements = body.getStatements();
   const [only] = statements;
   return statements.length === 1 && Node.isReturnStatement(only) ? only.getExpression() : undefined;
-};
-
-export const outermostWrapper = (node: Node): Node => {
-  const parent = node.getParent();
-  return parent !== undefined && unwrap(parent) !== parent && unwrap(parent) === unwrap(node) ? outermostWrapper(parent) : node;
 };
 
 export const isReceiverOfAccess = (node: Node): boolean => {

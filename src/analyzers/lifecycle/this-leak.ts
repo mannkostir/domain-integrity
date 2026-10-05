@@ -13,10 +13,9 @@ import {
   hasForeignThis,
   inheritanceChain,
   isReceiverOfAccess,
-  outermostWrapper,
-  unwrap,
 } from './field-ref';
 import { isLibraryNode } from './library';
+import { outermostWrapper, unwrap } from './wrappers';
 
 const NON_RETAINING_CALLBACKS = new Set([
   'filter',
@@ -210,7 +209,7 @@ const projectSubclasses = (cls: ClassDeclaration, files: readonly SourceFile[]):
     .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassDeclaration))
     .filter((candidate) => candidate !== cls && inheritanceChain(candidate).includes(cls));
 
-const classFamily = (cls: ClassDeclaration, files: readonly SourceFile[]): readonly ClassDeclaration[] => [
+export const classFamily = (cls: ClassDeclaration, files: readonly SourceFile[]): readonly ClassDeclaration[] => [
   ...inheritanceChain(cls).filter((candidate) => !isLibraryNode(candidate)),
   ...projectSubclasses(cls, files),
 ];

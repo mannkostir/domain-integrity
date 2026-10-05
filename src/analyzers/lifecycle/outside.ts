@@ -1,9 +1,10 @@
 import { CallExpression, ClassDeclaration, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
 import { assignedValue, isAssignmentOperator } from './assigned';
-import { inheritanceChain, unwrap } from './field-ref';
+import { inheritanceChain } from './field-ref';
 import { isLibraryNode } from './library';
 import { OutsideAssignment, StateField } from './model';
 import { UNRESOLVED } from './values';
+import { unwrap } from './wrappers';
 
 const isInstanceOf = (type: Type, cls: ClassDeclaration): boolean =>
   type.getNonNullableType().getSymbol()?.getDeclarations().includes(cls) ?? false;
