@@ -187,6 +187,52 @@ export const hydrate = (o: Root, g: object[]): void => { o['events'] = g; };`,
     ).toBe(false);
   });
 
+  it('rejects a write keyed by an as-const literal in another file', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }`, 'events', {
+        '/src/hydrate.ts': `import { Root } from './root';
+export const hydrate = (o: Root, g: object[]): void => { o['events' as const] = g; };`,
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects a write keyed by a const identifier in another file', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }`, 'events', {
+        '/src/hydrate.ts': `import { Root } from './root';
+const key = 'events';
+export const hydrate = (o: Root, g: object[]): void => { o[key] = g; };`,
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects a write keyed by a parenthesized literal in another file', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }`, 'events', {
+        '/src/hydrate.ts': `import { Root } from './root';
+export const hydrate = (o: Root, g: object[]): void => { o[('events')] = g; };`,
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects a write keyed by a union that includes the field name in another file', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }`, 'events', {
+        '/src/hydrate.ts': `import { Root } from './root';
+export const hydrate = (o: Root, key: 'other' | 'events', g: object[]): void => { o[key] = g; };`,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts a write keyed by another literal type in another file', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }`, 'events', {
+        '/src/hydrate.ts': `const write = (o: Record<string, object[]>, key: 'other', g: object[]): void => { o[key] = g; };
+export { write };`,
+      }),
+    ).toBe(true);
+  });
+
   it('accepts a string-keyed reset to an empty array in another file', () => {
     expect(
       plain(`export class Root { private events: object[] = []; }`, 'events', {

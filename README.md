@@ -314,7 +314,7 @@ A few rare self-wiring shapes can still produce a false finding: a factory or se
   - it is declared in your project, non-static, `private` or `#name`, without `declare`, a decorator or `accessor`, and its initializer is absent or `[]`;
   - every reference to it is a `.name` or `['name']` member access, so any other reference, such as `const { _events } = this`, disqualifies it;
   - every write to it anywhere in the project is `= []`, with no other assignment, compound assignment, destructuring target or default, `delete`, `++` or `--`;
-  - no `x['name']` or ``x[`name`]`` write anywhere in the project, on any reference, is other than `= []`;
+  - no bracket write `x[key]` anywhere in the project, on any reference, is other than `= []` when `key` is the literal `'name'` or ``` `name` ```, parenthesized or asserted, or when its type is the string literal type `'name'` or a union that includes it, such as `x['name' as const]`, `x[k]` with `const k = 'name'`, or `x[k]` with `k: 'other' | 'name'`;
   - no class in the aggregate's family, meaning its project base classes and project subclasses, has a class decorator, calls `assign(this, …)` in any spelling, such as `Object.assign(this, props)`, `Object['assign'](this, props)` or a destructured `assign(this, props)`, or writes `this[key]` with a non-literal key.
 - **Unreachable values.** `unreachable-state` is skipped for a field if any of these holds:
   - the field has an assignment whose value cannot be resolved;

@@ -8,6 +8,7 @@ import {
   SourceFile,
   Symbol as MorphSymbol,
   SyntaxKind,
+  Type,
 } from 'ts-morph';
 import { isLibraryNode } from './library';
 import { outermostWrapper, unwrap } from './wrappers';
@@ -128,10 +129,20 @@ const bracketName = (property: PropertyDeclaration): string | undefined => {
   return Node.isStringLiteral(name) ? name.getLiteralText() : undefined;
 };
 
+const isLiteralTypeOf = (type: Type, name: string): boolean => type.isStringLiteral() && type.getLiteralValue() === name;
+
+const keyTypeIncludes = (key: Node, name: string): boolean => {
+  const type = key.getType();
+  return isLiteralTypeOf(type, name) || type.getUnionTypes().some((member) => isLiteralTypeOf(member, name));
+};
+
+const isKeyFor = (key: Node | undefined, name: string): boolean =>
+  key !== undefined && (literalKeyText(unwrap(key)) === name || keyTypeIncludes(key, name));
+
 const isBracketWriteOf =
   (name: string) =>
   (access: ElementAccessExpression): boolean => {
-    if (literalKeyText(access.getArgumentExpression()) !== name) return false;
+    if (!isKeyFor(access.getArgumentExpression(), name)) return false;
     const target = outermostWrapper(access);
     return isWritten(target) && !isResetToEmpty(target);
   };
