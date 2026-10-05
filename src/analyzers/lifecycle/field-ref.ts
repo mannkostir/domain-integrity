@@ -1,4 +1,5 @@
 import { CallExpression, ClassDeclaration, Expression, NewExpression, Node, SyntaxKind, ts, Type } from 'ts-morph';
+import { isPlainArrayPush } from './array-store';
 import { isDefaultLibraryNode, isLibraryNode } from './library';
 import { namedClassChain } from './named-chain';
 import { isTransparentConstruction } from './transparent-constructor';
@@ -44,6 +45,7 @@ export type AggregateScope = {
   readonly eventMethods: ReadonlySet<string>;
   readonly inertMembers: ReadonlySet<string>;
   readonly leaksThis: boolean;
+  readonly plainEventArrays: ReadonlySet<Node>;
 };
 
 type MemberLookup =
@@ -230,7 +232,7 @@ const isPrimitiveType = (type: Type, depth = 0): boolean =>
         ))));
 
 const projectDataReadsField = (access: Node, scope: AggregateScope): boolean =>
-  scope.leaksThis && !isPrimitiveType(access.getType());
+  scope.leaksThis && !isPrimitiveType(access.getType()) && !isPlainArrayPush(access, scope.plainEventArrays);
 
 const dataReadsField = (access: Node, declarations: readonly Node[], field: string, scope: AggregateScope): boolean => {
   if (isOverwritten(access)) return false;

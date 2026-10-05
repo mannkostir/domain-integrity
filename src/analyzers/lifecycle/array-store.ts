@@ -106,8 +106,11 @@ const writesUnknownMembers = (cls: ClassDeclaration): boolean =>
   cls.getDescendantsOfKind(SyntaxKind.CallExpression).some(isAssignOntoThis) ||
   cls.getDescendantsOfKind(SyntaxKind.ElementAccessExpression).some(isComputedWriteOnThis);
 
+const isDecorated = (cls: ClassDeclaration): boolean => cls.getDecorators().length > 0;
+
 export const isPlainEventArray = (property: PropertyDeclaration, family: readonly ClassDeclaration[]): boolean =>
   isPlainDeclaration(property) &&
+  !family.some(isDecorated) &&
   !family.some(writesUnknownMembers) &&
   property
     .findReferencesAsNodes()

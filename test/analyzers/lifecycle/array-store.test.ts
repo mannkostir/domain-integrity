@@ -102,6 +102,14 @@ export class Root { @tag private events: object[] = []; }`),
     ).toBe(false);
   });
 
+  it('rejects a field of a decorated class', () => {
+    expect(
+      plain(`const d = <T>(target: T, _: ClassDecoratorContext): void => undefined;
+@d
+export class Root { private events: object[] = []; add(e: object): void { this.events.push(e); } }`),
+    ).toBe(false);
+  });
+
   it('rejects an accessor field', () => {
     expect(plain(`export class Root { private accessor events: object[] = []; }`)).toBe(false);
   });
