@@ -4,6 +4,7 @@ export const unwrap = (node: Node): Node =>
   Node.isNonNullExpression(node) ||
   Node.isParenthesizedExpression(node) ||
   Node.isAsExpression(node) ||
+  Node.isTypeAssertion(node) ||
   Node.isSatisfiesExpression(node)
     ? unwrap(node.getExpression())
     : node;

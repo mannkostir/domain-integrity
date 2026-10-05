@@ -60,6 +60,7 @@ const isResetToEmpty = (target: Node): boolean => {
   const parent = target.getParent();
   return (
     Node.isBinaryExpression(parent) &&
+    destructuringRoot(parent) === parent &&
     parent.getLeft() === target &&
     parent.getOperatorToken().getKind() === SyntaxKind.EqualsToken &&
     isEmptyArrayLiteral(parent.getRight())
@@ -80,25 +81,34 @@ const isSafeReference = (reference: Node): boolean => {
   return isResetToEmpty(target) || !isWritten(target);
 };
 
-const isObjectAssignOntoThis = (node: Node): boolean => {
+const isAssignKey = (key: Node | undefined): boolean => Node.isStringLiteral(key) && key.getLiteralText() === 'assign';
+
+const isAssignAccess = (callee: Node): boolean =>
+  (Node.isPropertyAccessExpression(callee) && callee.getName() === 'assign') ||
+  (Node.isElementAccessExpression(callee) && isAssignKey(callee.getArgumentExpression()));
+
+const isAssignOntoThis = (node: Node): boolean => {
   if (!Node.isCallExpression(node)) return false;
-  const callee = unwrap(node.getExpression());
   const [target] = node.getArguments();
-  return (
-    Node.isPropertyAccessExpression(callee) &&
-    callee.getName() === 'assign' &&
-    unwrap(callee.getExpression()).getText() === 'Object' &&
-    target !== undefined &&
-    Node.isThisExpression(unwrap(target))
-  );
+  return isAssignAccess(unwrap(node.getExpression())) && target !== undefined && Node.isThisExpression(unwrap(target));
 };
 
-const assignsOntoThis = (cls: ClassDeclaration): boolean =>
-  cls.getDescendantsOfKind(SyntaxKind.CallExpression).some(isObjectAssignOntoThis);
+const isLiteralKey = (key: Node | undefined): boolean =>
+  Node.isStringLiteral(key) || Node.isNumericLiteral(key) || Node.isNoSubstitutionTemplateLiteral(key);
+
+const isComputedWriteOnThis = (node: Node): boolean =>
+  Node.isElementAccessExpression(node) &&
+  Node.isThisExpression(unwrap(node.getExpression())) &&
+  !isLiteralKey(node.getArgumentExpression()) &&
+  isWritten(outermostWrapper(node));
+
+const writesUnknownMembers = (cls: ClassDeclaration): boolean =>
+  cls.getDescendantsOfKind(SyntaxKind.CallExpression).some(isAssignOntoThis) ||
+  cls.getDescendantsOfKind(SyntaxKind.ElementAccessExpression).some(isComputedWriteOnThis);
 
 export const isPlainEventArray = (property: PropertyDeclaration, family: readonly ClassDeclaration[]): boolean =>
   isPlainDeclaration(property) &&
-  !family.some(assignsOntoThis) &&
+  !family.some(writesUnknownMembers) &&
   property
     .findReferencesAsNodes()
     .filter((reference) => reference !== property.getNameNode())

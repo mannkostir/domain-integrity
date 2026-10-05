@@ -118,3 +118,29 @@ describe('library declaration', () => {
     expect(isPlainEventArray(library.getPropertyOrThrow('events'), [library])).toBe(false);
   });
 });
+
+describe('plain event array hardening', () => {
+  it('rejects an array destructuring default', () => {
+    expect(plain(`export class Root { private events: object[] = []; f(n: object[][]): void { [this.events = []] = n; } }`)).toBe(false);
+  });
+
+  it('rejects an object destructuring default', () => {
+    expect(plain(`export class Root { private events: object[] = []; f(n: { a?: object[] }): void { ({ a: this.events = [] } = n); } }`)).toBe(false);
+  });
+
+  it('rejects a write through an angle-bracket assertion', () => {
+    expect(plain(`export class Root { private events: object[] = []; f(n: object[]): void { (<object[]>this.events) = n; } }`)).toBe(false);
+  });
+
+  it('rejects a computed-key write on this', () => {
+    expect(plain(`export class Root { private events: object[] = []; f(n: object[]): void { const k = 'events' as const; this[k] = n; } }`)).toBe(false);
+  });
+
+  it('rejects Object.assign reached through globalThis', () => {
+    expect(plain(`export class Root { private events: object[] = []; constructor(p: object) { globalThis.Object.assign(this, p); } }`)).toBe(false);
+  });
+
+  it('rejects Object.assign reached through a string key', () => {
+    expect(plain(`export class Root { private events: object[] = []; constructor(p: object) { Object['assign'](this, p); } }`)).toBe(false);
+  });
+});
