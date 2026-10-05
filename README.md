@@ -274,7 +274,7 @@ The analysis also trusts that nothing tampers with a plain event array from outs
 
 - a replaced `Array.prototype.push`, or a replaced `push` on a single array;
 - writes that bypass type checking or reach the field through reflection or untyped access, such as `(agg as any)._events = …`, `Reflect.set`, `Object.defineProperty` with a string key, `Object.assign(agg, …)` on another reference, or a computed-key write through an alias such as `const self = this; self[key] = …`;
-- a project subclass of the aggregate that overrides the event method, because `this.` calls are resolved on the declared aggregate class, as for every other member.
+- a project subclass of the aggregate that overrides the event method, or an instance reassignment of it such as `this.addDomainEvent = …` in a constructor, because `this.` calls are resolved on the declared aggregate class, as for every other member.
 
 A few rare self-wiring shapes can still produce a false finding: a factory or service outside the class (`agg.policy = new Policy(agg)`), the instance held inside another object (`box.o.policy.owner = box.o`), and a module-level factory function. So can a non-callable library property, such as a `boolean`, that a `.d.ts` declares as plain data while its JavaScript implements it as a getter reading the state field, for example through one of your overrides. The property is trusted as written, so a guard through it reads as no guard and the method can be reported as a `terminal-state-leak` or `transition-drift`. Current TypeScript emits accessors as accessors in `.d.ts` files, so this needs an older or hand-written declaration. An `inertMembers` entry for a library member that does read the state field can too. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
 
@@ -294,12 +294,12 @@ A few rare self-wiring shapes can still produce a false finding: a factory or se
 
   Such an escape still makes the aggregate leak `this`, and still counts as a possible write for `unreachable-state`.
 - **Push-only event methods.** A configured `eventMethods` call on `this` or `super` that is declared in your project qualifies for the `new E(this)` exception when the aggregate's base classes all resolve by name, without a mixin call or alias, and the method meets all of these:
-  - it is the only declaration of that name across the aggregate's base classes, so an override in between disqualifies it;
+  - it is the only declaration of that name across the aggregate and its base classes, so an override in between or in the aggregate itself disqualifies it;
   - it is non-static, non-async and non-generator, with no overloads and no decorators;
-  - its parameters are plain identifiers, with no rest, default or destructuring;
-  - every statement of its body is `this.<field>.push(<its parameters>)` onto a plain event array.
+  - its parameters are plain identifiers, with no rest, default, destructuring or decorators;
+  - its body has at least one statement, and every statement is `this.<field>.push(<its parameters>)` onto a plain event array.
 
-  For example, `protected addDomainEvent(event: DomainEvent): void { this._domainEvents.push(event); }`. A method that does anything else, such as `DomainEvents.markAggregateForDispatch(this)` or checking `this._domainEvents.some(…)` first, does not qualify, and its callers stay unjudged;
+  For example, `protected addDomainEvent(event: DomainEvent): void { this._domainEvents.push(event); }`. A method that does anything else, such as `DomainEvents.markAggregateForDispatch(this)` or checking `this._domainEvents.some(…)` first, does not qualify, and its callers stay unjudged.
 - **Aggregates that leak `this`.** An aggregate leaks `this` when anywhere in its project base classes or subclasses either of these happens:
   - `this` or `this.props` escapes;
   - an arrow function captures `this`, other than as a direct callback of `filter`, `map`, `some`, `every`, `find`, `findIndex`, `forEach`, `reduce`, `flatMap` or `sort` on a built-in array.
@@ -312,8 +312,10 @@ A few rare self-wiring shapes can still produce a false finding: a factory or se
   Factory members are static members and any member that calls `new` on a class in the family, such as `clone()`, including constructors, property initializers and accessors. Inside a factory member, a variable or parameter is tracked like `this` when it is typed as the aggregate, initialized with `new` on a class in the family, or assigned one with `=`, `??=`, `||=` or `&&=`, whatever its declared type: `any`, an interface or an intersection. A tracked variable leaks when it escapes or is captured by any function other than a direct array callback. Only a bare `return v;` is exempt. Wrapping it counts as an escape: `return Result.ok(v)`, `[a, b]`, `cond ? v : w`, or pushing it into a field all make the aggregate leak. In a leaking aggregate, every non-primitive project field counts as reading the state field, except that `this.<field>.push(…)` on a plain event array does not; the pushed arguments are still judged, and `this.events?.push(…)` does not qualify. In an aggregate that does not leak, project fields are plain data.
 - **Plain event arrays.** A field is a plain event array when all of these hold:
   - it is declared in your project, non-static, `private` or `#name`, without `declare`, a decorator or `accessor`, and its initializer is absent or `[]`;
+  - every reference to it is a `.name` or `['name']` member access, so any other reference, such as `const { _events } = this`, disqualifies it;
   - every write to it anywhere in the project is `= []`, with no other assignment, compound assignment, destructuring target or default, `delete`, `++` or `--`;
-  - no class in the aggregate's family, meaning its project base classes and project subclasses, has a class decorator, calls `assign(this, …)` such as `Object.assign(this, props)`, or writes `this[key]` with a non-literal key.
+  - no `x['name']` or ``x[`name`]`` write anywhere in the project, on any reference, is other than `= []`;
+  - no class in the aggregate's family, meaning its project base classes and project subclasses, has a class decorator, calls `assign(this, …)` in any spelling, such as `Object.assign(this, props)`, `Object['assign'](this, props)` or a destructured `assign(this, props)`, or writes `this[key]` with a non-literal key.
 - **Unreachable values.** `unreachable-state` is skipped for a field if any of these holds:
   - the field has an assignment whose value cannot be resolved;
   - a method may write the field through an escaping `this`;
