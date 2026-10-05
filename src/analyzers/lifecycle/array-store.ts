@@ -1,4 +1,14 @@
-import { ClassDeclaration, MethodDeclaration, Node, ParameterDeclaration, PropertyDeclaration, Symbol as MorphSymbol, SyntaxKind } from 'ts-morph';
+import {
+  ClassDeclaration,
+  ElementAccessExpression,
+  MethodDeclaration,
+  Node,
+  ParameterDeclaration,
+  PropertyDeclaration,
+  SourceFile,
+  Symbol as MorphSymbol,
+  SyntaxKind,
+} from 'ts-morph';
 import { isLibraryNode } from './library';
 import { outermostWrapper, unwrap } from './wrappers';
 
@@ -81,9 +91,13 @@ const isSafeReference = (reference: Node): boolean => {
   return isResetToEmpty(target) || !isWritten(target);
 };
 
-const isAssignKey = (key: Node | undefined): boolean => Node.isStringLiteral(key) && key.getLiteralText() === 'assign';
+const literalKeyText = (key: Node | undefined): string | undefined =>
+  Node.isStringLiteral(key) || Node.isNoSubstitutionTemplateLiteral(key) ? key.getLiteralText() : undefined;
+
+const isAssignKey = (key: Node | undefined): boolean => literalKeyText(key) === 'assign';
 
 const isAssignAccess = (callee: Node): boolean =>
+  (Node.isIdentifier(callee) && callee.getText() === 'assign') ||
   (Node.isPropertyAccessExpression(callee) && callee.getName() === 'assign') ||
   (Node.isElementAccessExpression(callee) && isAssignKey(callee.getArgumentExpression()));
 
@@ -108,17 +122,44 @@ const writesUnknownMembers = (cls: ClassDeclaration): boolean =>
 
 const isDecorated = (cls: ClassDeclaration): boolean => cls.getDecorators().length > 0;
 
-export const isPlainEventArray = (property: PropertyDeclaration, family: readonly ClassDeclaration[]): boolean =>
+const bracketName = (property: PropertyDeclaration): string | undefined => {
+  const name = property.getNameNode();
+  if (Node.isIdentifier(name)) return name.getText();
+  return Node.isStringLiteral(name) ? name.getLiteralText() : undefined;
+};
+
+const isBracketWriteOf =
+  (name: string) =>
+  (access: ElementAccessExpression): boolean => {
+    if (literalKeyText(access.getArgumentExpression()) !== name) return false;
+    const target = outermostWrapper(access);
+    return isWritten(target) && !isResetToEmpty(target);
+  };
+
+const isBracketWrittenIn = (property: PropertyDeclaration, files: readonly SourceFile[]): boolean => {
+  const name = bracketName(property);
+  return (
+    name !== undefined &&
+    files.some((file) => file.getDescendantsOfKind(SyntaxKind.ElementAccessExpression).some(isBracketWriteOf(name)))
+  );
+};
+
+export const isPlainEventArray = (
+  property: PropertyDeclaration,
+  family: readonly ClassDeclaration[],
+  files: readonly SourceFile[],
+): boolean =>
   isPlainDeclaration(property) &&
   !family.some(isDecorated) &&
   !family.some(writesUnknownMembers) &&
+  !isBracketWrittenIn(property, files) &&
   property
     .findReferencesAsNodes()
     .filter((reference) => reference !== property.getNameNode())
     .every(isSafeReference);
 
-export const plainEventArrays = (family: readonly ClassDeclaration[]): ReadonlySet<Node> =>
-  new Set(family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArray(property, family)));
+export const plainEventArrays = (family: readonly ClassDeclaration[], files: readonly SourceFile[]): ReadonlySet<Node> =>
+  new Set(family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArray(property, family, files)));
 
 const declarationsAreIn = (node: Node, arrays: ReadonlySet<Node>): boolean => {
   const declarations = node.getSymbol()?.getDeclarations() ?? [];

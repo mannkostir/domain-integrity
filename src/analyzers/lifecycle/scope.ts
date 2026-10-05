@@ -13,5 +13,5 @@ export const aggregateScope = (
   eventMethods: new Set(declaration.eventMethods),
   inertMembers: new Set(declaration.inertMembers),
   leaksThis: leaksThis(cls, files),
-  plainEventArrays: plainEventArrays(classFamily(cls, files)),
+  plainEventArrays: plainEventArrays(classFamily(cls, files), files),
 });

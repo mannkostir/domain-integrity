@@ -47,7 +47,7 @@ export class CheckingOrder extends CheckingRoot {
 }
 `,
   '/src/handoff.ts': `
-import { Root } from './root';
+import { ReplacingRoot, Root } from './root';
 export type Status = 'open' | 'closed';
 export class Paid { constructor(readonly order: object) {} }
 export class Peeking { readonly label: string; constructor(source: { label(): string }) { this.label = source.label(); } }
@@ -67,6 +67,12 @@ export class Payment extends Root {
   peek(n: string): void { this.note = n; this.addDomainEvent(new Peeking(this)); }
 }
 export class MarkedPayment extends MarkingRoot {
+  private status: Status = 'open';
+  private note = '';
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
+}
+export class ReplacingPayment extends ReplacingRoot {
   private status: Status = 'open';
   private note = '';
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
@@ -128,6 +134,10 @@ describe('this handed to a push-only project event method', () => {
 
   it('leaves methods unjudged when the event method also hands this elsewhere', () => {
     expect(leaks(handoffClass('MarkedPayment'))).toEqual([]);
+  });
+
+  it('leaves methods unjudged when the pushed field is not plain', () => {
+    expect(leaks(handoffClass('ReplacingPayment'))).toEqual([]);
   });
 
   it('leaves methods unjudged when the event method is overridden', () => {

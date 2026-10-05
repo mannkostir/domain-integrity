@@ -12,7 +12,8 @@ const plain = (
 ): boolean => {
   const project = inMemoryProject({ '/types/library.d.ts': 'export declare class LibraryRoot { protected events: object[]; }', ...extraFiles, '/src/root.ts': source }, compilerOptions);
   const root = project.getSourceFileOrThrow('/src/root.ts').getClassOrThrow('Root');
-  return isPlainEventArray(root.getPropertyOrThrow(field), classFamily(root, project.getSourceFiles()));
+  const files = project.getSourceFiles();
+  return isPlainEventArray(root.getPropertyOrThrow(field), classFamily(root, files), files);
 };
 
 describe('plain event array', () => {
@@ -123,7 +124,7 @@ describe('library declaration', () => {
   it('rejects a field declared in a library file', () => {
     const project = inMemoryProject({ '/types/library.d.ts': 'export declare class LibraryRoot { private events; }' });
     const library = project.getSourceFileOrThrow('/types/library.d.ts').getClassOrThrow('LibraryRoot');
-    expect(isPlainEventArray(library.getPropertyOrThrow('events'), [library])).toBe(false);
+    expect(isPlainEventArray(library.getPropertyOrThrow('events'), [library], project.getSourceFiles())).toBe(false);
   });
 });
 
@@ -151,12 +152,65 @@ describe('plain event array hardening', () => {
   it('rejects Object.assign reached through a string key', () => {
     expect(plain(`export class Root { private events: object[] = []; constructor(p: object) { Object['assign'](this, p); } }`)).toBe(false);
   });
+
+  it('rejects Object.assign reached through a template key', () => {
+    expect(plain(`export class Root { private events: object[] = []; constructor(p: object) { Object[\`assign\`](this, p); } }`)).toBe(false);
+  });
+
+  it('rejects a destructured assign onto this', () => {
+    expect(plain(`const { assign } = Object;
+export class Root { private events: object[] = []; constructor(p: object) { assign(this, p); } }`)).toBe(false);
+  });
+});
+
+describe('bracket writes outside the declaring class', () => {
+  it('rejects a string-keyed write in a subclass', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }
+export class Child extends Root { constructor(g: object[]) { super(); this['events'] = g; } }`),
+    ).toBe(false);
+  });
+
+  it('rejects a template-keyed write in a subclass', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }
+export class Child extends Root { constructor(g: object[]) { super(); this[\`events\`] = g; } }`),
+    ).toBe(false);
+  });
+
+  it('rejects a string-keyed write on another reference in another file', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }`, 'events', {
+        '/src/hydrate.ts': `import { Root } from './root';
+export const hydrate = (o: Root, g: object[]): void => { o['events'] = g; };`,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts a string-keyed reset to an empty array in another file', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }`, 'events', {
+        '/src/clear.ts': `import { Root } from './root';
+export const clear = (o: Root): void => { o['events'] = []; };`,
+      }),
+    ).toBe(true);
+  });
+
+  it('accepts a string-keyed read in another file', () => {
+    expect(
+      plain(`export class Root { private events: object[] = []; }`, 'events', {
+        '/src/peek.ts': `import { Root } from './root';
+export const peek = (o: Root): number => o['events'].length;`,
+      }),
+    ).toBe(true);
+  });
 });
 
 const arraysAndClass = (source: string) => {
   const project = inMemoryProject({ '/src/root.ts': source });
   const root = project.getSourceFileOrThrow('/src/root.ts').getClassOrThrow('Root');
-  return { root, arrays: plainEventArrays(classFamily(root, project.getSourceFiles())) };
+  const files = project.getSourceFiles();
+  return { root, arrays: plainEventArrays(classFamily(root, files), files) };
 };
 
 const firstThisAccess = (root: ClassDeclaration, methodName: string): Node =>
