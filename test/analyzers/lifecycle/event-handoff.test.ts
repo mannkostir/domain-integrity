@@ -14,6 +14,16 @@ import { AggregateRoot } from '../types/cqrs';
 import { AggregateRoot as ProjectRoot } from './aggregate-root';
 export type Status = 'open' | 'closed';
 export class Opened { constructor(readonly source: object) {} }
+type Ctor = new (...args: never[]) => object;
+export function Guarded<T extends Ctor>(Base: T): T {
+  return class extends Base {
+    constructor(...args: never[]) {
+      super(...args);
+      if ((args[0] as unknown as { status: Status }).status === 'closed') throw new Error('closed');
+    }
+  };
+}
+export class GuardedOpened extends Guarded(Opened) {}
 export class Audited {
   readonly source: object;
   readonly at: Date;
@@ -38,6 +48,12 @@ export class Ledger extends AggregateRoot {
   close(): void { if (this.props.status === 'closed') throw new Error('x'); this.props.status = 'closed'; }
   touch(n: string): void { this.props.note = n; this.apply(new Opened(this)); }
   share(n: string): void { this.props.note = n; this.apply(new Opened(this.props)); }
+}
+export class GuardedTicket extends AggregateRoot {
+  private status: Status = 'open';
+  private note = '';
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  touch(n: string): void { this.note = n; this.apply(new GuardedOpened(this)); }
 }
 export class ProjectTicket extends ProjectRoot<object> {
   private status: Status = 'open';
@@ -73,6 +89,10 @@ describe('this handed to a transparent event constructor', () => {
 
   it('is judged on an aggregate whose state lives in props', () => {
     expect(leaks(classNamed('Ledger'))).toEqual(['touch']);
+  });
+
+  it('stays unknown when the event class extends a mixin', () => {
+    expect(leaks(classNamed('GuardedTicket'))).toEqual([]);
   });
 
   it('stays unknown when the event method is not configured', () => {

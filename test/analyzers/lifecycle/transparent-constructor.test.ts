@@ -279,6 +279,63 @@ export function raise(agg: Agg) { return new Raised(agg); }
     expect(isTransparentConstruction(expression)).toBe(false);
   });
 
+  it('rejects a base produced by a mixin call', () => {
+    const expression = construction(`
+export class Agg {}
+type Ctor = new (...args: never[]) => object;
+export class Plain { constructor(readonly agg: Agg) {} }
+export function Guarded<T extends Ctor>(Base: T): T {
+  return class extends Base { constructor(...args: never[]) { super(...args); if (args.length > 1) throw new Error('x'); } };
+}
+export class Raised extends Guarded(Plain) {}
+export function raise(agg: Agg) { return new Raised(agg); }
+`);
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects a mixin base that declares a setter', () => {
+    const expression = construction(
+      `
+export class Agg { touch(): void {} }
+type Ctor = new (...args: never[]) => object;
+export class Plain { constructor(readonly agg: Agg) {} }
+export const Intercepting = <T extends Ctor>(Base: T) =>
+  class extends Base { set agg(value: Agg) { value.touch(); } };
+export class Raised extends Intercepting(Plain) {}
+export function raise(agg: Agg) { return new Raised(agg); }
+`,
+      {},
+      SET_SEMANTICS,
+    );
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects a base reached through a variable', () => {
+    const expression = construction(`
+export class Agg {}
+export class Plain { constructor(readonly agg: Agg) {} }
+const Alias = Plain;
+export class Raised extends Alias {}
+export function raise(agg: Agg) { return new Raised(agg); }
+`);
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects a base reached through a property access', () => {
+    const expression = construction(`
+export class Agg {}
+export class Plain { constructor(readonly agg: Agg) {} }
+const bases = { Plain };
+export class Raised extends bases.Plain {}
+export function raise(agg: Agg) { return new Raised(agg); }
+`);
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
   it('rejects a class reached through a variable', () => {
     const expression = construction(`
 export class Agg {}

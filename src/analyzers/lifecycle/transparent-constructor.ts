@@ -143,20 +143,23 @@ const isPlainClass = (cls: ClassDeclaration, chain: readonly ClassDeclaration[])
     .filter((ctor) => ctor.getBody() !== undefined)
     .every((ctor) => isPlainConstructor(ctor, chain));
 
+const classNamedBy = (reference: Node): ClassDeclaration | undefined => {
+  const declarations = Node.isIdentifier(reference) ? declarationsOf(reference) : [];
+  const [only] = declarations;
+  return declarations.length === 1 && Node.isClassDeclaration(only) ? only : undefined;
+};
+
 const constructionChain = (cls: ClassDeclaration): readonly ClassDeclaration[] | undefined => {
   if (isLibraryNode(cls)) return undefined;
-  if (cls.getExtends() === undefined) return [cls];
-  const base = cls.getBaseClass();
+  const heritage = cls.getExtends();
+  if (heritage === undefined) return [cls];
+  const base = classNamedBy(heritage.getExpression());
   const rest = base === undefined ? undefined : constructionChain(base);
   return rest === undefined ? undefined : [cls, ...rest];
 };
 
-const constructedClass = (expression: NewExpression): ClassDeclaration | undefined => {
-  const callee = expression.getExpression();
-  const declarations = Node.isIdentifier(callee) ? declarationsOf(callee) : [];
-  const [only] = declarations;
-  return declarations.length === 1 && Node.isClassDeclaration(only) ? only : undefined;
-};
+const constructedClass = (expression: NewExpression): ClassDeclaration | undefined =>
+  classNamedBy(expression.getExpression());
 
 export const isTransparentConstruction = (expression: NewExpression): boolean => {
   const cls = constructedClass(expression);
