@@ -157,6 +157,21 @@ describe('plain event array hardening', () => {
     expect(plain(`export class Root { private events: object[] = []; constructor(p: object) { Object[\`assign\`](this, p); } }`)).toBe(false);
   });
 
+  it('rejects Object.assign reached through an as-const key', () => {
+    expect(plain(`export class Root { private events: object[] = []; constructor(p: object) { Object['assign' as const](this, p); } }`)).toBe(false);
+  });
+
+  it('rejects Object.assign reached through a parenthesized key', () => {
+    expect(plain(`export class Root { private events: object[] = []; constructor(p: object) { Object[('assign')](this, p); } }`)).toBe(false);
+  });
+
+  it('rejects Object.assign reached through a const identifier key', () => {
+    expect(
+      plain(`const key = 'assign';
+export class Root { private events: object[] = []; constructor(p: object) { Object[key](this, p); } }`),
+    ).toBe(false);
+  });
+
   it('rejects a destructured assign onto this', () => {
     expect(plain(`const { assign } = Object;
 export class Root { private events: object[] = []; constructor(p: object) { assign(this, p); } }`)).toBe(false);

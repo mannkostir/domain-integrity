@@ -95,7 +95,17 @@ const isSafeReference = (reference: Node): boolean => {
 const literalKeyText = (key: Node | undefined): string | undefined =>
   Node.isStringLiteral(key) || Node.isNoSubstitutionTemplateLiteral(key) ? key.getLiteralText() : undefined;
 
-const isAssignKey = (key: Node | undefined): boolean => literalKeyText(key) === 'assign';
+const isLiteralTypeOf = (type: Type, name: string): boolean => type.isStringLiteral() && type.getLiteralValue() === name;
+
+const keyTypeIncludes = (key: Node, name: string): boolean => {
+  const type = key.getType();
+  return isLiteralTypeOf(type, name) || type.getUnionTypes().some((member) => isLiteralTypeOf(member, name));
+};
+
+const isKeyFor = (key: Node | undefined, name: string): boolean =>
+  key !== undefined && (literalKeyText(unwrap(key)) === name || keyTypeIncludes(key, name));
+
+const isAssignKey = (key: Node | undefined): boolean => isKeyFor(key, 'assign');
 
 const isAssignAccess = (callee: Node): boolean =>
   (Node.isIdentifier(callee) && callee.getText() === 'assign') ||
@@ -129,22 +139,11 @@ const bracketName = (property: PropertyDeclaration): string | undefined => {
   return Node.isStringLiteral(name) ? name.getLiteralText() : undefined;
 };
 
-const isLiteralTypeOf = (type: Type, name: string): boolean => type.isStringLiteral() && type.getLiteralValue() === name;
-
-const keyTypeIncludes = (key: Node, name: string): boolean => {
-  const type = key.getType();
-  return isLiteralTypeOf(type, name) || type.getUnionTypes().some((member) => isLiteralTypeOf(member, name));
-};
-
-const isKeyFor = (key: Node | undefined, name: string): boolean =>
-  key !== undefined && (literalKeyText(unwrap(key)) === name || keyTypeIncludes(key, name));
-
 const isBracketWriteOf =
   (name: string) =>
   (access: ElementAccessExpression): boolean => {
-    if (!isKeyFor(access.getArgumentExpression(), name)) return false;
     const target = outermostWrapper(access);
-    return isWritten(target) && !isResetToEmpty(target);
+    return isWritten(target) && !isResetToEmpty(target) && isKeyFor(access.getArgumentExpression(), name);
   };
 
 const isBracketWrittenIn = (property: PropertyDeclaration, files: readonly SourceFile[]): boolean => {
