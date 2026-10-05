@@ -47,6 +47,7 @@ const STATE_HOLDER = 'props';
 export type AggregateScope = {
   readonly cls: ClassDeclaration;
   readonly eventMethods: ReadonlySet<string>;
+  readonly inertMembers: ReadonlySet<string>;
   readonly leaksThis: boolean;
 };
 
@@ -122,9 +123,37 @@ const tracedMember = (cls: ClassDeclaration, access: Node, name: string): Member
   return member === undefined ? absentMember(cls, access, name) : bodyOf(member);
 };
 
+const isUninitialisedLibraryData = (member: MemberLookup): boolean =>
+  member.kind === 'data' && member.initializer === undefined && member.declarations.every(isLibraryNode);
+
+const declarationsAcrossHierarchy = (type: Type, name: string): readonly Node[] => [
+  ...(type.getProperty(name)?.getDeclarations() ?? []),
+  ...type.getBaseTypes().flatMap((base) => declarationsAcrossHierarchy(base, name)),
+];
+
+const isDeclaredOnlyInLibraries = (cls: ClassDeclaration, name: string): boolean =>
+  declarationsAcrossHierarchy(cls.getType(), name).every(isLibraryNode);
+
+const isListedLibraryMember = (scope: AggregateScope, name: string): boolean =>
+  scope.inertMembers.has(name) && isDeclaredOnlyInLibraries(scope.cls, name);
+
+const isInertEventMethod = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
+  member.kind === 'untraceable' && scope.eventMethods.has(name);
+
+const isInertUntraceable = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
+  member.kind === 'untraceable' && isListedLibraryMember(scope, name);
+
+const isInertLibraryData = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
+  isUninitialisedLibraryData(member) && isListedLibraryMember(scope, name);
+
+const isAssumedInert = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
+  isInertEventMethod(scope, name, member) ||
+  isInertUntraceable(scope, name, member) ||
+  isInertLibraryData(scope, name, member);
+
 const lookupMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
   const member = tracedMember(scope.cls, access, name);
-  return member.kind === 'untraceable' && scope.eventMethods.has(name) ? { kind: 'inert' } : member;
+  return isAssumedInert(scope, name, member) ? { kind: 'inert' } : member;
 };
 
 const exposesField = (type: Type, field: string, location: Node): boolean =>

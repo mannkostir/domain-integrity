@@ -138,6 +138,7 @@ export const readDeclaration = (file: SourceFile): DomainDeclaration => {
     aggregateBaseClasses: stringList(valueOf(config, 'aggregateBaseClasses'), DEFAULT_DECLARATION.aggregateBaseClasses),
     auditFields: stringList(valueOf(config, 'auditFields'), DEFAULT_DECLARATION.auditFields),
     eventMethods: stringList(valueOf(config, 'eventMethods'), DEFAULT_DECLARATION.eventMethods),
+    inertMembers: stringList(valueOf(config, 'inertMembers'), DEFAULT_DECLARATION.inertMembers),
     lifecycles: lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle),
   };
 };
