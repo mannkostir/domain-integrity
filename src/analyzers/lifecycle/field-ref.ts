@@ -1,5 +1,5 @@
 import { ClassDeclaration, Expression, Node, SyntaxKind, ts, Type } from 'ts-morph';
-import { isLibraryNode } from './library';
+import { isDefaultLibraryNode, isLibraryNode } from './library';
 
 const MAX_GETTER_DEPTH = 5;
 
@@ -169,9 +169,6 @@ const canCarryField = (type: Type, field: string, cls: ClassDeclaration): boolea
   type.getStringIndexType() !== undefined;
 
 const MAX_CALLABLE_DEPTH = 3;
-
-const isDefaultLibraryNode = (node: Node): boolean =>
-  node.getProject().getProgram().compilerObject.isSourceFileDefaultLibrary(node.getSourceFile().compilerNode);
 
 const hasIndexSignature = (type: Type): boolean =>
   type.isObject() &&
