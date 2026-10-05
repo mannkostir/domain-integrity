@@ -1,4 +1,4 @@
-import { NewExpression, SyntaxKind } from 'ts-morph';
+import { CompilerOptions, NewExpression, SyntaxKind } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { isTransparentConstruction } from '../../../src/analyzers/lifecycle/transparent-constructor';
 import { inMemoryProject } from '../../helpers/in-memory';
@@ -7,8 +7,14 @@ const LIBRARY = `
 export declare class LibraryEvent { constructor(source: object); }
 `;
 
-const construction = (source: string, extraFiles: Readonly<Record<string, string>> = {}): NewExpression =>
-  inMemoryProject({ '/types/library.d.ts': LIBRARY, ...extraFiles, '/src/events.ts': source })
+const SET_SEMANTICS: CompilerOptions = { useDefineForClassFields: false };
+
+const construction = (
+  source: string,
+  extraFiles: Readonly<Record<string, string>> = {},
+  compilerOptions: CompilerOptions = {},
+): NewExpression =>
+  inMemoryProject({ '/types/library.d.ts': LIBRARY, ...extraFiles, '/src/events.ts': source }, compilerOptions)
     .getSourceFileOrThrow('/src/events.ts')
     .getFunctionOrThrow('raise')
     .getFirstDescendantByKindOrThrow(SyntaxKind.NewExpression);
@@ -279,6 +285,97 @@ export class Agg {}
 export class Raised { constructor(readonly agg: Agg) {} }
 const Alias = Raised;
 export function raise(agg: Agg) { return new Alias(agg); }
+`);
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects a parameter property intercepted by a setter in a base class', () => {
+    const expression = construction(
+      `
+export class Agg { touch(): void {} }
+export class Base { set agg(value: Agg) { value.touch(); } }
+export class Raised extends Base { constructor(readonly agg: Agg) { super(); } }
+export function raise(agg: Agg) { return new Raised(agg); }
+`,
+      {},
+      SET_SEMANTICS,
+    );
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects an instance initializer intercepted by a setter in a base class', () => {
+    const expression = construction(
+      `
+export class Agg { touch(): void {} }
+export class Base {
+  constructor(readonly agg: Agg) {}
+  set count(value: number) { void value; this.agg.touch(); }
+}
+export class Raised extends Base { count = 0; }
+export function raise(agg: Agg) { return new Raised(agg); }
+`,
+      {},
+      SET_SEMANTICS,
+    );
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects a store into a field whose setter has a quoted name', () => {
+    const expression = construction(
+      `
+export class Agg { touch(): void {} }
+export class Raised {
+  agg!: Agg;
+  set 'agg'(value: Agg) { value.touch(); }
+  constructor(agg: Agg) { this.agg = agg; }
+}
+export function raise(agg: Agg) { return new Raised(agg); }
+`,
+      {},
+      SET_SEMANTICS,
+    );
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects a store into a field that has only a getter', () => {
+    const expression = construction(`
+export class Agg {}
+export class Raised {
+  get agg(): Agg { return new Agg(); }
+  constructor(agg: Agg) { this.agg = agg; }
+}
+export function raise(agg: Agg) { return new Raised(agg); }
+`);
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects a class with an accessor keyword field', () => {
+    const expression = construction(`
+export class Agg {}
+export class Raised {
+  accessor agg: Agg;
+  constructor(agg: Agg) { this.agg = agg; }
+}
+export function raise(agg: Agg) { return new Raised(agg); }
+`);
+
+    expect(isTransparentConstruction(expression)).toBe(false);
+  });
+
+  it('rejects a store into the prototype field', () => {
+    const expression = construction(`
+export class Agg {}
+export class Raised {
+  __proto__: unknown;
+  x: string;
+  constructor(agg: Agg) { this.__proto__ = agg; this.x = 'a'; }
+}
+export function raise(agg: Agg) { return new Raised(agg); }
 `);
 
     expect(isTransparentConstruction(expression)).toBe(false);

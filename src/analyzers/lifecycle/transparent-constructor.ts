@@ -4,6 +4,7 @@ import {
   NewExpression,
   Node,
   ParameterDeclaration,
+  PropertyDeclaration,
   Symbol as MorphSymbol,
   SyntaxKind,
 } from 'ts-morph';
@@ -47,21 +48,29 @@ const isParameterReference = (node: Node, parameters: ReadonlySet<MorphSymbol>):
 const isPlainValue = (node: Node, parameters: ReadonlySet<MorphSymbol>): boolean =>
   isLiteral(node) || isDefaultLibraryConstruction(node) || isParameterReference(node, parameters);
 
-const hasAccessor = (chain: readonly ClassDeclaration[], name: string): boolean =>
-  chain.some((cls) => cls.getGetAccessor(name) !== undefined || cls.getSetAccessor(name) !== undefined);
+const PROTOTYPE_FIELD = '__proto__';
 
-const declaresParameterProperty = (cls: ClassDeclaration, name: string): boolean =>
-  cls
-    .getConstructors()
-    .some((ctor) => ctor.getParameters().some((parameter) => parameter.isParameterProperty() && parameter.getName() === name));
+const unquoted = (name: string): string => name.replace(/^(['"`])(.*)\1$/, '$2');
 
-const declaresPlainProperty = (cls: ClassDeclaration, name: string): boolean => {
-  const property = cls.getProperty(name);
-  return property !== undefined && !property.isStatic() && !property.hasModifier(SyntaxKind.AccessorKeyword);
-};
+const parameterProperties = (cls: ClassDeclaration): readonly ParameterDeclaration[] =>
+  cls.getConstructors().flatMap((ctor) => ctor.getParameters().filter((parameter) => parameter.isParameterProperty()));
+
+const instanceProperties = (cls: ClassDeclaration): readonly PropertyDeclaration[] =>
+  cls.getProperties().filter((property) => !property.isStatic());
+
+const declaresAccessor = (cls: ClassDeclaration): boolean =>
+  cls.getGetAccessors().length > 0 ||
+  cls.getSetAccessors().length > 0 ||
+  cls.getProperties().some((property) => property.hasModifier(SyntaxKind.AccessorKeyword));
+
+const declaresPrototypeField = (cls: ClassDeclaration): boolean =>
+  [...instanceProperties(cls), ...parameterProperties(cls)].some((field) => unquoted(field.getName()) === PROTOTYPE_FIELD);
+
+const hasInterceptingMember = (chain: readonly ClassDeclaration[]): boolean =>
+  chain.some((cls) => declaresAccessor(cls) || declaresPrototypeField(cls));
 
 const isPlainField = (chain: readonly ClassDeclaration[], name: string): boolean =>
-  chain.some((cls) => declaresPlainProperty(cls, name) || declaresParameterProperty(cls, name)) && !hasAccessor(chain, name);
+  chain.some((cls) => cls.getProperty(name)?.isStatic() === false || parameterProperties(cls).some((parameter) => parameter.getName() === name));
 
 const storeOf = (expression: Node): Store | undefined => {
   if (!Node.isBinaryExpression(expression) || expression.getOperatorToken().getKind() !== SyntaxKind.EqualsToken) return undefined;
@@ -152,5 +161,5 @@ const constructedClass = (expression: NewExpression): ClassDeclaration | undefin
 export const isTransparentConstruction = (expression: NewExpression): boolean => {
   const cls = constructedClass(expression);
   const chain = cls === undefined ? undefined : constructionChain(cls);
-  return chain !== undefined && chain.every((member) => isPlainClass(member, chain));
+  return chain !== undefined && !hasInterceptingMember(chain) && chain.every((member) => isPlainClass(member, chain));
 };
