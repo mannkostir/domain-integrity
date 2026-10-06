@@ -84,4 +84,28 @@ describe('fixture projects', () => {
   it('enum-inline: agent context', async () => {
     expect(await output('enum-inline', ['context'])).toMatchSnapshot();
   });
+
+  it('event-flows: one finding per event-flow rule', async () => {
+    expect(await checkJson('event-flows')).toEqual({
+      code: 1,
+      findings: [
+        'error dead-handler RefundIssued RefundHandler.handle ',
+        'error handler-payload-mismatch OrderPlaced OrderPlacedHandler.handle PaymentCaptured',
+        'error saga-missing-failure-path PaymentFailed OrderSaga PaymentCaptured',
+        'error unhandled-event Shipped - ',
+      ],
+    });
+  });
+
+  it('event-flows: text report', async () => {
+    expect(await output('event-flows', ['check'])).toMatchSnapshot();
+  });
+
+  it('event-flows: sarif report', async () => {
+    expect(await output('event-flows', ['check', '--format', 'sarif'])).toMatchSnapshot();
+  });
+
+  it('event-flows: diagram', async () => {
+    expect(await output('event-flows', ['show'])).toMatchSnapshot();
+  });
 });

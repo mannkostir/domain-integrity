@@ -56,6 +56,13 @@ describe('check', () => {
       example: stderr().includes("export default defineDomain({ aggregateBaseClasses: ['MyAggregateBase'] })"),
     }).toEqual({ code: 2, searched: true, example: true });
   });
+
+  it('keeps lifecycle baseline keys unchanged', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
+
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual(['terminal-state-leak|Ticket|rename|status|CLOSED']);
+  });
 });
 
 const WARNING_ONLY_PROJECT = {
