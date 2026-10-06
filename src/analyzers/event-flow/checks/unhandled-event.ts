@@ -8,7 +8,7 @@ const mightBeHandledUnseen = (model: EventFlowModel, event: EventClassModel): bo
   event.escaped ||
   event.instanceofChecked ||
   event.namedInString ||
-  event.typedParameter ||
+  event.typedHandling ||
   event.opaque ||
   (event.extendsLibrary && model.libraryKeyed.length > 0);
 

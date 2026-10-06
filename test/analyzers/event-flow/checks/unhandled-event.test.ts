@@ -39,7 +39,7 @@ describe('unhandledEvent', () => {
       unhandledEvent(declared({ escaped: true })),
       unhandledEvent(declared({ instanceofChecked: true })),
       unhandledEvent(declared({ namedInString: true })),
-      unhandledEvent(declared({ typedParameter: true })),
+      unhandledEvent(declared({ typedHandling: true })),
     ]).toEqual([[], [], [], [], [], []]);
   });
 

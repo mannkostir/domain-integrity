@@ -17,7 +17,7 @@ export type EventClassModel = {
   readonly subclassed: boolean;
   readonly escaped: boolean;
   readonly instanceofChecked: boolean;
-  readonly typedParameter: boolean;
+  readonly typedHandling: boolean;
   readonly namedInString: boolean;
   readonly opaque: boolean;
   readonly extendsLibrary: boolean;

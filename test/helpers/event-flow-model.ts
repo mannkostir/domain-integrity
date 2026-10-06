@@ -10,7 +10,7 @@ export const eventClass = (id: string, overrides: Partial<EventClassModel> = {})
   subclassed: false,
   escaped: false,
   instanceofChecked: false,
-  typedParameter: false,
+  typedHandling: false,
   namedInString: false,
   opaque: false,
   extendsLibrary: false,

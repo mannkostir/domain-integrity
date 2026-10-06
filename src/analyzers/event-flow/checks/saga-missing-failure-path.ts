@@ -9,7 +9,7 @@ const handlingClasses = (saga: SagaModel): ReadonlySet<string> => new Set([saga.
 const isSilenced = (model: EventFlowModel, saga: SagaModel): boolean => saga.extendsForeign || model.unresolved.length > 0;
 
 const mightBeHandledUnseen = (event: EventClassModel | undefined): boolean =>
-  event === undefined || event.opaque || event.escaped || event.instanceofChecked || event.namedInString || event.typedParameter;
+  event === undefined || event.opaque || event.escaped || event.instanceofChecked || event.namedInString || event.typedHandling;
 
 const isOutcomeSilenced = (model: EventFlowModel, saga: SagaModel, [success, failure]: Outcome): boolean => {
   const owners = handlingClasses(saga);

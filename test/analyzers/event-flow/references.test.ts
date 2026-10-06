@@ -15,7 +15,7 @@ const factsOf = (sources: Readonly<Record<string, string>>, keyText?: string): R
   return referenceFacts(paid, { analysed, isTest: (file) => file.getFilePath().endsWith('.spec.ts'), keys });
 };
 
-const QUIET: ReferenceFacts = { constructions: [], subclassed: false, escaped: false, instanceofChecked: false, typedParameter: false, namedInString: false };
+const QUIET: ReferenceFacts = { constructions: [], subclassed: false, escaped: false, instanceofChecked: false, typedHandling: false, namedInString: false };
 
 describe('referenceFacts', () => {
   it('records production constructions and ignores test ones', () => {
@@ -34,7 +34,19 @@ describe('referenceFacts', () => {
   it('records a subclass, an instanceof check, a typed parameter and a string with the class name', () => {
     expect(factsOf({
       '/app/src/more.ts': "import { Paid } from './events';\nexport class Refined extends Paid {}\nexport const is = (value: unknown) => value instanceof Paid;\nexport const handle = (event: Paid | string) => event;\nexport const topic = 'Paid';",
-    })).toEqual({ ...QUIET, subclassed: true, instanceofChecked: true, typedParameter: true, namedInString: true });
+    })).toEqual({ ...QUIET, subclassed: true, instanceofChecked: true, typedHandling: true, namedInString: true });
+  });
+
+  it('records type-only handling through assertions, satisfies and type arguments', () => {
+    const typed = (code: string) =>
+      factsOf({ '/app/src/typed.ts': `import { Paid } from './events';\ndeclare const e: unknown; declare const on: <T>(topic: string, handler: (event: T) => void) => void; declare class Box<T> {}\n${code}` });
+    expect([
+      typed('export const a = e as Paid;'),
+      typed('export const b = <Paid>e;'),
+      typed('export const c = e satisfies Paid;'),
+      typed("on<Paid>('t', () => undefined);"),
+      typed('export const d = new Box<Paid>();'),
+    ]).toEqual(Array(5).fill({ ...QUIET, typedHandling: true }));
   });
 
   it('records any other value use as an escape', () => {

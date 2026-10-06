@@ -50,7 +50,7 @@ describe('extractEventFlows', () => {
         subclassed: false,
         escaped: false,
         instanceofChecked: false,
-        typedParameter: false,
+        typedHandling: false,
         namedInString: false,
         opaque: false,
         extendsLibrary: false,

@@ -12,11 +12,11 @@ export type ReferenceFacts = {
   readonly subclassed: boolean;
   readonly escaped: boolean;
   readonly instanceofChecked: boolean;
-  readonly typedParameter: boolean;
+  readonly typedHandling: boolean;
   readonly namedInString: boolean;
 };
 
-type Use = 'construction' | 'test-construction' | 'quiet' | 'extends' | 'instanceof' | 'typed-parameter' | 'escape';
+type Use = 'construction' | 'test-construction' | 'quiet' | 'extends' | 'instanceof' | 'typed-handling' | 'escape';
 
 const isKey = (reference: Node, keys: ReadonlySet<Node>): boolean => {
   const parent = reference.getParent();
@@ -35,11 +35,24 @@ const isExtendsClause = (reference: Node): boolean => {
   );
 };
 
-const inParameterType = (reference: Node): boolean => {
-  const parameter = reference.getFirstAncestorByKind(SyntaxKind.Parameter);
-  const typeNode = parameter?.getTypeNode();
-  return typeNode !== undefined && typeNode.getPos() <= reference.getPos() && reference.getEnd() <= typeNode.getEnd();
-};
+const within = (reference: Node, container: Node | undefined): boolean =>
+  container !== undefined && container.getPos() <= reference.getPos() && reference.getEnd() <= container.getEnd();
+
+const inParameterType = (reference: Node): boolean => within(reference, reference.getFirstAncestorByKind(SyntaxKind.Parameter)?.getTypeNode());
+
+const inAssertedType = (reference: Node): boolean =>
+  reference.getAncestors().some((ancestor) => {
+    const typed = Node.isAsExpression(ancestor) || Node.isTypeAssertion(ancestor) || Node.isSatisfiesExpression(ancestor);
+    return typed && within(reference, ancestor.getTypeNode());
+  });
+
+const inTypeArgument = (reference: Node): boolean =>
+  reference.getAncestors().some((ancestor) => {
+    const generic = Node.isCallExpression(ancestor) || Node.isNewExpression(ancestor);
+    return generic && ancestor.getTypeArguments().some((argument) => within(reference, argument));
+  });
+
+const inTypedHandling = (reference: Node): boolean => inParameterType(reference) || inAssertedType(reference) || inTypeArgument(reference);
 
 const inTypePosition = (reference: Node): boolean => {
   const typeNode = reference.getFirstAncestor((ancestor) => Node.isTypeNode(ancestor));
@@ -61,7 +74,7 @@ const useOf = (reference: Node, context: ReferenceContext): Use => {
     return 'instanceof';
   }
   if (isExtendsClause(reference)) return 'extends';
-  if (inParameterType(reference)) return 'typed-parameter';
+  if (inTypedHandling(reference)) return 'typed-handling';
   if (inTypePosition(reference)) return 'quiet';
   return 'escape';
 };
@@ -94,7 +107,7 @@ export const referenceFacts = (cls: ClassDeclaration, context: ReferenceContext)
     subclassed: has('extends'),
     escaped: has('escape') || constructsItself(cls),
     instanceofChecked: has('instanceof'),
-    typedParameter: has('typed-parameter'),
+    typedHandling: has('typed-handling'),
     namedInString: namedInString(cls, context.analysed),
   };
 };

@@ -62,7 +62,7 @@ describe('sagaMissingFailurePath', () => {
       withFailure({ escaped: true }),
       withFailure({ instanceofChecked: true }),
       withFailure({ namedInString: true }),
-      withFailure({ typedParameter: true }),
+      withFailure({ typedHandling: true }),
     ]).toEqual([[], [], [], []]);
   });
 
@@ -104,7 +104,7 @@ describe('sagaProblems', () => {
       sagaProblems(sagaModel([handles('Failed')])),
       sagaProblems(sagaModel([], { events: new Map([['Paid', eventClass('Paid', { opaque: true })], ['Failed', eventClass('Failed')]]) })),
       sagaProblems(sagaModel([], { unresolved: [{ owner: undefined, file: '/app/src/bus.ts', line: 3 }] })),
-      sagaProblems(sagaModel([], { events: new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed', { typedParameter: true })]]) })),
+      sagaProblems(sagaModel([], { events: new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed', { typedHandling: true })]]) })),
     ]).toEqual([[], [], [], [], []]);
   });
 });
