@@ -129,6 +129,13 @@ describe('program', () => {
     expect(await run(['--help'], io)).toBe(0);
   });
 
+  it('names the show argument after what it accepts', async () => {
+    const { io, stdout } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['show', '--help'], io);
+
+    expect(stdout()).toContain('show [options] [name]');
+  });
+
   it('exits 2 for an unknown command', async () => {
     const { io } = captureIo(writeProject(TICKET_PROJECT));
 

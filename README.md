@@ -150,8 +150,8 @@ Four more checks cover in-process event flows. All of them are errors:
 `dead-handler` and `handler-payload-mismatch` always run. `unhandled-event` runs only for the classes listed in `events.inProcess`, and `saga-missing-failure-path` only for sagas declared with `saga()`. See "The declaration".
 
 These shapes are recognised as handlers:
-- a configured decorator on a class, where the `handle` method is the handler and its first parameter is the event, or on a method;
-- `register(callback, X)` or `register(callback, X.name)`, where the callback is `this.m`, `this.m.bind(this)` or an inline function;
+- a configured decorator on a class, where the `handle` method is the handler and its first parameter is the event, or on a method. The decorator is matched by its name, written plainly or as `ns.Name`, called or not; any other decorator expression, such as `@(list[0])` or `@factory()()`, is never a handler. An object-literal argument is read as options and skipped, so `@OnEvent(X.name, { async: true })` registers `X`;
+- `register(callback, X)` or `register(callback, X.name)`, with exactly these two arguments in this order, where the callback is `this.m`, `this.m.bind(this)` or an inline arrow or function expression. A call without a callback of that shape first is not a handler registration and is ignored, such as a DI container's `container.register(Logger, { useValue: logger })`. A key that is a library class is ignored too;
 - `subscribedTo()` returning an array literal, such as `[X, Y]`;
 - a `@Saga()` property that uses `ofType(X, …)`.
 
@@ -206,7 +206,7 @@ Baseline entries for lifecycle findings are keyed by check, aggregate, method an
 
 Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
 
-Event-flow findings have the key `checkId|eventId|handler|subject`. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields.
+Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields.
 
 ## CI
 
@@ -345,10 +345,13 @@ The event-flow analyzer reports nothing for these:
 - **Events constructed only outside the analysed files, or only in test files.** Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`.
 - **Getter-declared handlers**, such as `get event()`.
 - **Events raised into an aggregate buffer that is never dispatched.**
-- **Sagas whose class extends a library class or a mixin call.** A saga is also skipped when a handler registration inside it or one of its project base classes cannot be resolved.
+- **Handlers in test files.** `dead-handler` and `handler-payload-mismatch` skip registrations in test files. They still count as handling for `unhandled-event` and `saga-missing-failure-path`.
+- **Events with an opaque hierarchy.** When an event class, or a project class above it, extends a mixin call or any other expression that is not a plain class name, `handler-payload-mismatch`, `unhandled-event` and `saga-missing-failure-path` do not judge it.
+- **Sagas whose class extends a library class or a mixin call.** Every saga is also skipped when any handler registration in the project cannot be resolved.
 
 Some code keeps a rule silent:
-- `unhandled-event` is silent for the whole project when any handler registration cannot be resolved. That covers an unrecognised `register` call, a configured decorator whose arguments are not plain class references (a string topic, for example), a `subscribedTo()` that does not return an array literal of classes, and a `@Saga()` property without a resolvable `ofType(...)`. For one event class `X` it is also silent on an `instanceof X`, a string equal to `X`'s name, a parameter typed `X`, or `X` used as a value other than `new X`, a registration key or `instanceof`.
+- `unhandled-event` is silent for the whole project when any handler registration cannot be resolved. That covers a `register` call with a recognised callback whose key is not a class, such as a string topic, a configured decorator whose arguments are not plain class references (a string topic, for example), a `subscribedTo()` that does not return an array literal of classes, and a `@Saga()` property without a resolvable `ofType(...)`. For one event class `X` it is also silent on an `instanceof X`, a string equal to `X`'s name, a parameter typed `X`, or `X` used as a value other than `new X`, a registration key or `instanceof`. It is also silent for an event whose chain of base classes ends in a library class when any handler anywhere is keyed on a library class, because a library-keyed handler may receive it.
+- `saga-missing-failure-path` is silent for an outcome when its failure event `B` is used as a value other than `new B`, a registration key or `instanceof`, appears in an `instanceof B`, a string equal to `B`'s name or a parameter typed `B`, because the saga may handle it through code it cannot follow. It is also silent when `B` extends a library class and the saga or one of its project base classes has a handler keyed on a library class.
 - `dead-handler` is silent for `X` when `X` is abstract, is subclassed, or is used as a value other than `new X`, a registration key or `instanceof`. A factory map, passing `X` to a function, and `X<T>` as a value all count.
 
 <details>

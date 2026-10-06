@@ -33,9 +33,9 @@ const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
       outcome.exitCode = checkCommand(pathsFrom(options, io), options, io);
     });
 
-  withCommonOptions(program.command('show').description('print Mermaid state and event-flow diagrams').argument('[aggregate]'))
-    .action((aggregate: string | undefined, options: CommonOptions) => {
-      outcome.exitCode = showCommand(pathsFrom(options, io), aggregate, io);
+  withCommonOptions(program.command('show').description('print Mermaid state and event-flow diagrams').argument('[name]'))
+    .action((name: string | undefined, options: CommonOptions) => {
+      outcome.exitCode = showCommand(pathsFrom(options, io), name, io);
     });
 
   withCommonOptions(program.command('context').description('print or write the domain summary for agents'))
