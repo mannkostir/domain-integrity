@@ -13,7 +13,7 @@ export const HandleEvent = (event: unknown) => (target: unknown) => target;
 const run = (handlers: string, handlerDecorators?: readonly string[]) =>
   recognise(decoratorRecogniser, {
     '/src/events.ts': EVENTS,
-    '/src/handlers.ts': `import { Paid, Failed, EventsHandler, OnEvent, HandleEvent } from './events';\nimport { LibraryEvent } from '../types/lib';\ndeclare const someKey: unknown;\n${handlers}`,
+    '/src/handlers.ts': `import { Paid, Failed, EventsHandler, OnEvent, HandleEvent } from './events';\nimport { LibraryEvent } from '../types/lib';\ndeclare const someKey: unknown; declare const deco: ((target: unknown) => unknown)[]; declare const curry: () => () => (target: unknown) => unknown; declare const ns: { EventsHandler: typeof EventsHandler };\n${handlers}`,
   }, handlerDecorators ? { handlerDecorators } : {});
 
 describe('decoratorRecogniser', () => {
@@ -51,5 +51,13 @@ describe('decoratorRecogniser', () => {
 
   it('cannot read the payload of a class without exactly one handle method', () => {
     expect(run('@EventsHandler(Paid) export class NoHandle { run(event: Paid) {} }')).toEqual(['Paid -> NoHandle.- (?)']);
+  });
+
+  it('reads no site from a decorator whose name cannot be read, without crashing', () => {
+    expect(run('@(deco[0]!) export class Indexed { handle(event: Paid) {} }\n@curry()() export class Curried { handle(event: Paid) {} }')).toEqual([]);
+  });
+
+  it('reads a decorator reached through a namespace', () => {
+    expect(run('@ns.EventsHandler(Paid) export class Namespaced { handle(event: Paid) {} }')).toEqual(['Paid -> Namespaced.handle (Paid)']);
   });
 });

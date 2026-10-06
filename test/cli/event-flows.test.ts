@@ -63,4 +63,12 @@ describe('event flows in the CLI', () => {
 
     expect({ code: await run(['check'], io), message: stderr().includes('both success and failure') }).toEqual({ code: 2, message: true });
   });
+
+  it('checks a lifecycle-only project with a decorator whose name cannot be read', async () => {
+    const { io, stdout } = captureIo(
+      writeProject({ ...TICKET_PROJECT, 'src/decorated.ts': 'declare const deco: ((target: unknown) => unknown)[];\n@(deco[0]!) export class Decorated {}\n' }),
+    );
+
+    expect({ code: await run(['check'], io), leak: stdout().includes('terminal-state-leak  Ticket.rename()') }).toEqual({ code: 1, leak: true });
+  });
 });

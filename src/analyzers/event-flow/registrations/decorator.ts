@@ -1,5 +1,6 @@
 import { ClassDeclaration, Decorator, MethodDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { readPayload } from '../payload';
+import { decoratorName } from './decorator-name';
 import { RawRegistration, RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass, resolveKeys } from './recogniser';
 
 type Target = { readonly handler: ClassDeclaration | undefined; readonly method: MethodDeclaration | undefined; readonly methodName: string | undefined };
@@ -39,7 +40,10 @@ export const decoratorRecogniser: RegistrationRecogniser = {
   sites: (file: SourceFile, context: RecogniserContext) =>
     file
       .getDescendantsOfKind(SyntaxKind.Decorator)
-      .filter((decorator) => context.events.handlerDecorators.includes(decorator.getName()))
+      .filter((decorator) => {
+        const name = decoratorName(decorator);
+        return name !== undefined && context.events.handlerDecorators.includes(name);
+      })
       .flatMap((decorator) => {
         const site = siteOf(decorator, context);
         return site === undefined ? [] : [site];

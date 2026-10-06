@@ -1,4 +1,5 @@
 import { CallExpression, Decorator, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { decoratorName } from './decorator-name';
 import { RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass, resolveKeys } from './recogniser';
 
 const ofTypeCalls = (node: Node): readonly CallExpression[] =>
@@ -32,7 +33,7 @@ export const sagaStreamRecogniser: RegistrationRecogniser = {
   sites: (file: SourceFile, context: RecogniserContext) =>
     file
       .getDescendantsOfKind(SyntaxKind.Decorator)
-      .filter((decorator) => decorator.getName() === 'Saga')
+      .filter((decorator) => decoratorName(decorator) === 'Saga')
       .flatMap((decorator) => {
         const site = siteOf(decorator, context);
         return site === undefined ? [] : [site];
