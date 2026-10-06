@@ -1,4 +1,4 @@
-import { toPosixRelative } from './path';
+import { toPosixRelative } from '../engine/path';
 import { Finding, RuleDescription } from '../analyzer';
 
 export type Report = {

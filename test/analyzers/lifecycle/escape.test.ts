@@ -45,6 +45,7 @@ const modelWith = (declared: boolean) =>
         : [],
     },
     files: project.getSourceFiles(),
+    root: '/',
   });
 
 describe('methods that let this escape without writing the state field', () => {

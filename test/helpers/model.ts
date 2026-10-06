@@ -53,7 +53,9 @@ export const declared = (terminal: string[], transitions?: Record<string, string
 });
 
 export const aggregate = (overrides: Partial<AggregateModel>): AggregateModel => ({
+  id: 'Order',
   name: 'Order',
+  qualifiedName: 'src/order.ts:Order',
   file: '/app/src/order.ts',
   line: 3,
   declared: true,
@@ -81,6 +83,7 @@ export const finding = (overrides: Partial<Finding>): Finding => ({
   checkId: 'terminal-state-leak',
   severity: 'error',
   aggregate: 'Order',
+  aggregateId: 'Order',
   method: 'annotate',
   field: 'status',
   subject: 'CANCELLED',

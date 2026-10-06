@@ -4,6 +4,7 @@ import { DomainDeclaration } from './engine/declaration';
 export type AnalysisInput = {
   readonly declaration: DomainDeclaration;
   readonly files: readonly SourceFile[];
+  readonly root: string;
 };
 
 export type Severity = 'error' | 'warning';
@@ -12,6 +13,7 @@ export type Finding = {
   readonly checkId: string;
   readonly severity: Severity;
   readonly aggregate: string;
+  readonly aggregateId: string;
   readonly method: string | undefined;
   readonly field: string;
   readonly subject: string;
@@ -22,7 +24,7 @@ export type Finding = {
 };
 
 export const findingKey = (finding: Finding): string =>
-  [finding.checkId, finding.aggregate, finding.method ?? '', finding.field, finding.subject].join('|');
+  [finding.checkId, finding.aggregateId, finding.method ?? '', finding.field, finding.subject].join('|');
 
 export type RuleDescription = { readonly id: string; readonly description: string };
 

@@ -37,4 +37,14 @@ describe('baseline', () => {
   it('rejects invalid JSON', () => {
     expect(() => readBaseline(tempFile('not json'))).toThrow(UsageError);
   });
+
+  it('keys a finding by its aggregate id', () => {
+    expect(JSON.parse(serializeBaseline([finding({ aggregateId: 'src/a/order.ts:Order' })])).findings).toEqual([
+      'terminal-state-leak|src/a/order.ts:Order|annotate|status|CANCELLED',
+    ]);
+  });
+
+  it('keys a finding of a uniquely named aggregate by its class name', () => {
+    expect(JSON.parse(serializeBaseline([finding({})])).findings).toEqual(['terminal-state-leak|Order|annotate|status|CANCELLED']);
+  });
 });

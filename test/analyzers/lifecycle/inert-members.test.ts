@@ -132,6 +132,7 @@ const leaks = (target: ClassDeclaration, inertMembers: readonly string[]) => {
       ],
     },
     files: project.getSourceFiles(),
+    root: '/',
   });
   return lifecycleAnalyzer
     .check(model)

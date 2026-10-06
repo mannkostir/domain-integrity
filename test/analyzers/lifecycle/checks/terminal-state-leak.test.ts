@@ -3,6 +3,7 @@ import { terminalStateLeak } from '../../../../src/analyzers/lifecycle/checks/te
 import { aggregate, assigned, known, method, unknownSources } from '../../../helpers/model';
 
 const ALL = known('PENDING', 'CONFIRMED', 'CANCELLED');
+const QUALIFIED = 'src/a/order.ts:Order';
 
 describe('terminalStateLeak', () => {
   it('flags a mutating method that can run in a terminal state', () => {
@@ -15,6 +16,7 @@ describe('terminalStateLeak', () => {
         checkId: 'terminal-state-leak',
         severity: 'error',
         aggregate: 'Order',
+        aggregateId: 'Order',
         method: 'annotate',
         field: 'status',
         subject: 'CANCELLED',
@@ -66,5 +68,13 @@ describe('terminalStateLeak', () => {
     const methods = [method('annotate', true, { status: { sources: unknownSources, sets: assigned() } })];
 
     expect(terminalStateLeak(aggregate({ methods }))).toEqual([]);
+  });
+
+  it('identifies findings by the aggregate id', () => {
+    expect(
+      terminalStateLeak(
+        aggregate({ id: QUALIFIED, methods: [method('annotate', true, { status: { sources: ALL, sets: assigned() } })] }),
+      ).map((finding) => finding.aggregateId),
+    ).toEqual([QUALIFIED]);
   });
 });

@@ -4,6 +4,7 @@ import { aggregate, assigned, declared, known, mayWriteValue, method, unknownSou
 
 const withTransitions = (transitions: Record<string, string[]>) =>
   new Map([['status', declared(['CANCELLED'], transitions)]]);
+const QUALIFIED = 'src/a/order.ts:Order';
 
 describe('transitionDrift', () => {
   it('flags sources the declaration does not allow as an error', () => {
@@ -86,5 +87,17 @@ describe('transitionDrift', () => {
     const methods = [method('cancel', true, { status: { sources: unknownSources, sets: assigned('CANCELLED') } })];
 
     expect(transitionDrift(aggregate({ methods, declarations: withTransitions({ cancel: ['PENDING'] }) }))).toEqual([]);
+  });
+
+  it('identifies findings by the aggregate id', () => {
+    expect(
+      transitionDrift(
+        aggregate({
+          id: QUALIFIED,
+          methods: [method('cancel', true, { status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') } })],
+          declarations: withTransitions({ cancel: ['PENDING'] }),
+        }),
+      ).map((finding) => finding.aggregateId),
+    ).toEqual([QUALIFIED]);
   });
 });

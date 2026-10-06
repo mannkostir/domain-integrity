@@ -27,6 +27,7 @@ describe('lifecycleAnalyzer', () => {
         lifecycles: [{ target: ticket, fields: [{ name: 'status', terminal: ['CLOSED'], transitions: undefined }], allowAfterTerminal: [] }],
       },
       files: project.getSourceFiles(),
+      root: '/',
     });
 
     expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
@@ -52,6 +53,7 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
         lifecycles: [{ target: order, fields: [{ name: 'status', terminal: ['PAID'], transitions: undefined }], allowAfterTerminal: [] }],
       },
       files: orderProject.getSourceFiles(),
+      root: '/',
     });
 
     expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak pay']);
@@ -80,6 +82,7 @@ export class Meter {
         ],
       },
       files: meterProject.getSourceFiles(),
+      root: '/',
     });
 
     expect(result.findings.filter((finding) => finding.checkId === 'transition-drift')).toEqual([]);
@@ -103,6 +106,7 @@ export class Account {
         lifecycles: [{ target: account, fields: [{ name: 'label', terminal: ['set'], transitions: undefined }], allowAfterTerminal: [] }],
       },
       files: accountProject.getSourceFiles(),
+      root: '/',
     });
 
     expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
