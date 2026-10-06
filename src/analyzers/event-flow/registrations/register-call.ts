@@ -1,4 +1,4 @@
-import { CallExpression, MethodDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { CallExpression, ClassDeclaration, MethodDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { resolveKey } from '../keys';
 import { RawPayload, readPayload } from '../payload';
 import { RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass } from './recogniser';
@@ -34,6 +34,18 @@ const callbackOf = (expression: Node, call: CallExpression, context: RecogniserC
   return { method: name, payload: readPayload(method?.getParameters()[0], context.isProject) };
 };
 
+const isConstructionOf = (node: Node, cls: ClassDeclaration): boolean => {
+  if (!Node.isNewExpression(node)) return false;
+  const target = node.getExpression();
+  return Node.isIdentifier(target) && target.getDefinitionNodes().includes(cls);
+};
+
+const constructs = (body: Node, cls: ClassDeclaration): boolean =>
+  isConstructionOf(body, cls) || body.getDescendantsOfKind(SyntaxKind.NewExpression).some((construction) => isConstructionOf(construction, cls));
+
+const isFactoryOf = (expression: Node, cls: ClassDeclaration): boolean =>
+  (Node.isArrowFunction(expression) || Node.isFunctionExpression(expression)) && constructs(expression.getBody(), cls);
+
 const siteOf = (call: CallExpression, context: RecogniserContext): RecognisedSite | undefined => {
   const [first, key] = call.getArguments();
   if (call.getArguments().length !== 2 || first === undefined || key === undefined) return undefined;
@@ -42,6 +54,7 @@ const siteOf = (call: CallExpression, context: RecogniserContext): RecognisedSit
   const resolution = resolveKey(key, context.isProject);
   if (resolution.kind === 'foreign') return { kind: 'resolved', node: call, registrations: [], libraryKeyed: true };
   if (resolution.kind === 'unresolved') return { kind: 'unresolved', node: call };
+  if (isFactoryOf(first, resolution.cls)) return undefined;
   return {
     kind: 'resolved',
     node: call,

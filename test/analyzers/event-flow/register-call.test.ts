@@ -53,6 +53,16 @@ describe('registerCallRecogniser', () => {
     ).toEqual([]);
   });
 
+  it('reads no site from a factory callback that constructs the keyed class', () => {
+    expect(
+      run('container.register((config: AppConfig) => new Db(config), Db);\ncontainer.register(function () { return new Db(); }, Db);'),
+    ).toEqual([]);
+  });
+
+  it('still reads a handler arrow that constructs something else', () => {
+    expect(run('DomainEvents.register((event: Paid) => new Logger(), Paid);')).toEqual(['Paid -> -.- (Paid)']);
+  });
+
   it('registers nothing for a library event key but notes it', () => {
     expect(run('DomainEvents.register((event: LibraryEvent) => undefined, LibraryEvent.name);')).toEqual(['library']);
   });
