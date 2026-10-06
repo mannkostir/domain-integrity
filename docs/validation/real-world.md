@@ -177,7 +177,7 @@ These were not fixed, because each needs a design change rather than a correctio
 
 ## Resolved during validation
 
-- **`allowAfterTerminal` was per aggregate, not per field.** kyhsa93 `close()` should be allowed after `lockedAt` but not after `deletedAt`, and the only options were to exempt it for both fields or for neither. A state field now takes its own `allowAfterTerminal`, which combines with the aggregate-level list, so `close` can be exempted for `lockedAt` alone.
+- **`allowAfterTerminal` was per aggregate, not per field.** kyhsa93 `close()` should be allowed after `lockedAt` but not after `deletedAt`, and the only options were to exempt it for both fields or for neither. A state field now takes its own `allowAfterTerminal`, which combines with the aggregate-level list, so `close` can be exempted for `lockedAt` alone. Fixed in bac609f.
 - **Private event appliers were judged as entry points.** This caused the 27 false positives in daruma-backend. The leak and drift checks now judge only public methods. Fixed in 56c5953.
 - **`init` collapsed classes with the same name.** When two suggested aggregate classes in different files shared a name, `init` imported only one of them. It now imports the later one under a distinct local name, for example `Order as Order2`, and does the same for same-named state enums. Fixed in 5692004.
 - **Misleading `init` message.** When no discovered aggregate had a candidate field, `init` printed "All discovered aggregates are already declared." and wrote no config. It now says that no state fields were found. Fixed in 96ff2b7.
