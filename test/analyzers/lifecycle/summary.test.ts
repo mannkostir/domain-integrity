@@ -60,11 +60,11 @@ describe('lifecycleSummary', () => {
 
   it('lists methods allowed after terminal for one field', () => {
     const model = aggregate({ declarations: new Map([['status', declared(['CANCELLED'], undefined, ['close', 'audit'])]]) });
-    expect(summaryOf(model)).toContain('  - terminal: cancelled\n  - may run after terminal: close, audit\n');
+    expect(summaryOf(model)).toContain('  - terminal: cancelled\n  - may run after a terminal state: close, audit\n');
   });
 
   it('omits the field line when the field list is empty', () => {
-    expect(summaryOf(aggregate({}))).not.toContain('may run after terminal');
+    expect(summaryOf(aggregate({}))).not.toContain('may run after a terminal state');
   });
 
   it('lists methods allowed after a terminal state', () => {
