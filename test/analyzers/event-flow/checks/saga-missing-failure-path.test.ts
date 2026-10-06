@@ -50,6 +50,22 @@ describe('sagaMissingFailurePath', () => {
     ]).toEqual([[], []]);
   });
 
+  it('stays silent with an unresolved site anywhere in the project', () => {
+    expect(sagaMissingFailurePath(sagaModel([handles('Paid')], { unresolved: [{ owner: undefined, file: '/app/src/bus.ts', line: 3 }] }))).toEqual([]);
+  });
+
+  it('stays silent when the failure could be handled through a shape it cannot see', () => {
+    const withFailure = (overrides: Parameters<typeof eventClass>[1]) =>
+      sagaMissingFailurePath(sagaModel([handles('Paid')], { events: new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed', overrides)]]) }));
+
+    expect([
+      withFailure({ escaped: true }),
+      withFailure({ instanceofChecked: true }),
+      withFailure({ namedInString: true }),
+      withFailure({ typedParameter: true }),
+    ]).toEqual([[], [], [], []]);
+  });
+
   it('stays silent for an outcome whose success or failure hierarchy is opaque', () => {
     expect([
       sagaMissingFailurePath(sagaModel([handles('Paid')], { events: new Map([['Paid', eventClass('Paid', { opaque: true })], ['Failed', eventClass('Failed')]]) })),
@@ -87,6 +103,8 @@ describe('sagaProblems', () => {
       sagaProblems(sagaModel([], { sagas: [{ ...SAGA, extendsForeign: true }] })),
       sagaProblems(sagaModel([handles('Failed')])),
       sagaProblems(sagaModel([], { events: new Map([['Paid', eventClass('Paid', { opaque: true })], ['Failed', eventClass('Failed')]]) })),
-    ]).toEqual([[], [], []]);
+      sagaProblems(sagaModel([], { unresolved: [{ owner: undefined, file: '/app/src/bus.ts', line: 3 }] })),
+      sagaProblems(sagaModel([], { events: new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed', { typedParameter: true })]]) })),
+    ]).toEqual([[], [], [], [], []]);
   });
 });

@@ -1,21 +1,21 @@
 import { EventFlowFinding } from '../../../analyzer';
-import { EventFlowModel, SagaModel } from '../model';
+import { EventClassModel, EventFlowModel, SagaModel } from '../model';
 import { acceptedIds, nameOf, refOf } from './handler-label';
 
 type Outcome = readonly [string, string];
 
 const handlingClasses = (saga: SagaModel): ReadonlySet<string> => new Set([saga.id, ...saga.ancestors]);
 
-const isSilenced = (model: EventFlowModel, saga: SagaModel): boolean => {
-  const owners = handlingClasses(saga);
-  return saga.extendsForeign || model.unresolved.some((site) => site.owner !== undefined && owners.has(site.owner));
-};
+const isSilenced = (model: EventFlowModel, saga: SagaModel): boolean => saga.extendsForeign || model.unresolved.length > 0;
+
+const mightBeHandledUnseen = (event: EventClassModel | undefined): boolean =>
+  event === undefined || event.opaque || event.escaped || event.instanceofChecked || event.namedInString || event.typedParameter;
 
 const isOutcomeSilenced = (model: EventFlowModel, saga: SagaModel, [success, failure]: Outcome): boolean => {
   const owners = handlingClasses(saga);
   const failureEvent = model.events.get(failure);
   const libraryKeyedHere = model.libraryKeyed.some((owner) => owner !== undefined && owners.has(owner));
-  return model.events.get(success)?.opaque === true || failureEvent?.opaque === true || (failureEvent?.extendsLibrary === true && libraryKeyedHere);
+  return model.events.get(success)?.opaque !== false || mightBeHandledUnseen(failureEvent) || (failureEvent?.extendsLibrary === true && libraryKeyedHere);
 };
 
 const handles = (model: EventFlowModel, saga: SagaModel, eventId: string): boolean => {
