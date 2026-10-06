@@ -108,7 +108,7 @@ describe('configured event methods without a body in the project', () => {
     expect(leaks(classNamed('/src/project-order.ts', 'ProjectOrder'))).toEqual([]);
   });
 
-  it('are traced as reading the field when a project mixin declares them', () => {
+  it('do not report callers when a project mixin declares them', () => {
     expect(leaks(classNamed('/src/mixin-todo.ts', 'MixinTodo'))).toEqual([]);
   });
 });
