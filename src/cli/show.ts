@@ -4,7 +4,7 @@ import { Io, Paths } from './io';
 import { openSession } from './session';
 
 const ambiguityError = ({ reference, candidates }: AmbiguousReference): UsageError =>
-  new UsageError(`Aggregate name "${reference}" is ambiguous. Use one of: ${candidates.join(', ')}`);
+  new UsageError(`Name "${reference}" is ambiguous. Use one of: ${candidates.join(', ')}`);
 
 const diagramText = (outcomes: readonly DiagramOutcome[]): string =>
   outcomes
@@ -22,7 +22,9 @@ export const showCommand = (paths: Paths, aggregate: string | undefined, io: Io)
   const output = diagramText(outcomes);
   if (output.length === 0) {
     throw new UsageError(
-      aggregate ? `No declared aggregate named "${aggregate}".` : 'No declared aggregates to show. Run "domain-integrity init" first.',
+      aggregate
+        ? `No declared aggregate or event named "${aggregate}".`
+        : 'No declared aggregates or event flows to show. Run "domain-integrity init" first.',
     );
   }
   io.out(`${output}\n`);

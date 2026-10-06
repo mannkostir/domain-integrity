@@ -28,6 +28,18 @@ export default defineDomain({ lifecycles: [lifecycle(Ticket, { states: { status:
 
 export const TICKET_PROJECT = { ...TICKET_SOURCES, 'domain.config.ts': TICKET_CONFIG };
 
+export const EVENT_FLOW_SOURCES = {
+  'src/decorators.ts': 'export const EventsHandler = (...events: unknown[]) => (target: unknown) => target;\nexport const Saga = () => (target: unknown, key: string) => undefined;\nexport const ofType = (...types: unknown[]) => types;\nexport type Stream = { pipe: (...operators: unknown[]) => unknown };\n',
+  'src/events.ts': 'export class Paid {}\nexport class Refunded {}\n',
+  'src/pay.ts': "import { Paid } from './events';\nexport const pay = () => new Paid();\n",
+  'src/handlers.ts': "import { EventsHandler } from './decorators';\nimport { Paid, Refunded } from './events';\n@EventsHandler(Paid) export class PaidHandler { handle(event: Paid) { return event; } }\n@EventsHandler(Refunded) export class RefundHandler { handle(event: Refunded) { return event; } }\n",
+};
+
+export const EVENT_FLOW_PROJECT = {
+  ...EVENT_FLOW_SOURCES,
+  'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n",
+};
+
 export const writeProject = (files: Readonly<Record<string, string>>): string => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-cli-')));
   const tsconfig = {
