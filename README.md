@@ -301,7 +301,7 @@ export default defineDomain({
 
 An outcome that lists one class as both success and failure exits `2`. So does a declared class outside the analysed files, or a saga that handles neither side of an outcome; the last two are reported as `problem:` lines.
 
-Each lifecycle takes these options:
+Lifecycle declarations and the other top-level options:
 
 | Option | Meaning |
 |---|---|
