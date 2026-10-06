@@ -1,4 +1,4 @@
-import { ClassDeclaration, Project } from 'ts-morph';
+import { CompilerOptions, Project } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
@@ -16,43 +16,24 @@ export class Noted { constructor(readonly note: string) {} }
 export class Peeking { readonly label: string; constructor(source: { label(): string }) { this.label = source.label(); } }
 `;
 
-const FILES = {
-  '/src/registry.ts': REGISTRY,
-  '/src/root.ts': `
+const DEFINE: CompilerOptions = { useDefineForClassFields: true };
+const ASSIGN: CompilerOptions = { useDefineForClassFields: false };
+
+const projectWith = (rootSource: string, paymentSource: string, options: CompilerOptions): Project =>
+  inMemoryProject({ '/src/registry.ts': REGISTRY, '/src/root.ts': rootSource, '/src/payment.ts': paymentSource }, options);
+
+const REGISTERING_ROOT = `
 import { Registry } from './registry';
-const sealed = <T>(target: T): T => target;
 export abstract class Root {
   readonly id: string = 'id';
   private events: object[] = [];
   protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); this.log(event); }
   private log(event: object): void { void Reflect.getPrototypeOf(this); void Reflect.getPrototypeOf(event); }
 }
-export abstract class ReassigningRoot {
-  readonly id: string = 'id';
-  private events: object[] = [];
-  constructor() { this.addDomainEvent = (event: object): void => { void event; }; }
-  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
-}
-export abstract class AssigningRoot {
-  readonly id: string = 'id';
-  private events: object[] = [];
-  constructor(props: object) { Object.assign(this, props); }
-  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
-}
-@sealed
-export abstract class DecoratedRoot {
-  readonly id: string = 'id';
-  private events: object[] = [];
-  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
-}
-export abstract class AccessorRoot {
-  readonly id: string = 'id';
-  private events: object[] = [];
-  protected get addDomainEvent(): (event: object) => void { return (event) => { this.events.push(event); Registry.mark(this); }; }
-}
-`,
-  '/src/payment.ts': `
-import { AccessorRoot, AssigningRoot, DecoratedRoot, ReassigningRoot, Root } from './root';
+`;
+
+const JUDGED_PAYMENT = `
+import { Root } from './root';
 import { Noted, Paid, Peeking } from './registry';
 export type Status = 'open' | 'closed';
 export class Payment extends Root {
@@ -66,74 +47,118 @@ export class Payment extends Root {
   refund(n: string): void { if (this.status === 'closed') throw new Error('x'); this.note = n; this.addDomainEvent(new Paid(this)); }
   peek(n: string): void { this.note = n; this.addDomainEvent(new Peeking(this)); }
 }
-export class OverriddenPayment extends Root {
-  private status: Status = 'open';
-  private note = '';
-  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
-}
-export class LoudPayment extends OverriddenPayment {
-  protected addDomainEvent = (event: object): void => { void event; };
-}
-export class ReassignedPayment extends ReassigningRoot {
-  private status: Status = 'open';
-  private note = '';
-  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
-}
-export class AssignedPayment extends AssigningRoot {
-  private status: Status = 'open';
-  private note = '';
-  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
-}
-export class DecoratedPayment extends DecoratedRoot {
-  private status: Status = 'open';
-  private note = '';
-  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
-}
-export class AccessorPayment extends AccessorRoot {
-  private status: Status = 'open';
-  private note = '';
-  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
-}
-`,
-};
+`;
 
-const BRACKET_FILES = {
-  '/src/registry.ts': REGISTRY,
-  '/src/root.ts': `
+const PLAIN_ROOT = `
 import { Registry } from './registry';
-export abstract class BracketRoot {
+export abstract class Root {
+  readonly id: string = 'id';
+  private events: object[] = [];
+  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
+}
+`;
+
+const REASSIGNING_ROOT = `
+import { Registry } from './registry';
+export abstract class Root {
+  readonly id: string = 'id';
+  private events: object[] = [];
+  constructor() { this.addDomainEvent = (event: object): void => { void event; }; }
+  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
+}
+`;
+
+const BRACKET_ROOT = `
+import { Registry } from './registry';
+export abstract class Root {
   readonly id: string = 'id';
   private events: object[] = [];
   constructor() { this['addDomainEvent'] = (event: object): void => { void event; }; }
   protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
 }
-`,
-  '/src/payment.ts': `
-import { BracketRoot } from './root';
+`;
+
+const ASSIGNING_ROOT = `
+import { Registry } from './registry';
+export abstract class Root {
+  readonly id: string = 'id';
+  private events: object[] = [];
+  constructor(props: object) { Object.assign(this, props); }
+  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
+}
+`;
+
+const DECORATED_ROOT = `
+import { Registry } from './registry';
+const sealed = <T>(target: T): T => target;
+@sealed
+export abstract class Root {
+  readonly id: string = 'id';
+  private events: object[] = [];
+  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
+}
+`;
+
+const ACCESSOR_ROOT = `
+import { Registry } from './registry';
+export abstract class Root {
+  readonly id: string = 'id';
+  private events: object[] = [];
+  protected get addDomainEvent(): (event: object) => void { return (event) => { this.events.push(event); Registry.mark(this); }; }
+}
+`;
+
+const PAYMENT = `
+import { Root } from './root';
 import { Paid } from './registry';
 export type Status = 'open' | 'closed';
-export class BracketPayment extends BracketRoot {
-  private status: Status = 'open';
+export class Payment extends Root {
+  protected status: Status = 'open';
   private note = '';
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
   pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
 }
-`,
+`;
+
+const FIELD_SUBCLASS = `
+export class LoudPayment extends Payment {
+  protected addDomainEvent = (event: object): void => { void event; };
+}
+`;
+
+const CLASS_EXPRESSION_SUBCLASS = `
+export const Sub = class extends Payment {
+  protected addDomainEvent = (event: object): void => { if (this.status === 'closed') throw new Error('x'); void event; };
 };
+`;
 
-const defineProject = inMemoryProject(FILES, { useDefineForClassFields: true });
-const assignProject = inMemoryProject(FILES, { useDefineForClassFields: false });
-const bracketProject = inMemoryProject(BRACKET_FILES, { useDefineForClassFields: true });
+const MIXIN = `
+export function Loud<T extends new (...args: any[]) => object>(Base: T) {
+  return class extends Base { addDomainEvent = (event: object): void => { void event; }; };
+}
+export const LoudPayment = Loud(Payment);
+`;
 
-const paymentClass = (project: Project, name: string): ClassDeclaration =>
-  project.getSourceFileOrThrow('/src/payment.ts').getClassOrThrow(name);
+const PROTOTYPE_WRITE = `
+Payment.prototype.addDomainEvent = (event: object): void => { void event; };
+`;
 
-const leaks = (project: Project, target: ClassDeclaration, inertEventMethods: readonly string[]) => {
+const judgedDefine = projectWith(REGISTERING_ROOT, JUDGED_PAYMENT, DEFINE);
+const judgedAssign = projectWith(REGISTERING_ROOT, JUDGED_PAYMENT, ASSIGN);
+const plain = projectWith(PLAIN_ROOT, PAYMENT, DEFINE);
+const fieldSubclassDefine = projectWith(PLAIN_ROOT, PAYMENT + FIELD_SUBCLASS, DEFINE);
+const fieldSubclassAssign = projectWith(PLAIN_ROOT, PAYMENT + FIELD_SUBCLASS, ASSIGN);
+const reassigned = projectWith(REASSIGNING_ROOT, PAYMENT, DEFINE);
+const bracket = projectWith(BRACKET_ROOT, PAYMENT, DEFINE);
+const assigning = projectWith(ASSIGNING_ROOT, PAYMENT, DEFINE);
+const decorated = projectWith(DECORATED_ROOT, PAYMENT, DEFINE);
+const classExpression = projectWith(PLAIN_ROOT, PAYMENT + CLASS_EXPRESSION_SUBCLASS, DEFINE);
+const mixin = projectWith(PLAIN_ROOT, PAYMENT + MIXIN, DEFINE);
+const prototypeWrite = projectWith(PLAIN_ROOT, PAYMENT + PROTOTYPE_WRITE, DEFINE);
+const accessor = projectWith(ACCESSOR_ROOT, PAYMENT, DEFINE);
+
+const leaks = (project: Project, inertEventMethods: readonly string[]) => {
+  const target = project.getSourceFileOrThrow('/src/payment.ts').getClassOrThrow('Payment');
   const model = lifecycleAnalyzer.extract({
     declaration: {
       ...DEFAULT_DECLARATION,
@@ -152,44 +177,60 @@ const leaks = (project: Project, target: ClassDeclaration, inertEventMethods: re
 
 describe('event methods asserted inert', () => {
   it('leaves callers of a registering event method unjudged when it is not listed', () => {
-    expect(leaks(defineProject, paymentClass(defineProject, 'Payment'), [])).toEqual([]);
+    expect(leaks(judgedDefine, [])).toEqual([]);
   });
 
   it('judges callers through this and super when the event method is listed', () => {
-    expect(leaks(defineProject, paymentClass(defineProject, 'Payment'), ['addDomainEvent'])).toEqual(['pay', 'record', 'settle']);
+    expect(leaks(judgedDefine, ['addDomainEvent'])).toEqual(['pay', 'record', 'settle']);
   });
 
   it('judges callers the same way when class fields use assignment semantics', () => {
-    expect(leaks(assignProject, paymentClass(assignProject, 'Payment'), ['addDomainEvent'])).toEqual(['pay', 'record', 'settle']);
+    expect(leaks(judgedAssign, ['addDomainEvent'])).toEqual(['pay', 'record', 'settle']);
+  });
+
+  it('judges the caller of a plain listed event method that nothing overrides', () => {
+    expect(leaks(plain, ['addDomainEvent'])).toEqual(['pay']);
   });
 });
 
 describe('event methods that cannot be asserted inert', () => {
   it('ignores the entry when a project subclass redeclares the name as a field', () => {
-    expect(leaks(defineProject, paymentClass(defineProject, 'OverriddenPayment'), ['addDomainEvent'])).toEqual([]);
+    expect(leaks(fieldSubclassDefine, ['addDomainEvent'])).toEqual([]);
   });
 
   it('ignores the entry for a subclass field under assignment semantics', () => {
-    expect(leaks(assignProject, paymentClass(assignProject, 'OverriddenPayment'), ['addDomainEvent'])).toEqual([]);
+    expect(leaks(fieldSubclassAssign, ['addDomainEvent'])).toEqual([]);
   });
 
   it('ignores the entry when the method is reassigned on this', () => {
-    expect(leaks(defineProject, paymentClass(defineProject, 'ReassignedPayment'), ['addDomainEvent'])).toEqual([]);
+    expect(leaks(reassigned, ['addDomainEvent'])).toEqual([]);
   });
 
   it('ignores the entry when the method is reassigned through a bracket key', () => {
-    expect(leaks(bracketProject, paymentClass(bracketProject, 'BracketPayment'), ['addDomainEvent'])).toEqual([]);
+    expect(leaks(bracket, ['addDomainEvent'])).toEqual([]);
   });
 
   it('ignores the entry when the family assigns onto this', () => {
-    expect(leaks(defineProject, paymentClass(defineProject, 'AssignedPayment'), ['addDomainEvent'])).toEqual([]);
+    expect(leaks(assigning, ['addDomainEvent'])).toEqual([]);
   });
 
   it('ignores the entry when a class in the family is decorated', () => {
-    expect(leaks(defineProject, paymentClass(defineProject, 'DecoratedPayment'), ['addDomainEvent'])).toEqual([]);
+    expect(leaks(decorated, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a class expression subclass redeclares the name as a field', () => {
+    expect(leaks(classExpression, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a mixin applied to the aggregate declares the name as a field', () => {
+    expect(leaks(mixin, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when the method is replaced on the prototype', () => {
+    expect(leaks(prototypeWrite, ['addDomainEvent'])).toEqual([]);
   });
 
   it('ignores the entry when the name is an accessor', () => {
-    expect(leaks(defineProject, paymentClass(defineProject, 'AccessorPayment'), ['addDomainEvent'])).toEqual([]);
+    expect(leaks(accessor, ['addDomainEvent'])).toEqual([]);
   });
 });

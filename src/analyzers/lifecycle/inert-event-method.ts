@@ -1,22 +1,36 @@
-import { ClassDeclaration, MethodDeclaration, Node, SourceFile } from 'ts-morph';
+import { ClassDeclaration, Node, PropertyAccessExpression, SourceFile, SyntaxKind } from 'ts-morph';
 import { outermostWrapper } from './wrappers';
-import { accessOf, bracketWritesOf, isDecorated, isWritten, writesUnknownMembers } from './writes';
+import { bracketWritesOf, isDecorated, isWritten, writesUnknownMembers } from './writes';
 
-const familyMembersNamed = (family: readonly ClassDeclaration[], name: string): readonly Node[] =>
-  family.flatMap((cls) => cls.getInstanceMembers().filter((member) => member.getName() === name));
+const classLikes = (file: SourceFile): readonly Node[] => [
+  ...file.getDescendantsOfKind(SyntaxKind.ClassDeclaration),
+  ...file.getDescendantsOfKind(SyntaxKind.ClassExpression),
+];
 
-const isWrittenReference = (reference: Node): boolean => {
-  const access = accessOf(reference);
-  return access !== undefined && isWritten(outermostWrapper(access));
-};
+const instanceMembersOf = (classLike: Node): readonly Node[] =>
+  Node.isClassDeclaration(classLike) || Node.isClassExpression(classLike) ? classLike.getInstanceMembers() : [];
 
-const isNeverRewritten = (method: MethodDeclaration): boolean => !method.findReferencesAsNodes().some(isWrittenReference);
+const isNamed = (member: Node, name: string): boolean =>
+  member.getSymbol()?.getName() === name || (Node.hasName(member) && member.getName() === name);
 
-const isAssertable = (name: string, family: readonly ClassDeclaration[], files: readonly SourceFile[]): boolean => {
-  const members = familyMembersNamed(family, name);
-  const methods = members.filter(Node.isMethodDeclaration);
-  return methods.length === members.length && methods.every(isNeverRewritten) && bracketWritesOf(name, files).length === 0;
-};
+const isNonMethodMemberNamed =
+  (name: string) =>
+  (member: Node): boolean =>
+    !Node.isMethodDeclaration(member) && isNamed(member, name);
+
+const declaresNonMethodMember = (name: string, files: readonly SourceFile[]): boolean =>
+  files.some((file) => classLikes(file).some((classLike) => instanceMembersOf(classLike).some(isNonMethodMemberNamed(name))));
+
+const isWrittenAccessNamed =
+  (name: string) =>
+  (access: PropertyAccessExpression): boolean =>
+    access.getName() === name && isWritten(outermostWrapper(access));
+
+const isWrittenByName = (name: string, files: readonly SourceFile[]): boolean =>
+  files.some((file) => file.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression).some(isWrittenAccessNamed(name)));
+
+const isAssertable = (name: string, files: readonly SourceFile[]): boolean =>
+  !declaresNonMethodMember(name, files) && !isWrittenByName(name, files) && bracketWritesOf(name, files).length === 0;
 
 const installsUnknownMembers = (family: readonly ClassDeclaration[]): boolean =>
   family.some(isDecorated) || family.some(writesUnknownMembers);
@@ -26,7 +40,9 @@ export const assertedInertEventMethods = (
   family: readonly ClassDeclaration[],
   files: readonly SourceFile[],
 ): ReadonlySet<string> =>
-  installsUnknownMembers(family) ? new Set() : new Set(names.filter((name) => isAssertable(name, family, files)));
+  names.length === 0 || installsUnknownMembers(family)
+    ? new Set()
+    : new Set(names.filter((name) => isAssertable(name, files)));
 
 export const isDeclaredOnlyAsMethods = (declarations: readonly Node[]): boolean =>
   declarations.length > 0 &&
