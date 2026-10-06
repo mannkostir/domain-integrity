@@ -1,17 +1,41 @@
-import { ClassDeclaration, Node, PropertyAccessExpression, SourceFile, SyntaxKind } from 'ts-morph';
+import {
+  ClassDeclaration,
+  ClassExpression,
+  Node,
+  PropertyAccessExpression,
+  SourceFile,
+  SyntaxKind,
+  Type,
+} from 'ts-morph';
 import { outermostWrapper } from './wrappers';
-import { bracketWritesOf, isDecorated, isWritten, writesUnknownMembers } from './writes';
+import { bracketWritesOf, isDecorated, isKeyFor, isWritten, writesUnknownMembers } from './writes';
 
-const classLikes = (file: SourceFile): readonly Node[] => [
+const classLikes = (file: SourceFile): readonly (ClassDeclaration | ClassExpression)[] => [
   ...file.getDescendantsOfKind(SyntaxKind.ClassDeclaration),
   ...file.getDescendantsOfKind(SyntaxKind.ClassExpression),
 ];
 
-const instanceMembersOf = (classLike: Node): readonly Node[] =>
-  Node.isClassDeclaration(classLike) || Node.isClassExpression(classLike) ? classLike.getInstanceMembers() : [];
+const isOpenKeyType = (type: Type): boolean =>
+  (type.isString() && !type.isStringLiteral()) ||
+  type.isTemplateLiteral() ||
+  type.isAny() ||
+  type.isUnknown() ||
+  type.getUnionTypes().some(isOpenKeyType);
+
+const computedKeyOf = (member: Node): Node | undefined => {
+  const nameNode = Node.isPropertyNamed(member) ? member.getNameNode() : undefined;
+  return Node.isComputedPropertyName(nameNode) ? nameNode.getExpression() : undefined;
+};
+
+const hasComputedKeyFor = (member: Node, name: string): boolean => {
+  const key = computedKeyOf(member);
+  return key !== undefined && (isKeyFor(key, name) || isOpenKeyType(key.getType()));
+};
 
 const isNamed = (member: Node, name: string): boolean =>
-  member.getSymbol()?.getName() === name || (Node.hasName(member) && member.getName() === name);
+  member.getSymbol()?.getName() === name ||
+  (Node.hasName(member) && member.getName() === name) ||
+  hasComputedKeyFor(member, name);
 
 const isNonMethodMemberNamed =
   (name: string) =>
@@ -19,7 +43,7 @@ const isNonMethodMemberNamed =
     !Node.isMethodDeclaration(member) && isNamed(member, name);
 
 const declaresNonMethodMember = (name: string, files: readonly SourceFile[]): boolean =>
-  files.some((file) => classLikes(file).some((classLike) => instanceMembersOf(classLike).some(isNonMethodMemberNamed(name))));
+  files.some((file) => classLikes(file).some((classLike) => classLike.getInstanceMembers().some(isNonMethodMemberNamed(name))));
 
 const isWrittenAccessNamed =
   (name: string) =>

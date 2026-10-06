@@ -132,6 +132,20 @@ export const Sub = class extends Payment {
 };
 `;
 
+const COMPUTED_KEY_SUBCLASS = `
+const K = 'addDomainEvent';
+export class LoudPayment extends Payment {
+  [K] = (event: object): void => { if (this.status === 'closed') throw new Error('x'); void event; };
+}
+`;
+
+const OPEN_KEY_SUBCLASS = `
+declare const key: string;
+export class LoudPayment extends Payment {
+  [key] = (event: object): void => { if (this.status === 'closed') throw new Error('x'); void event; };
+}
+`;
+
 const MIXIN = `
 export function Loud<T extends new (...args: any[]) => object>(Base: T) {
   return class extends Base { addDomainEvent = (event: object): void => { void event; }; };
@@ -156,6 +170,8 @@ const classExpression = projectWith(PLAIN_ROOT, PAYMENT + CLASS_EXPRESSION_SUBCL
 const mixin = projectWith(PLAIN_ROOT, PAYMENT + MIXIN, DEFINE);
 const prototypeWrite = projectWith(PLAIN_ROOT, PAYMENT + PROTOTYPE_WRITE, DEFINE);
 const accessor = projectWith(ACCESSOR_ROOT, PAYMENT, DEFINE);
+const computedKey = projectWith(PLAIN_ROOT, PAYMENT + COMPUTED_KEY_SUBCLASS, DEFINE);
+const openKey = projectWith(PLAIN_ROOT, PAYMENT + OPEN_KEY_SUBCLASS, DEFINE);
 
 const leaks = (project: Project, inertEventMethods: readonly string[]) => {
   const target = project.getSourceFileOrThrow('/src/payment.ts').getClassOrThrow('Payment');
@@ -232,5 +248,13 @@ describe('event methods that cannot be asserted inert', () => {
 
   it('ignores the entry when the name is an accessor', () => {
     expect(leaks(accessor, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a subclass field has a computed key naming it', () => {
+    expect(leaks(computedKey, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a subclass field has a computed string key', () => {
+    expect(leaks(openKey, ['addDomainEvent'])).toEqual([]);
   });
 });
