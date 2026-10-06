@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatText } from '../../src/report/text';
-import { finding } from '../helpers/model';
+import { finding, flowFinding } from '../helpers/model';
 
 describe('formatText', () => {
   it('lists fresh findings, then known ones, then a summary', () => {
@@ -42,5 +42,17 @@ describe('formatText', () => {
     });
 
     expect(text.startsWith('error terminal-state-leak  src/order.ts:Order.annotate()  src/order.ts:10')).toBe(true);
+  });
+
+  it('locates an event-flow finding by event and handler', () => {
+    const text = formatText({ fresh: [flowFinding({})], known: [], problems: [], rules: [], root: '/app' });
+
+    expect(text.split('\n')[0]).toBe('error dead-handler  RefundIssued → RefundHandler.handle  src/handlers.ts:4');
+  });
+
+  it('locates an event-flow finding without a handler by its event alone', () => {
+    const text = formatText({ fresh: [flowFinding({ checkId: 'unhandled-event', handler: undefined })], known: [], problems: [], rules: [], root: '/app' });
+
+    expect(text.split('\n')[0]).toBe('error unhandled-event  RefundIssued  src/handlers.ts:4');
   });
 });

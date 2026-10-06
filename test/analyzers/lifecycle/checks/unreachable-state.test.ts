@@ -9,6 +9,7 @@ describe('unreachableState', () => {
   it('flags a value that nothing assigns', () => {
     expect(unreachableState(aggregate({ methods: [CANCEL] }))).toEqual([
       {
+        analyzer: 'lifecycle',
         checkId: 'unreachable-state',
         severity: 'error',
         aggregate: 'Order',

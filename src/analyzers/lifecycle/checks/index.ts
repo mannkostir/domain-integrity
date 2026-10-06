@@ -1,4 +1,4 @@
-import { Finding, RuleDescription } from '../../../analyzer';
+import { LifecycleFinding, RuleDescription } from '../../../analyzer';
 import { LifecycleModel } from '../model';
 import { outsideMutation } from './outside-mutation';
 import { terminalStateLeak } from './terminal-state-leak';
@@ -14,8 +14,8 @@ export const LIFECYCLE_RULES: readonly RuleDescription[] = [
 
 const CHECKS = [terminalStateLeak, unreachableState, outsideMutation, transitionDrift];
 
-const byLocation = (a: Finding, b: Finding): number =>
+const byLocation = (a: LifecycleFinding, b: LifecycleFinding): number =>
   a.file.localeCompare(b.file) || a.line - b.line || a.checkId.localeCompare(b.checkId);
 
-export const runChecks = (model: LifecycleModel): Finding[] =>
+export const runChecks = (model: LifecycleModel): LifecycleFinding[] =>
   model.aggregates.flatMap((aggregate) => CHECKS.flatMap((check) => check(aggregate))).sort(byLocation);

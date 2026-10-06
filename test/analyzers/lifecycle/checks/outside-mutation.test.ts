@@ -9,6 +9,7 @@ describe('outsideMutation', () => {
   it('flags an assignment to a declared state field outside the aggregate', () => {
     expect(outsideMutation(aggregate({ outside: [ASSIGNMENT] }))).toEqual([
       {
+        analyzer: 'lifecycle',
         checkId: 'outside-mutation',
         severity: 'error',
         aggregate: 'Order',

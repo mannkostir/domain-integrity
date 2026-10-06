@@ -9,13 +9,9 @@ export type AnalysisInput = {
 
 export type Severity = 'error' | 'warning';
 
-export type Finding = {
+type FindingCore = {
   readonly checkId: string;
   readonly severity: Severity;
-  readonly aggregate: string;
-  readonly aggregateId: string;
-  readonly method: string | undefined;
-  readonly field: string;
   readonly subject: string;
   readonly file: string;
   readonly line: number;
@@ -23,8 +19,27 @@ export type Finding = {
   readonly fix: string;
 };
 
+export type LifecycleFinding = FindingCore & {
+  readonly analyzer: 'lifecycle';
+  readonly aggregate: string;
+  readonly aggregateId: string;
+  readonly method: string | undefined;
+  readonly field: string;
+};
+
+export type EventFlowFinding = FindingCore & {
+  readonly analyzer: 'event-flow';
+  readonly event: string;
+  readonly eventId: string;
+  readonly handler: string | undefined;
+};
+
+export type Finding = LifecycleFinding | EventFlowFinding;
+
 export const findingKey = (finding: Finding): string =>
-  [finding.checkId, finding.aggregateId, finding.method ?? '', finding.field, finding.subject].join('|');
+  finding.analyzer === 'lifecycle'
+    ? [finding.checkId, finding.aggregateId, finding.method ?? '', finding.field, finding.subject].join('|')
+    : [finding.checkId, finding.eventId, finding.handler ?? '', finding.subject].join('|');
 
 export type AmbiguousReference = { readonly kind: 'ambiguous'; readonly reference: string; readonly candidates: readonly string[] };
 
@@ -32,13 +47,13 @@ export type DiagramOutcome = { readonly kind: 'diagram'; readonly text: string }
 
 export type RuleDescription = { readonly id: string; readonly description: string };
 
-export type Analyzer<Model, Suggestion> = {
+export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
   readonly id: string;
   readonly rules: readonly RuleDescription[];
   readonly extract: (input: AnalysisInput) => Model;
   readonly problems: (model: Model) => readonly string[];
   readonly suggest: (model: Model) => readonly Suggestion[];
-  readonly check: (model: Model) => readonly Finding[];
+  readonly check: (model: Model) => readonly Produced[];
   readonly diagram: (model: Model, only: string | undefined) => DiagramOutcome;
   readonly summarize: (model: Model, root: string) => string;
   readonly isEmpty: (model: Model) => boolean;

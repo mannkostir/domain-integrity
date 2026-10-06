@@ -12,6 +12,7 @@ describe('transitionDrift', () => {
 
     expect(transitionDrift(aggregate({ methods, declarations: withTransitions({ cancel: ['PENDING'] }) }))).toEqual([
       expect.objectContaining({
+        analyzer: 'lifecycle',
         checkId: 'transition-drift',
         severity: 'error',
         method: 'cancel',

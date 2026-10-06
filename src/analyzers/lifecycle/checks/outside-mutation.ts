@@ -1,11 +1,12 @@
-import { Finding } from '../../../analyzer';
+import { LifecycleFinding } from '../../../analyzer';
 import { AggregateModel } from '../model';
 
-export const outsideMutation = (aggregate: AggregateModel): Finding[] =>
+export const outsideMutation = (aggregate: AggregateModel): LifecycleFinding[] =>
   aggregate.outside
     .filter((assignment) => aggregate.declarations.has(assignment.field))
     .filter((assignment) => !assignment.throughOwnSetter)
     .map((assignment) => ({
+      analyzer: 'lifecycle',
       checkId: 'outside-mutation',
       severity: 'error',
       aggregate: aggregate.name,

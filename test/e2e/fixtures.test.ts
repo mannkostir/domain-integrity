@@ -6,15 +6,18 @@ import { captureIo } from '../helpers/disk';
 
 const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
+const describeFinding = (finding: Finding): string =>
+  finding.analyzer === 'lifecycle'
+    ? `${finding.severity} ${finding.checkId} ${finding.aggregate}.${finding.method ?? '-'} ${finding.field} ${finding.subject}`
+    : `${finding.severity} ${finding.checkId} ${finding.event} ${finding.handler ?? '-'} ${finding.subject}`;
+
 const checkJson = async (name: string) => {
   const { io, stdout } = captureIo(fixture(name));
   const code = await run(['check', '--format', 'json'], io);
   const findings = (JSON.parse(stdout()) as { findings: Finding[] }).findings;
   return {
     code,
-    findings: findings
-      .map((finding) => `${finding.severity} ${finding.checkId} ${finding.aggregate}.${finding.method ?? '-'} ${finding.field} ${finding.subject}`)
-      .sort(),
+    findings: findings.map(describeFinding).sort(),
   };
 };
 

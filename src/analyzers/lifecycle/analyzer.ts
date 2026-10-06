@@ -1,4 +1,4 @@
-import { Analyzer } from '../../analyzer';
+import { Analyzer, LifecycleFinding } from '../../analyzer';
 import { LIFECYCLE_RULES, runChecks } from './checks';
 import { lifecycleDiagrams } from './diagram';
 import { extractLifecycles } from './extract';
@@ -6,7 +6,7 @@ import { LifecycleModel } from './model';
 import { LifecycleSuggestion, suggestLifecycles } from './suggest';
 import { lifecycleSummary } from './summary';
 
-export const lifecycleAnalyzer: Analyzer<LifecycleModel, LifecycleSuggestion> = {
+export const lifecycleAnalyzer: Analyzer<LifecycleModel, LifecycleSuggestion, LifecycleFinding> = {
   id: 'lifecycle',
   rules: LIFECYCLE_RULES,
   extract: extractLifecycles,

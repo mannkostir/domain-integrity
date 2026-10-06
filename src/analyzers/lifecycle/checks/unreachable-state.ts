@@ -1,4 +1,4 @@
-import { Finding } from '../../../analyzer';
+import { LifecycleFinding } from '../../../analyzer';
 import { AggregateModel, AssignedValues, StateField } from '../model';
 import { hasUnknownWrite } from '../values';
 import { fieldOf } from './format';
@@ -10,7 +10,7 @@ const assignmentsOf = (aggregate: AggregateModel, field: StateField): AssignedVa
     ...aggregate.outside.filter((assignment) => assignment.field === field.name).map((assignment) => assignment.value),
   ].filter((value): value is AssignedValues => value !== undefined);
 
-const unreachableValues = (aggregate: AggregateModel, field: StateField): Finding[] => {
+const unreachableValues = (aggregate: AggregateModel, field: StateField): LifecycleFinding[] => {
   const assignments = assignmentsOf(aggregate, field);
   if (assignments.some(hasUnknownWrite)) return [];
   const reached = new Set([
@@ -20,6 +20,7 @@ const unreachableValues = (aggregate: AggregateModel, field: StateField): Findin
   return field.values
     .filter((value) => !reached.has(value.token))
     .map((value) => ({
+      analyzer: 'lifecycle',
       checkId: 'unreachable-state',
       severity: 'error',
       aggregate: aggregate.name,
@@ -34,7 +35,7 @@ const unreachableValues = (aggregate: AggregateModel, field: StateField): Findin
     }));
 };
 
-export const unreachableState = (aggregate: AggregateModel): Finding[] =>
+export const unreachableState = (aggregate: AggregateModel): LifecycleFinding[] =>
   [...aggregate.declarations.keys()]
     .map((name) => fieldOf(aggregate, name))
     .filter((field) => field.kind === 'enum' || field.kind === 'union')
