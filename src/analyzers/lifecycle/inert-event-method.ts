@@ -1,6 +1,7 @@
 import {
   ClassDeclaration,
   ClassExpression,
+  ExpressionWithTypeArguments,
   Node,
   PropertyAccessExpression,
   SourceFile,
@@ -71,19 +72,15 @@ const classExpressionsIn = (files: readonly SourceFile[]): readonly ClassExpress
 const installsUnknownMembers = (classes: readonly (ClassDeclaration | ClassExpression)[]): boolean =>
   classes.some(isDecorated) || classes.some(writesUnknownMembers);
 
-export const assertedInertEventMethods = (
-  names: readonly string[],
-  family: readonly ClassDeclaration[],
-  files: readonly SourceFile[],
-): ReadonlySet<string> =>
-  names.length === 0 || installsUnknownMembers([...family, ...classExpressionsIn(files)])
-    ? new Set()
-    : new Set(names.filter((name) => isAssertable(name, files)));
-
-const hasUnresolvedExtends = (declaration: Node): boolean => {
+const extendsClausesOf = (declaration: Node): readonly ExpressionWithTypeArguments[] => {
+  if (Node.isInterfaceDeclaration(declaration)) return declaration.getExtends();
   const heritage = Node.isClassDeclaration(declaration) || Node.isClassExpression(declaration) ? declaration.getExtends() : undefined;
-  return heritage !== undefined && heritage.getExpression().getType().isAny();
+  return heritage === undefined ? [] : [heritage];
 };
+
+const isUnresolvedClause = (clause: ExpressionWithTypeArguments): boolean => clause.getExpression().getType().isAny();
+
+const hasUnresolvedExtends = (declaration: Node): boolean => extendsClausesOf(declaration).some(isUnresolvedClause);
 
 const declaresUnresolvedExtends = (type: Type): boolean =>
   (type.getSymbol()?.getDeclarations() ?? []).some(hasUnresolvedExtends);
@@ -101,7 +98,17 @@ const hasUnresolvedHeritage = (type: Type, seen: ReadonlySet<ts.Type>): boolean 
   );
 };
 
-export const hasResolvedBases = (cls: ClassDeclaration): boolean => !hasUnresolvedHeritage(cls.getType(), new Set());
+const hasResolvedBases = (cls: ClassDeclaration): boolean => !hasUnresolvedHeritage(cls.getType(), new Set());
+
+export const assertedInertEventMethods = (
+  names: readonly string[],
+  cls: ClassDeclaration,
+  family: readonly ClassDeclaration[],
+  files: readonly SourceFile[],
+): ReadonlySet<string> =>
+  names.length === 0 || !hasResolvedBases(cls) || installsUnknownMembers([...family, ...classExpressionsIn(files)])
+    ? new Set()
+    : new Set(names.filter((name) => isAssertable(name, files)));
 
 export const isDeclaredOnlyAsMethods = (declarations: readonly Node[]): boolean =>
   declarations.length > 0 &&

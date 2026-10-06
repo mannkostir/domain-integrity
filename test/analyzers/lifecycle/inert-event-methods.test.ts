@@ -130,6 +130,17 @@ const Plain = <T extends abstract new (...args: any[]) => object>(B: T) => { abs
 export abstract class Root extends Plain(Base) {}
 `;
 
+const MERGED_UNRESOLVED_INTERFACE_ROOT = `
+import { Lib } from 'missing-lib';
+import { Registry } from './registry';
+export interface Root extends Lib {}
+export abstract class Root {
+  readonly id: string = 'id';
+  private events: object[] = [];
+  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
+}
+`;
+
 const PAYMENT = `
 import { Root } from './root';
 import { Paid } from './registry';
@@ -246,6 +257,7 @@ const narrowGenericKey = projectWith(PLAIN_ROOT, PAYMENT + NARROW_GENERIC_KEY_MI
 const brandedKey = projectWith(PLAIN_ROOT, PAYMENT + BRANDED_KEY_SUBCLASS, DEFINE);
 const otherKeys = projectWith(PLAIN_ROOT, PAYMENT + OTHER_KEYS_SUBCLASS, DEFINE);
 const unresolvedUnderMixin = projectWith(UNRESOLVED_UNDER_MIXIN_ROOT, PAYMENT, DEFINE);
+const mergedUnresolvedInterface = projectWith(MERGED_UNRESOLVED_INTERFACE_ROOT, PAYMENT, DEFINE);
 
 const leaks = (project: Project, inertEventMethods: readonly string[]) => {
   const target = project.getSourceFileOrThrow('/src/payment.ts').getClassOrThrow('Payment');
@@ -362,5 +374,9 @@ describe('event methods that cannot be asserted inert', () => {
 
   it('ignores the entry when a base above a mixin call cannot be resolved', () => {
     expect(leaks(unresolvedUnderMixin, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when an interface merged into a base class extends an unresolved base', () => {
+    expect(leaks(mergedUnresolvedInterface, ['addDomainEvent'])).toEqual([]);
   });
 });
