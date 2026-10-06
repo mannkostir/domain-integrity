@@ -156,6 +156,35 @@ export class LoudPayment extends Payment {
 }
 `;
 
+const GENERIC_KEY_MIXIN = `
+export function Loud<K extends string>(key: K) {
+  return class extends Payment { [key] = (event: object): void => { if (this.status === 'closed') throw new Error('x'); void event; }; };
+}
+`;
+
+const NARROW_GENERIC_KEY_MIXIN = `
+export function Loud<K extends 'addDomainEvent'>(key: K) {
+  return class extends Payment { get [key](): (event: object) => void { if (this.status === 'closed') throw new Error('x'); return () => undefined; } };
+}
+`;
+
+const BRANDED_KEY_SUBCLASS = `
+declare const key: string & { readonly brand: 1 };
+export class LoudPayment extends Payment {
+  get [key](): (event: object) => void { if (this.status === 'closed') throw new Error('x'); return () => undefined; }
+}
+`;
+
+const OTHER_KEYS_SUBCLASS = `
+const OTHER = 'other';
+const TAG = Symbol('tag');
+export class TaggedPayment extends Payment {
+  [OTHER] = 1;
+  [2] = 2;
+  [TAG] = 3;
+}
+`;
+
 const ASSIGNING_CLASS_EXPRESSION = `
 export const Guarded = class extends Payment {
   constructor() {
@@ -200,6 +229,10 @@ const openKey = projectWith(PLAIN_ROOT, PAYMENT + OPEN_KEY_SUBCLASS, DEFINE);
 const assigningClassExpression = projectWith(PLAIN_ROOT, PAYMENT + ASSIGNING_CLASS_EXPRESSION, DEFINE);
 const decoratedClassExpression = projectWith(PLAIN_ROOT, PAYMENT + DECORATED_CLASS_EXPRESSION, DEFINE);
 const unresolvedBase = projectWith(UNRESOLVED_ROOT, PAYMENT, DEFINE);
+const genericKey = projectWith(PLAIN_ROOT, PAYMENT + GENERIC_KEY_MIXIN, DEFINE);
+const narrowGenericKey = projectWith(PLAIN_ROOT, PAYMENT + NARROW_GENERIC_KEY_MIXIN, DEFINE);
+const brandedKey = projectWith(PLAIN_ROOT, PAYMENT + BRANDED_KEY_SUBCLASS, DEFINE);
+const otherKeys = projectWith(PLAIN_ROOT, PAYMENT + OTHER_KEYS_SUBCLASS, DEFINE);
 
 const leaks = (project: Project, inertEventMethods: readonly string[]) => {
   const target = project.getSourceFileOrThrow('/src/payment.ts').getClassOrThrow('Payment');
@@ -234,6 +267,10 @@ describe('event methods asserted inert', () => {
 
   it('judges the caller of a plain listed event method that nothing overrides', () => {
     expect(leaks(plain, ['addDomainEvent'])).toEqual(['pay']);
+  });
+
+  it('judges the caller when computed keys are a different literal, a number or a symbol', () => {
+    expect(leaks(otherKeys, ['addDomainEvent'])).toEqual(['pay']);
   });
 });
 
@@ -296,5 +333,17 @@ describe('event methods that cannot be asserted inert', () => {
 
   it('ignores the entry when a base class of the aggregate cannot be resolved', () => {
     expect(leaks(unresolvedBase, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a subclass field has a generic string key', () => {
+    expect(leaks(genericKey, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a getter has a generic key constrained to the name', () => {
+    expect(leaks(narrowGenericKey, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a getter has a branded string key', () => {
+    expect(leaks(brandedKey, ['addDomainEvent'])).toEqual([]);
   });
 });

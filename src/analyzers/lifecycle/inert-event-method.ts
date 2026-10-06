@@ -5,22 +5,31 @@ import {
   PropertyAccessExpression,
   SourceFile,
   SyntaxKind,
+  ts,
   Type,
 } from 'ts-morph';
 import { outermostWrapper } from './wrappers';
-import { bracketWritesOf, isDecorated, isKeyFor, isWritten, writesUnknownMembers } from './writes';
+import { bracketWritesOf, isDecorated, isWritten, writesUnknownMembers } from './writes';
 
 const classLikes = (file: SourceFile): readonly (ClassDeclaration | ClassExpression)[] => [
   ...file.getDescendantsOfKind(SyntaxKind.ClassDeclaration),
   ...file.getDescendantsOfKind(SyntaxKind.ClassExpression),
 ];
 
-const isOpenKeyType = (type: Type): boolean =>
-  (type.isString() && !type.isStringLiteral()) ||
-  type.isTemplateLiteral() ||
-  type.isAny() ||
-  type.isUnknown() ||
-  type.getUnionTypes().some(isOpenKeyType);
+const NON_STRING_KEY_FLAGS = ts.TypeFlags.NumberLike | ts.TypeFlags.ESSymbolLike;
+
+const isOtherLiteral = (type: Type, name: string): boolean => type.isStringLiteral() && type.getLiteralValue() !== name;
+
+const isNonStringKey = (type: Type): boolean => (type.getFlags() & NON_STRING_KEY_FLAGS) !== 0;
+
+const isProvablyOtherKeyType = (type: Type, name: string): boolean => {
+  if (type.isUnion()) return type.getUnionTypes().every((member) => isProvablyOtherKeyType(member, name));
+  if (type.isTypeParameter()) {
+    const constraint = type.getConstraint();
+    return constraint !== undefined && isProvablyOtherKeyType(constraint, name);
+  }
+  return isOtherLiteral(type, name) || isNonStringKey(type);
+};
 
 const computedKeyOf = (member: Node): Node | undefined => {
   const nameNode = Node.isPropertyNamed(member) ? member.getNameNode() : undefined;
@@ -29,7 +38,7 @@ const computedKeyOf = (member: Node): Node | undefined => {
 
 const hasComputedKeyFor = (member: Node, name: string): boolean => {
   const key = computedKeyOf(member);
-  return key !== undefined && (isKeyFor(key, name) || isOpenKeyType(key.getType()));
+  return key !== undefined && !isProvablyOtherKeyType(key.getType(), name);
 };
 
 const isNamed = (member: Node, name: string): boolean =>
