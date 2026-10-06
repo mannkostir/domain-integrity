@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fieldDiagram, lifecycleDiagrams } from '../../../src/analyzers/lifecycle/diagram';
+import { AggregateModel } from '../../../src/analyzers/lifecycle/model';
 import { aggregate, assigned, declared, DECLARED_ORDER, known, method, stateField, STATUS, unknownSources } from '../../helpers/model';
 
 describe('fieldDiagram', () => {
@@ -58,19 +59,62 @@ describe('fieldDiagram edge cases', () => {
   });
 });
 
+const TICKET_A = aggregate({ id: 'src/a/ticket.ts:Ticket', name: 'Ticket', qualifiedName: 'src/a/ticket.ts:Ticket' });
+
+const TICKET_B = aggregate({ id: 'src/b/ticket.ts:Ticket', name: 'Ticket', qualifiedName: 'src/b/ticket.ts:Ticket' });
+
+const diagramOf = (model: AggregateModel): string =>
+  `## ${model.id}.status\n\n\`\`\`mermaid\n${fieldDiagram(model, STATUS)}\n\`\`\``;
+
 describe('lifecycleDiagrams', () => {
   it('wraps each declared field in a titled mermaid block', () => {
-    expect(lifecycleDiagrams({ aggregates: [DECLARED_ORDER], problems: [] }, undefined)).toBe(
-      `## Order.status\n\n\`\`\`mermaid\n${fieldDiagram(DECLARED_ORDER, STATUS)}\n\`\`\``,
-    );
+    expect(lifecycleDiagrams({ aggregates: [DECLARED_ORDER], problems: [] }, undefined)).toEqual({
+      kind: 'diagram',
+      text: `## Order.status\n\n\`\`\`mermaid\n${fieldDiagram(DECLARED_ORDER, STATUS)}\n\`\`\``,
+    });
   });
 
-  it('returns an empty string when the named aggregate is not declared', () => {
-    expect(lifecycleDiagrams({ aggregates: [DECLARED_ORDER], problems: [] }, 'Payment')).toBe('');
+  it('returns an empty diagram when the named aggregate is not declared', () => {
+    expect(lifecycleDiagrams({ aggregates: [DECLARED_ORDER], problems: [] }, 'Payment')).toEqual({ kind: 'diagram', text: '' });
   });
 
   it('skips a field that has no declaration', () => {
     const model = aggregate({ declarations: new Map() });
-    expect(lifecycleDiagrams({ aggregates: [model], problems: [] }, undefined)).toBe('');
+    expect(lifecycleDiagrams({ aggregates: [model], problems: [] }, undefined)).toEqual({ kind: 'diagram', text: '' });
+  });
+
+  it('selects a uniquely named aggregate by its plain name', () => {
+    expect(lifecycleDiagrams({ aggregates: [DECLARED_ORDER, TICKET_A], problems: [] }, 'Order')).toEqual({
+      kind: 'diagram',
+      text: diagramOf(DECLARED_ORDER),
+    });
+  });
+
+  it('selects a uniquely named aggregate by its qualified name', () => {
+    expect(lifecycleDiagrams({ aggregates: [DECLARED_ORDER, TICKET_A], problems: [] }, 'src/order.ts:Order')).toEqual({
+      kind: 'diagram',
+      text: diagramOf(DECLARED_ORDER),
+    });
+  });
+
+  it('selects one of two same-named aggregates by its qualified name', () => {
+    expect(lifecycleDiagrams({ aggregates: [TICKET_A, TICKET_B], problems: [] }, 'src/b/ticket.ts:Ticket')).toEqual({
+      kind: 'diagram',
+      text: diagramOf(TICKET_B),
+    });
+  });
+
+  it('reports a plain name shared by two declared aggregates as ambiguous', () => {
+    expect(lifecycleDiagrams({ aggregates: [TICKET_A, TICKET_B], problems: [] }, 'Ticket')).toEqual({
+      kind: 'ambiguous',
+      candidates: ['src/a/ticket.ts:Ticket', 'src/b/ticket.ts:Ticket'],
+    });
+  });
+
+  it('titles each section with the aggregate id', () => {
+    expect(lifecycleDiagrams({ aggregates: [TICKET_A], problems: [] }, undefined)).toEqual({
+      kind: 'diagram',
+      text: `## src/a/ticket.ts:Ticket.status\n\n\`\`\`mermaid\n${fieldDiagram(TICKET_A, STATUS)}\n\`\`\``,
+    });
   });
 });

@@ -142,6 +142,89 @@ describe('show', () => {
 
     expect(await run(['show', 'Payment'], io)).toBe(2);
   });
+
+  it('prints the diagram of an aggregate named by its path', async () => {
+    const { io } = captureIo(writeProject(TICKET_PROJECT));
+
+    expect(await run(['show', 'src/ticket.ts:Ticket'], io)).toBe(0);
+  });
+});
+
+const sameNamedTicket = (closed: string): string => `
+import { AggregateRoot } from '../aggregate-root';
+export enum TicketStatus { open = 'OPEN', closed = '${closed}' }
+export class Ticket extends AggregateRoot<{ status: TicketStatus; title: string }> {
+  static open(title: string): Ticket { return new Ticket({ status: TicketStatus.open, title }); }
+  rename(title: string): void { this.props.title = title; }
+  close(): void { if (this.props.status === TicketStatus.closed) return; this.props.status = TicketStatus.closed; }
+}
+`;
+
+const SAME_NAMED_PROJECT = {
+  'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'],
+  'src/a/ticket.ts': sameNamedTicket('CLOSED_A'),
+  'src/b/ticket.ts': sameNamedTicket('CLOSED_B'),
+  'domain.config.ts': `
+import { defineDomain, lifecycle } from 'domain-integrity';
+import { Ticket as TicketA, TicketStatus as TicketStatusA } from './src/a/ticket';
+import { Ticket as TicketB, TicketStatus as TicketStatusB } from './src/b/ticket';
+export default defineDomain({
+  lifecycles: [
+    lifecycle(TicketA, { states: { status: { terminal: [TicketStatusA.closed] } } }),
+    lifecycle(TicketB, { states: { status: { terminal: [TicketStatusB.closed] } } }),
+  ],
+});
+`,
+};
+
+describe('same-named aggregates', () => {
+  it('exits 2 and lists the qualified names for an ambiguous show', async () => {
+    const { io, stderr } = captureIo(writeProject(SAME_NAMED_PROJECT));
+
+    expect({
+      code: await run(['show', 'Ticket'], io),
+      a: stderr().includes('src/a/ticket.ts:Ticket'),
+      b: stderr().includes('src/b/ticket.ts:Ticket'),
+    }).toEqual({ code: 2, a: true, b: true });
+  });
+
+  it('shows only the aggregate named by its path', async () => {
+    const { io, stdout } = captureIo(writeProject(SAME_NAMED_PROJECT));
+
+    expect({ code: await run(['show', 'src/a/ticket.ts:Ticket'], io), output: stdout().match(/^## .*$/gm) }).toEqual({
+      code: 0,
+      output: ['## src/a/ticket.ts:Ticket.status'],
+    });
+  });
+
+  it('writes path-qualified baseline keys', async () => {
+    const dir = writeProject(SAME_NAMED_PROJECT);
+    await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
+
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual([
+      'terminal-state-leak|src/a/ticket.ts:Ticket|rename|status|CLOSED_A',
+      'terminal-state-leak|src/b/ticket.ts:Ticket|rename|status|CLOSED_B',
+    ]);
+  });
+
+  it('reports the plain name and the qualified id in JSON', async () => {
+    const { io, stdout } = captureIo(writeProject(SAME_NAMED_PROJECT));
+    await run(['check', '--format', 'json'], io);
+
+    expect(
+      JSON.parse(stdout()).findings.map((finding: { aggregate: string; aggregateId: string }) => [finding.aggregate, finding.aggregateId]),
+    ).toEqual([
+      ['Ticket', 'src/a/ticket.ts:Ticket'],
+      ['Ticket', 'src/b/ticket.ts:Ticket'],
+    ]);
+  });
+
+  it('keeps plain baseline keys for a uniquely named aggregate', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
+
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual(['terminal-state-leak|Ticket|rename|status|CLOSED']);
+  });
 });
 
 describe('context', () => {

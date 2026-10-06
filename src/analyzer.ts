@@ -26,6 +26,10 @@ export type Finding = {
 export const findingKey = (finding: Finding): string =>
   [finding.checkId, finding.aggregateId, finding.method ?? '', finding.field, finding.subject].join('|');
 
+export type DiagramOutcome =
+  | { readonly kind: 'diagram'; readonly text: string }
+  | { readonly kind: 'ambiguous'; readonly candidates: readonly string[] };
+
 export type RuleDescription = { readonly id: string; readonly description: string };
 
 export type Analyzer<Model, Suggestion> = {
@@ -35,7 +39,7 @@ export type Analyzer<Model, Suggestion> = {
   readonly problems: (model: Model) => readonly string[];
   readonly suggest: (model: Model) => readonly Suggestion[];
   readonly check: (model: Model) => readonly Finding[];
-  readonly diagram: (model: Model, only: string | undefined) => string;
+  readonly diagram: (model: Model, only: string | undefined) => DiagramOutcome;
   readonly summarize: (model: Model, root: string) => string;
   readonly isEmpty: (model: Model) => boolean;
 };
@@ -44,7 +48,7 @@ export type AnalysisResult = {
   readonly rules: readonly RuleDescription[];
   readonly problems: readonly string[];
   readonly findings: readonly Finding[];
-  readonly diagram: (only: string | undefined) => string;
+  readonly diagram: (only: string | undefined) => DiagramOutcome;
   readonly summary: (root: string) => string;
   readonly isEmpty: boolean;
 };
