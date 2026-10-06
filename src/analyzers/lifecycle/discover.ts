@@ -1,8 +1,9 @@
 import { ClassDeclaration, ExpressionWithTypeArguments, InterfaceDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { className } from '../../engine/class-identity';
 
 type BaseNames = ReadonlySet<string>;
 
-export const aggregateName = (cls: ClassDeclaration): string => cls.getName() ?? '<anonymous>';
+export const aggregateName = className;
 
 const lastNameSegment = (clause: ExpressionWithTypeArguments): string =>
   clause.getExpression().getText().split('.').pop() ?? '';

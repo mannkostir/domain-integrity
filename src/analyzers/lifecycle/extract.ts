@@ -1,7 +1,7 @@
 import { ClassDeclaration, MethodDeclaration, Node, Scope, SourceFile } from 'ts-morph';
 import { AnalysisInput } from '../../analyzer';
 import { DeclaredField, DeclaredLifecycle, DomainDeclaration } from '../../engine/declaration';
-import { toPosixRelative } from '../../engine/path';
+import { ClassIdentity, classIdentities } from '../../engine/class-identity';
 import { setsOf } from './assigned';
 import { candidateFields } from './candidates';
 import { aggregateName, discoverAggregates } from './discover';
@@ -15,8 +15,6 @@ import { mentionedTokens } from './mentions';
 import { outsideAssignments } from './outside';
 import { aggregateScope } from './scope';
 import { resolveStateField } from './state-field';
-
-type AggregateIdentity = { readonly id: string; readonly qualifiedName: string };
 
 type DeclaredOutcome =
   | { readonly kind: 'ok'; readonly field: StateField; readonly declaration: FieldDeclaration }
@@ -98,20 +96,15 @@ const methodModels = (
   }));
 };
 
-const sharedNames = (classes: readonly ClassDeclaration[]): ReadonlySet<string> => {
-  const names = classes.map(aggregateName);
-  return new Set(names.filter((name, index) => names.indexOf(name) !== index));
-};
-
-const identityOf = (cls: ClassDeclaration, root: string, shared: ReadonlySet<string>): AggregateIdentity => {
-  const name = aggregateName(cls);
-  const qualifiedName = `${toPosixRelative(root, cls.getSourceFile().getFilePath())}:${name}`;
-  return { qualifiedName, id: shared.has(name) ? qualifiedName : name };
+const identityOf = (identities: ReadonlyMap<ClassDeclaration, ClassIdentity>, cls: ClassDeclaration): ClassIdentity => {
+  const identity = identities.get(cls);
+  if (!identity) throw new Error(`no identity computed for ${aggregateName(cls)}`);
+  return identity;
 };
 
 const extractAggregate = (
   cls: ClassDeclaration,
-  identity: AggregateIdentity,
+  identity: ClassIdentity,
   declaration: DomainDeclaration,
   files: readonly SourceFile[],
 ): { readonly aggregate: AggregateModel; readonly problems: readonly string[] } => {
@@ -124,7 +117,8 @@ const extractAggregate = (
   return {
     problems: resolved.problems,
     aggregate: {
-      ...identity,
+      id: identity.id,
+      qualifiedName: identity.qualifiedName,
       name: aggregateName(cls),
       file: cls.getSourceFile().getFilePath(),
       line: cls.getStartLineNumber(),
@@ -146,8 +140,8 @@ export const extractLifecycles = ({ declaration, files, root }: AnalysisInput): 
     declaration.aggregateBaseClasses,
     declaration.lifecycles.map((lifecycle) => lifecycle.target),
   );
-  const shared = sharedNames(classes);
-  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(cls, root, shared), declaration, files));
+  const identities = classIdentities(classes, root);
+  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(identities, cls), declaration, files));
   return {
     aggregates: extracted.map((result) => result.aggregate),
     problems: extracted.flatMap((result) => result.problems),
