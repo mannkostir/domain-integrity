@@ -20,6 +20,7 @@ export const registration = (overrides: Partial<Registration> = {}): Registratio
   handlerClass: 'PaidHandler',
   handlerMethod: 'handle',
   payload: { kind: 'unreadable' },
+  inTest: false,
   file: '/app/src/handlers.ts',
   line: 4,
   ...overrides,

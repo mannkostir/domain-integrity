@@ -6,6 +6,7 @@ export type Registration = {
   readonly handlerClass: string | undefined;
   readonly handlerMethod: string | undefined;
   readonly payload: Payload;
+  readonly inTest: boolean;
 } & Location;
 export type UnresolvedSite = { readonly owner: string | undefined } & Location;
 export type EventClassModel = {

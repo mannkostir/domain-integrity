@@ -17,8 +17,8 @@ import { OrderSaga } from './src/handlers';
 export default defineDomain({ events: { inProcess: [Failed], sagas: [saga(OrderSaga, { outcomes: [[Paid, Failed]] })] } });
 `;
 
-const extract = (analysedPrefix = '/app/src/') => {
-  const project = inMemoryProject({ ...SOURCES, '/app/domain.config.ts': CONFIG });
+const extract = (analysedPrefix = '/app/src/', extra: Readonly<Record<string, string>> = {}) => {
+  const project = inMemoryProject({ ...SOURCES, ...extra, '/app/domain.config.ts': CONFIG });
   const config = project.getSourceFileOrThrow('/app/domain.config.ts');
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith(analysedPrefix));
   return extractEventFlows({ declaration: readDeclaration(config), files, root: '/app' });
@@ -73,5 +73,17 @@ describe('extractEventFlows', () => {
       inProcess: [],
       sagas: [],
     });
+  });
+
+  it('marks registrations in test files', () => {
+    const model = extract('/app/src/', {
+      '/app/src/handlers.spec.ts': "import { EventsHandler } from './decorators';\nimport { Paid } from './events';\n@EventsHandler(Paid) export class SpecHandler { handle(event: Paid) {} }",
+    });
+
+    expect(model.registrations.map((registration) => [registration.handlerClass, registration.inTest])).toEqual([
+      ['SpecHandler', true],
+      ['PaidHandler', false],
+      ['OrderSaga', false],
+    ]);
   });
 });

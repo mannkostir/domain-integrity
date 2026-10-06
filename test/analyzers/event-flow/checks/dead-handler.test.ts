@@ -44,4 +44,10 @@ describe('deadHandler', () => {
 
     expect(deadHandler(model).map((finding) => finding.handler)).toEqual(['PaidHandler', 'onPaid', undefined]);
   });
+
+  it('skips a handler registered in a test file', () => {
+    const model = flowModel({ events: new Map([['Paid', eventClass('Paid', { constructions: [] })]]), registrations: [registration({ inTest: true })] });
+
+    expect(deadHandler(model)).toEqual([]);
+  });
 });

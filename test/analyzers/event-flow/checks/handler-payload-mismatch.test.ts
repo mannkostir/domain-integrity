@@ -43,4 +43,13 @@ describe('handlerPayloadMismatch', () => {
       handlerPayloadMismatch(flowModel()),
     ]).toEqual([[], [], [], []]);
   });
+
+  it('skips a handler registered in a test file', () => {
+    const model = flowModel({
+      events: new Map([['Paid', eventClass('Paid')]]),
+      registrations: [registration({ payload: payload(['Failed']), inTest: true })],
+    });
+
+    expect(handlerPayloadMismatch(model)).toEqual([]);
+  });
 });

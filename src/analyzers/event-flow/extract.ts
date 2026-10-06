@@ -36,7 +36,8 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
   const sagas = declared.sagas.filter((saga) => [saga.target, ...saga.outcomes.flat()].every(isProject));
   const eventClasses = unique([...raw.map((registration) => registration.event), ...inProcess, ...sagas.flatMap((saga) => saga.outcomes.flat())]);
   const keys: ReadonlySet<Node> = new Set(raw.map((registration) => registration.key));
-  const referenceContext = { analysed, isTest: (file: SourceFile) => isTestFile(file, input.root), keys };
+  const isTest = (file: SourceFile): boolean => isTestFile(file, input.root);
+  const referenceContext = { analysed, isTest, keys };
   const hierarchies = new Map([...eventClasses, ...sagas.map((saga) => saga.target)].map((cls) => [cls, hierarchyOf(cls, isProject)]));
   const ancestorIds = (cls: ClassDeclaration): readonly string[] => (hierarchies.get(cls)?.ancestors ?? []).map((ancestor) => identity(ancestor).id);
 
@@ -50,6 +51,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
     handlerClass: registration.handler === undefined ? undefined : identity(registration.handler).id,
     handlerMethod: registration.method,
     payload: payloadOf(registration),
+    inTest: isTest(registration.node.getSourceFile()),
     ...locationOf(registration.node),
   }));
 

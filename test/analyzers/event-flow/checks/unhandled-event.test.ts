@@ -24,11 +24,12 @@ describe('unhandledEvent', () => {
     ]);
   });
 
-  it('stays silent when the event or an ancestor is handled', () => {
+  it('stays silent when the event or an ancestor is handled, in a test file too', () => {
     expect([
       unhandledEvent(declared({}, { registrations: [registration({ event: 'Failed' })] })),
       unhandledEvent(declared({}, { registrations: [registration({ event: 'Base' })] })),
-    ]).toEqual([[], []]);
+      unhandledEvent(declared({}, { registrations: [registration({ event: 'Failed', inTest: true })] })),
+    ]).toEqual([[], [], []]);
   });
 
   it('stays silent when anything could hide a handler or the event is never constructed', () => {

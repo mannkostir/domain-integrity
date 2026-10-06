@@ -30,5 +30,5 @@ const hasDeadEvent = (model: EventFlowModel, registration: Registration): boolea
 
 export const deadHandler = (model: EventFlowModel): EventFlowFinding[] =>
   model.registrations
-    .filter((registration) => hasDeadEvent(model, registration))
+    .filter((registration) => !registration.inTest && hasDeadEvent(model, registration))
     .map((registration) => toFinding(model, registration));

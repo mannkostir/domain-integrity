@@ -34,12 +34,13 @@ describe('sagaMissingFailurePath', () => {
     ]);
   });
 
-  it('accepts handling of the failure itself, an ancestor of it, or by a saga ancestor', () => {
+  it('accepts handling of the failure itself, an ancestor of it, by a saga ancestor, or in a test file', () => {
     expect([
       sagaMissingFailurePath(sagaModel([handles('Paid'), handles('Failed')])),
       sagaMissingFailurePath(sagaModel([handles('Paid'), handles('Base')])),
       sagaMissingFailurePath(sagaModel([handles('Paid'), handles('Failed', 'Base')], { sagas: [{ ...SAGA, ancestors: ['Base'] }] })),
-    ]).toEqual([[], [], []]);
+      sagaMissingFailurePath(sagaModel([handles('Paid'), { ...handles('Failed'), inTest: true }])),
+    ]).toEqual([[], [], [], []]);
   });
 
   it('stays silent with an unresolved site in the saga or a foreign base', () => {
