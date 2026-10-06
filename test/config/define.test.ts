@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defineDomain, lifecycle } from '../../src/index';
+import { defineDomain, lifecycle, saga } from '../../src/index';
 
 enum TicketStatus {
   open = 'OPEN',
@@ -59,5 +59,41 @@ describe('config helpers', () => {
     });
 
     expect(declaration.kind).toBe('lifecycle');
+  });
+});
+
+class PaymentCaptured {
+  private constructor(readonly amount: number) {}
+
+  static of(amount: number): PaymentCaptured {
+    return new PaymentCaptured(amount);
+  }
+}
+
+class PaymentFailed {}
+
+class OrderSaga {}
+
+describe('event config helpers', () => {
+  it('saga() returns its declaration', () => {
+    const declaration = saga(OrderSaga, { outcomes: [[PaymentCaptured, PaymentFailed]] });
+
+    expect(defineDomain({ events: { inProcess: [PaymentCaptured], sagas: [declaration] } })).toEqual({
+      events: { inProcess: [PaymentCaptured], sagas: [declaration] },
+    });
+  });
+
+  it('saga() rejects an outcome that is not a pair', () => {
+    // @ts-expect-error
+    const declaration = saga(OrderSaga, { outcomes: [[PaymentCaptured]] });
+
+    expect(declaration.kind).toBe('saga');
+  });
+
+  it('saga() rejects an outcome element that is not a class', () => {
+    // @ts-expect-error
+    const declaration = saga(OrderSaga, { outcomes: [['PaymentCaptured', PaymentFailed]] });
+
+    expect(declaration.kind).toBe('saga');
   });
 });
