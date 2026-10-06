@@ -26,7 +26,13 @@ const isKey = (reference: Node, keys: ReadonlySet<Node>): boolean => {
 const isExtendsClause = (reference: Node): boolean => {
   const clause = reference.getParent();
   const heritage = clause?.getParent();
-  return Node.isExpressionWithTypeArguments(clause) && Node.isHeritageClause(heritage) && heritage.getToken() === SyntaxKind.ExtendsKeyword;
+  const owner = heritage?.getParent();
+  return (
+    Node.isExpressionWithTypeArguments(clause) &&
+    Node.isHeritageClause(heritage) &&
+    heritage.getToken() === SyntaxKind.ExtendsKeyword &&
+    (Node.isClassDeclaration(owner) || Node.isClassExpression(owner))
+  );
 };
 
 const inParameterType = (reference: Node): boolean => {
@@ -38,13 +44,14 @@ const inParameterType = (reference: Node): boolean => {
 const inTypePosition = (reference: Node): boolean => {
   const typeNode = reference.getFirstAncestor((ancestor) => Node.isTypeNode(ancestor));
   if (typeNode === undefined) return false;
-  return !Node.isExpressionWithTypeArguments(typeNode) || reference.getParent() === typeNode;
+  return !Node.isExpressionWithTypeArguments(typeNode) || (reference.getParent() === typeNode && Node.isHeritageClause(typeNode.getParent()));
 };
 
 const isImportOrExportSpecifier = (reference: Node): boolean =>
   reference.getFirstAncestor((ancestor) => Node.isImportDeclaration(ancestor) || Node.isExportSpecifier(ancestor)) !== undefined;
 
 const useOf = (reference: Node, context: ReferenceContext): Use => {
+  if (!Node.isIdentifier(reference)) return 'escape';
   const parent = reference.getParent();
   if (Node.isNewExpression(parent) && parent.getExpression() === reference) {
     return context.isTest(reference.getSourceFile()) ? 'test-construction' : 'construction';

@@ -50,7 +50,22 @@ describe('referenceFacts', () => {
     const project = inMemoryProject({ '/app/src/events.ts': 'export class Paid { static make() { return new this(); } }' });
     const paid = project.getSourceFileOrThrow('/app/src/events.ts').getClassOrThrow('Paid');
 
-    expect(referenceFacts(paid, { analysed: new Set(project.getSourceFiles()), isTest: () => false, keys: new Set() }).escaped).toBe(true);
+    const facts = referenceFacts(paid, { analysed: new Set(project.getSourceFiles()), isTest: () => false, keys: new Set() });
+
+    expect([facts.escaped, facts.constructions]).toEqual([true, []]);
+  });
+
+  it('records instantiation expressions as escapes', () => {
+    const generic = '/app/src/events.ts';
+    const source = 'export class Paid<T = unknown> {}';
+    expect([
+      factsOf({ [generic]: source, '/app/src/inst.ts': "import { Paid } from './events';\nexport const F = Paid<string>;" }).escaped,
+      factsOf({ [generic]: source, '/app/src/inst.ts': "import { Paid } from './events';\ndeclare const build: (t: unknown) => unknown;\nexport const b = build(Paid<string>);" }).escaped,
+    ]).toEqual([true, true]);
+  });
+
+  it('treats an interface extending the class as a quiet type position', () => {
+    expect(factsOf({ '/app/src/shape.ts': "import { Paid } from './events';\nexport interface Shape extends Paid {}" })).toEqual(QUIET);
   });
 
   it('ignores references outside the analysed files', () => {
