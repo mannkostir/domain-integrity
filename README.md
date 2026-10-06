@@ -155,7 +155,7 @@ These shapes are recognised as handlers:
 - `subscribedTo()` returning an array literal, such as `[X, Y]`;
 - a `@Saga()` property that uses `ofType(X, …)`.
 
-A project with event handlers and no aggregates is accepted. `check` reports "No aggregates found" only when it finds neither aggregates nor event flows.
+A project with event handlers and no aggregates is accepted. When it has neither aggregates nor event flows, every command exits `2` with the "No aggregates found" message.
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
 
@@ -301,6 +301,8 @@ export default defineDomain({
 
 An outcome that lists one class as both success and failure exits `2`. So does a declared class outside the analysed files, or a saga that handles neither side of an outcome; the last two are reported as `problem:` lines.
 
+Each lifecycle takes these options:
+
 | Option | Meaning |
 |---|---|
 | `states` | The aggregate's state fields. Supported: enum, string-literal union, boolean, and nullable (`T \| null` or optional; use `'set'` and `'unset'`). Name the data field itself, e.g. `_status` rather than its getter. |
@@ -343,11 +345,11 @@ The event-flow analyzer reports nothing for these:
 - **Events constructed only outside the analysed files, or only in test files.** Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`.
 - **Getter-declared handlers**, such as `get event()`.
 - **Events raised into an aggregate buffer that is never dispatched.**
-- **Sagas whose class extends a library class or a mixin call.**
+- **Sagas whose class extends a library class or a mixin call.** A saga is also skipped when a handler registration inside it or one of its project base classes cannot be resolved.
 
-Some code keeps a single rule silent for an event class `X`:
-- For `unhandled-event`: an unrecognised `register` call anywhere, an `instanceof X`, a string equal to `X`'s name, or a parameter typed `X`.
-- For `dead-handler`: `X` is abstract, is subclassed, or is used as a value other than `new X`, a registration key or `instanceof`. A factory map, passing `X` to a function, and `X<T>` as a value all count.
+Some code keeps a rule silent:
+- `unhandled-event` is silent for the whole project when any handler registration cannot be resolved. That covers an unrecognised `register` call, a configured decorator whose arguments are not plain class references (a string topic, for example), a `subscribedTo()` that does not return an array literal of classes, and a `@Saga()` property without a resolvable `ofType(...)`. For one event class `X` it is also silent on an `instanceof X`, a string equal to `X`'s name, a parameter typed `X`, or `X` used as a value other than `new X`, a registration key or `instanceof`.
+- `dead-handler` is silent for `X` when `X` is abstract, is subclassed, or is used as a value other than `new X`, a registration key or `instanceof`. A factory map, passing `X` to a function, and `X<T>` as a value all count.
 
 <details>
 <summary>The precise rules</summary>
