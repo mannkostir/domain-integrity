@@ -51,4 +51,13 @@ describe('config helpers', () => {
 
     expect(declaration.kind).toBe('lifecycle');
   });
+
+  it('reject field allowAfterTerminal entries that are not methods', () => {
+    const declaration = lifecycle(Ticket, {
+      // @ts-expect-error
+      states: { status: { terminal: [TicketStatus.closed], allowAfterTerminal: ['archive'] } },
+    });
+
+    expect(declaration.kind).toBe('lifecycle');
+  });
 });

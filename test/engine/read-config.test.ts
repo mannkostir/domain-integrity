@@ -51,7 +51,7 @@ export default defineDomain({
       allowAfterTerminal: order?.allowAfterTerminal,
     }).toEqual({
       target: 'Order',
-      fields: [{ name: 'status', terminal: ['CANCELLED'], transitions: new Map([['cancel', ['PENDING']]]) }],
+      fields: [{ name: 'status', terminal: ['CANCELLED'], transitions: new Map([['cancel', ['PENDING']]]), allowAfterTerminal: [] }],
       allowAfterTerminal: ['cancel'],
     });
   });
@@ -144,6 +144,42 @@ export default defineDomain({
 `).lifecycles;
 
     expect(order?.allowAfterTerminal).toEqual([]);
+  });
+
+  it('reads allowAfterTerminal inside a state field', () => {
+    const [order] = read(`
+import { defineDomain, lifecycle } from 'domain-integrity';
+import { Order, OrderStatus } from './src/order';
+export default defineDomain({
+  lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled], allowAfterTerminal: ['cancel'] } } })],
+});
+`).lifecycles;
+
+    expect(order?.fields.map((field) => field.allowAfterTerminal)).toEqual([['cancel']]);
+  });
+
+  it('defaults a state field allowAfterTerminal to an empty list', () => {
+    const [order] = read(`
+import { defineDomain, lifecycle } from 'domain-integrity';
+import { Order, OrderStatus } from './src/order';
+export default defineDomain({
+  lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled] } } })],
+});
+`).lifecycles;
+
+    expect(order?.fields.map((field) => field.allowAfterTerminal)).toEqual([[]]);
+  });
+
+  it('rejects a state field allowAfterTerminal entry that is not a method', () => {
+    expect(() =>
+      read(`
+import { defineDomain, lifecycle } from 'domain-integrity';
+import { Order, OrderStatus } from './src/order';
+export default defineDomain({
+  lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled], allowAfterTerminal: ['nope'] } } })],
+});
+`),
+    ).toThrow(ConfigError);
   });
 
   it('rejects a non-string entry in aggregateBaseClasses', () => {

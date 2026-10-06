@@ -128,7 +128,7 @@ const leaks = (target: ClassDeclaration, inertMembers: readonly string[]) => {
       ...DEFAULT_DECLARATION,
       inertMembers,
       lifecycles: [
-        { target, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined }], allowAfterTerminal: [] },
+        { target, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] },
       ],
     },
     files: project.getSourceFiles(),

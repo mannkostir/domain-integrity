@@ -50,12 +50,13 @@ describe('methods inherited from a project base class', () => {
           ['pay', ['pending', 'paid']],
           ['cancel', ['pending', 'paid']],
         ]),
+        allowAfterTerminal: [],
       }),
     ).toEqual({ problems: [], findings: ['transition-drift pay missing'] });
   });
 
   it('are judged for terminal-state leaks on the subclass, with subclass overrides taking precedence', () => {
-    expect(analyse({ name: 'status', terminal: ['cancelled'], transitions: undefined })).toEqual({
+    expect(analyse({ name: 'status', terminal: ['cancelled'], transitions: undefined, allowAfterTerminal: [] })).toEqual({
       problems: [],
       findings: ['terminal-state-leak annotate cancelled'],
     });

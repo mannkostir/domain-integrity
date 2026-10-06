@@ -8,6 +8,7 @@ type MethodName<T> = {
 export type FieldSpec<T> = {
   readonly terminal: StateToken | readonly StateToken[];
   readonly transitions?: Partial<Record<MethodName<T>, readonly StateToken[]>>;
+  readonly allowAfterTerminal?: readonly MethodName<T>[];
 };
 
 export type LifecycleSpec<T> = {

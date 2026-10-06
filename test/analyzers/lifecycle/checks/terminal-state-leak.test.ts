@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { terminalStateLeak } from '../../../../src/analyzers/lifecycle/checks/terminal-state-leak';
-import { aggregate, assigned, known, method, unknownSources } from '../../../helpers/model';
+import { aggregate, assigned, declared, known, method, stateField, STATUS, unknownSources } from '../../../helpers/model';
 
 const ALL = known('PENDING', 'CONFIRMED', 'CANCELLED');
+const PHASE = stateField('phase', 'enum', ['OPEN', 'CLOSED']);
+const BOTH_LEAK = method('archive', true, {
+  status: { sources: ALL, sets: assigned() },
+  phase: { sources: known('OPEN', 'CLOSED'), sets: assigned() },
+});
+const twoFields = (statusAllows: string[], phaseAllows: string[], allowAfterTerminal: string[] = []) =>
+  aggregate({
+    fields: [STATUS, PHASE],
+    declarations: new Map([
+      ['status', declared(['CANCELLED'], undefined, statusAllows)],
+      ['phase', declared(['CLOSED'], undefined, phaseAllows)],
+    ]),
+    allowAfterTerminal: new Set(allowAfterTerminal),
+    methods: [BOTH_LEAK],
+  });
 
 describe('terminalStateLeak', () => {
   it('flags a mutating method that can run in a terminal state', () => {
@@ -60,6 +75,31 @@ describe('terminalStateLeak', () => {
     const methods = [method('archive', true, { status: { sources: ALL, sets: assigned() } })];
 
     expect(terminalStateLeak(aggregate({ methods, allowAfterTerminal: new Set(['archive']) }))).toEqual([]);
+  });
+
+  it('flags a method on every terminal field when no list exempts it', () => {
+    expect(terminalStateLeak(twoFields([], [])).map((finding) => finding.field)).toEqual(['status', 'phase']);
+  });
+
+  it('exempts a method only for the field whose own list names it', () => {
+    expect(terminalStateLeak(twoFields(['archive'], [])).map((finding) => finding.field)).toEqual(['phase']);
+  });
+
+  it('exempts a method for every field when the aggregate list names it', () => {
+    expect(terminalStateLeak(twoFields([], [], ['archive']))).toEqual([]);
+  });
+
+  it('combines the aggregate list with the field list', () => {
+    const model = aggregate({
+      declarations: new Map([['status', declared(['CANCELLED'], undefined, ['annotate'])]]),
+      allowAfterTerminal: new Set(['archive']),
+      methods: [
+        method('annotate', true, { status: { sources: ALL, sets: assigned() } }),
+        method('archive', true, { status: { sources: ALL, sets: assigned() } }),
+      ],
+    });
+
+    expect(terminalStateLeak(model)).toEqual([]);
   });
 
   it('stays silent when the guard could not be analysed', () => {

@@ -46,8 +46,13 @@ export const method = (
   fields: new Map(Object.entries(fields)),
 });
 
-export const declared = (terminal: string[], transitions?: Record<string, string[]>): FieldDeclaration => ({
+export const declared = (
+  terminal: string[],
+  transitions?: Record<string, string[]>,
+  allowAfterTerminal: string[] = [],
+): FieldDeclaration => ({
   terminal: new Set(terminal),
+  allowAfterTerminal: new Set(allowAfterTerminal),
   transitions:
     transitions && new Map(Object.entries(transitions).map(([name, sources]) => [name, new Set(sources)])),
 });
