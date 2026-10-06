@@ -71,4 +71,16 @@ describe('event flows in the CLI', () => {
 
     expect({ code: await run(['check'], io), leak: stdout().includes('terminal-state-leak  Ticket.rename()') }).toEqual({ code: 1, leak: true });
   });
+
+  it('stays silent for a handler of a mixin event typed as the mixin base', async () => {
+    const { io, stdout } = captureIo(
+      writeProject({
+        ...EVENT_FLOW_PROJECT,
+        'src/handlers.ts':
+          "import { EventsHandler } from './decorators';\ndeclare const Timestamped: <B>(base: B) => B;\nexport class DomainEvent { id = 1; }\nexport class OrderPaid extends Timestamped(DomainEvent) {}\n@EventsHandler(OrderPaid) export class AuditHandler { handle(event: DomainEvent) { return event.id; } }\nexport const pay = () => new OrderPaid();\n",
+      }),
+    );
+
+    expect({ code: await run(['check'], io), mismatch: stdout().includes('handler-payload-mismatch') }).toEqual({ code: 0, mismatch: false });
+  });
 });

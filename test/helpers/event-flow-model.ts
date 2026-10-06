@@ -12,6 +12,8 @@ export const eventClass = (id: string, overrides: Partial<EventClassModel> = {})
   instanceofChecked: false,
   typedParameter: false,
   namedInString: false,
+  opaque: false,
+  extendsLibrary: false,
   ...overrides,
 });
 
@@ -31,6 +33,7 @@ export const flowModel = (overrides: Partial<EventFlowModel> = {}): EventFlowMod
   events: new Map([['Paid', eventClass('Paid')]]),
   registrations: [registration()],
   unresolved: [],
+  libraryKeyed: [],
   inProcess: [],
   sagas: [],
   problems: [],

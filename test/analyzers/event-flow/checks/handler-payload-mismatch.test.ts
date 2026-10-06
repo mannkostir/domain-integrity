@@ -52,4 +52,13 @@ describe('handlerPayloadMismatch', () => {
 
     expect(handlerPayloadMismatch(model)).toEqual([]);
   });
+
+  it('stays silent for an event whose hierarchy is opaque', () => {
+    const model = flowModel({
+      events: new Map([['OrderPaid', eventClass('OrderPaid', { opaque: true })]]),
+      registrations: [registration({ event: 'OrderPaid', payload: payload(['DomainEvent']) })],
+    });
+
+    expect(handlerPayloadMismatch(model)).toEqual([]);
+  });
 });

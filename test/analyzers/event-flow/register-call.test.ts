@@ -53,7 +53,7 @@ describe('registerCallRecogniser', () => {
     ).toEqual([]);
   });
 
-  it('ignores a library event key', () => {
-    expect(run('DomainEvents.register((event: LibraryEvent) => undefined, LibraryEvent.name);')).toEqual([]);
+  it('registers nothing for a library event key but notes it', () => {
+    expect(run('DomainEvents.register((event: LibraryEvent) => undefined, LibraryEvent.name);')).toEqual(['library']);
   });
 });

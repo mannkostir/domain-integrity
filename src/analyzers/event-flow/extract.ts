@@ -55,16 +55,24 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
     ...locationOf(registration.node),
   }));
 
-  const unresolved: readonly UnresolvedSite[] = sites.flatMap((site) => {
-    if (site.kind === 'resolved') return [];
-    const owner = enclosingClass(site.node);
-    return [{ owner: owner === undefined ? undefined : identity(owner).id, ...locationOf(site.node) }];
-  });
+  const ownerOf = (node: Node): string | undefined => {
+    const owner = enclosingClass(node);
+    return owner === undefined ? undefined : identity(owner).id;
+  };
+
+  const unresolved: readonly UnresolvedSite[] = sites.flatMap((site) =>
+    site.kind === 'resolved' ? [] : [{ owner: ownerOf(site.node), ...locationOf(site.node) }],
+  );
+
+  const libraryKeyed: readonly (string | undefined)[] = sites.flatMap((site) => (site.kind === 'resolved' && site.libraryKeyed ? [ownerOf(site.node)] : []));
 
   const events = new Map<string, EventClassModel>(
     eventClasses.map((cls) => {
       const id = identity(cls).id;
-      return [id, { id, abstract: cls.isAbstract(), ancestors: ancestorIds(cls), ...referenceFacts(cls, referenceContext) }];
+      const hierarchy = hierarchies.get(cls);
+      const opaque = hierarchy?.opaque ?? false;
+      const extendsLibrary = (hierarchy?.extendsForeign ?? false) && !opaque;
+      return [id, { id, abstract: cls.isAbstract(), ancestors: ancestorIds(cls), ...referenceFacts(cls, referenceContext), opaque, extendsLibrary }];
     }),
   );
 
@@ -97,6 +105,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
     events,
     registrations,
     unresolved,
+    libraryKeyed,
     inProcess: inProcess.map((cls) => identity(cls).id),
     sagas: sagaModels,
     problems: unique(outside).map((cls) => `"${cls.getName() ?? 'anonymous class'}" is declared in events but is not in the analysed files.`),

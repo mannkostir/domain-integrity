@@ -13,7 +13,7 @@ export type RawRegistration = {
 };
 
 export type RecognisedSite =
-  | { readonly kind: 'resolved'; readonly registrations: readonly RawRegistration[] }
+  | { readonly kind: 'resolved'; readonly node: Node; readonly registrations: readonly RawRegistration[]; readonly libraryKeyed: boolean }
   | { readonly kind: 'unresolved'; readonly node: Node };
 
 export type RecogniserContext = { readonly events: DeclaredEvents; readonly isProject: ProjectClasses };
@@ -23,7 +23,7 @@ export type RegistrationRecogniser = {
 };
 
 export type ResolvedKeys =
-  | { readonly kind: 'resolved'; readonly classes: readonly { readonly cls: ClassDeclaration; readonly key: Node }[] }
+  | { readonly kind: 'resolved'; readonly classes: readonly { readonly cls: ClassDeclaration; readonly key: Node }[]; readonly libraryKeyed: boolean }
   | { readonly kind: 'unresolved' };
 
 export const enclosingClass = (node: Node): ClassDeclaration | undefined => node.getFirstAncestorByKind(SyntaxKind.ClassDeclaration);
@@ -34,5 +34,6 @@ export const resolveKeys = (keys: readonly Node[], isProject: ProjectClasses): R
   return {
     kind: 'resolved',
     classes: resolutions.flatMap(({ key, resolution }) => (resolution.kind === 'project' ? [{ cls: resolution.cls, key }] : [])),
+    libraryKeyed: resolutions.some(({ resolution }) => resolution.kind === 'foreign'),
   };
 };

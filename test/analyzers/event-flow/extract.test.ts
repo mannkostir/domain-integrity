@@ -52,6 +52,8 @@ describe('extractEventFlows', () => {
         instanceofChecked: false,
         typedParameter: false,
         namedInString: false,
+        opaque: false,
+        extendsLibrary: false,
       },
       failed: { constructions: [], ancestors: ['BaseEvent'] },
       inProcess: ['Failed'],
@@ -85,5 +87,19 @@ describe('extractEventFlows', () => {
       ['PaidHandler', false],
       ['OrderSaga', false],
     ]);
+  });
+
+  it('records opaque and library-based event hierarchies and the owners of library-keyed sites', () => {
+    const model = extract('/app/src/', {
+      '/app/lib/external.ts': 'export class LibraryEvent {}',
+      '/app/src/more.ts': "import { EventsHandler } from './decorators';\nimport { Paid } from './events';\nimport { LibraryEvent } from '../lib/external';\ndeclare const Mixin: <T>(base: T) => T;\nexport class Mixed extends Mixin(Paid) {}\nexport class Wrapped extends LibraryEvent {}\n@EventsHandler(Mixed, Wrapped, LibraryEvent) export class MoreHandler { handle(event: unknown) {} }",
+    });
+
+    expect({
+      mixed: [model.events.get('Mixed')?.opaque, model.events.get('Mixed')?.extendsLibrary],
+      wrapped: [model.events.get('Wrapped')?.opaque, model.events.get('Wrapped')?.extendsLibrary],
+      paid: [model.events.get('Paid')?.opaque, model.events.get('Paid')?.extendsLibrary],
+      libraryKeyed: model.libraryKeyed,
+    }).toEqual({ mixed: [true, false], wrapped: [false, true], paid: [false, false], libraryKeyed: ['MoreHandler'] });
   });
 });

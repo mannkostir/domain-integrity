@@ -4,8 +4,13 @@ import { acceptedIds, nameOf } from './handler-label';
 
 const byPosition = (a: Location, b: Location): number => a.file.localeCompare(b.file) || a.line - b.line;
 
-const mightBeHandledUnseen = (event: EventClassModel): boolean =>
-  event.escaped || event.instanceofChecked || event.namedInString || event.typedParameter;
+const mightBeHandledUnseen = (model: EventFlowModel, event: EventClassModel): boolean =>
+  event.escaped ||
+  event.instanceofChecked ||
+  event.namedInString ||
+  event.typedParameter ||
+  event.opaque ||
+  (event.extendsLibrary && model.libraryKeyed.length > 0);
 
 const isHandled = (model: EventFlowModel, event: EventClassModel): boolean => {
   const accepted = acceptedIds(model, event.id);
@@ -17,7 +22,7 @@ export const unhandledEvent = (model: EventFlowModel): EventFlowFinding[] => {
   return model.inProcess.flatMap((id): EventFlowFinding[] => {
     const event = model.events.get(id);
     const [first] = [...(event?.constructions ?? [])].sort(byPosition);
-    if (event === undefined || first === undefined || mightBeHandledUnseen(event) || isHandled(model, event)) return [];
+    if (event === undefined || first === undefined || mightBeHandledUnseen(model, event) || isHandled(model, event)) return [];
     const name = nameOf(model, id);
     return [
       {

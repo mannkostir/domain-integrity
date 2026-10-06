@@ -19,6 +19,8 @@ export type EventClassModel = {
   readonly instanceofChecked: boolean;
   readonly typedParameter: boolean;
   readonly namedInString: boolean;
+  readonly opaque: boolean;
+  readonly extendsLibrary: boolean;
 };
 export type SagaModel = {
   readonly id: string;
@@ -31,6 +33,7 @@ export type EventFlowModel = {
   readonly events: ReadonlyMap<string, EventClassModel>;
   readonly registrations: readonly Registration[];
   readonly unresolved: readonly UnresolvedSite[];
+  readonly libraryKeyed: readonly (string | undefined)[];
   readonly inProcess: readonly string[];
   readonly sagas: readonly SagaModel[];
   readonly problems: readonly string[];

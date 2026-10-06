@@ -22,7 +22,7 @@ describe('subscribedToRecogniser', () => {
     ]);
   });
 
-  it('ignores library classes in the array', () => {
-    expect(run('export class OnLibrary { subscribedTo() { return [LibraryEvent]; } }')).toEqual([]);
+  it('registers nothing for library classes in the array but notes them', () => {
+    expect(run('export class OnLibrary { subscribedTo() { return [LibraryEvent]; } }')).toEqual(['library']);
   });
 });

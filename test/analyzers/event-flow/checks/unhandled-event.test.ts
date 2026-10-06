@@ -43,6 +43,20 @@ describe('unhandledEvent', () => {
     ]).toEqual([[], [], [], [], [], []]);
   });
 
+  it('stays silent for an opaque event, or a library-based one when a handler is keyed on a library class', () => {
+    expect([
+      unhandledEvent(declared({ opaque: true })),
+      unhandledEvent(declared({ extendsLibrary: true }, { libraryKeyed: [undefined] })),
+    ]).toEqual([[], []]);
+  });
+
+  it('still judges a library-based event without library-keyed handlers, and a project-based one with them', () => {
+    expect([
+      unhandledEvent(declared({ extendsLibrary: true })).length,
+      unhandledEvent(declared({}, { libraryKeyed: ['PaidHandler'] })).length,
+    ]).toEqual([1, 1]);
+  });
+
   it('ignores events that are not declared in-process', () => {
     expect(unhandledEvent(declared({}, { inProcess: [] }))).toEqual([]);
   });

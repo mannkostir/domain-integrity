@@ -20,7 +20,7 @@ const targetOf = (decorator: Decorator): Target | undefined => {
   return undefined;
 };
 
-const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSite | undefined => {
+const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSite => {
   const target = targetOf(decorator);
   const keys = resolveKeys(
     decorator.getArguments().filter((argument) => !Node.isObjectLiteralExpression(argument)),
@@ -36,7 +36,7 @@ const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSit
     payload,
     node: decorator,
   }));
-  return registrations.length === 0 ? undefined : { kind: 'resolved', registrations };
+  return { kind: 'resolved', node: decorator, registrations, libraryKeyed: keys.libraryKeyed };
 };
 
 export const decoratorRecogniser: RegistrationRecogniser = {
@@ -47,8 +47,5 @@ export const decoratorRecogniser: RegistrationRecogniser = {
         const name = decoratorName(decorator);
         return name !== undefined && context.events.handlerDecorators.includes(name);
       })
-      .flatMap((decorator) => {
-        const site = siteOf(decorator, context);
-        return site === undefined ? [] : [site];
-      }),
+      .map((decorator) => siteOf(decorator, context)),
 };

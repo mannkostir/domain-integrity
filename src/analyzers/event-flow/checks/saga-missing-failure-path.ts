@@ -11,6 +11,13 @@ const isSilenced = (model: EventFlowModel, saga: SagaModel): boolean => {
   return saga.extendsForeign || model.unresolved.some((site) => site.owner !== undefined && owners.has(site.owner));
 };
 
+const isOutcomeSilenced = (model: EventFlowModel, saga: SagaModel, [success, failure]: Outcome): boolean => {
+  const owners = handlingClasses(saga);
+  const failureEvent = model.events.get(failure);
+  const libraryKeyedHere = model.libraryKeyed.some((owner) => owner !== undefined && owners.has(owner));
+  return model.events.get(success)?.opaque === true || failureEvent?.opaque === true || (failureEvent?.extendsLibrary === true && libraryKeyedHere);
+};
+
 const handles = (model: EventFlowModel, saga: SagaModel, eventId: string): boolean => {
   const owners = handlingClasses(saga);
   const accepted = acceptedIds(model, eventId);
@@ -20,7 +27,10 @@ const handles = (model: EventFlowModel, saga: SagaModel, eventId: string): boole
 };
 
 const judged = (model: EventFlowModel): readonly { readonly saga: SagaModel; readonly outcome: Outcome }[] =>
-  model.sagas.filter((saga) => !isSilenced(model, saga)).flatMap((saga) => saga.outcomes.map((outcome) => ({ saga, outcome })));
+  model.sagas
+    .filter((saga) => !isSilenced(model, saga))
+    .flatMap((saga) => saga.outcomes.map((outcome) => ({ saga, outcome })))
+    .filter(({ saga, outcome }) => !isOutcomeSilenced(model, saga, outcome));
 
 export const sagaMissingFailurePath = (model: EventFlowModel): EventFlowFinding[] =>
   judged(model)

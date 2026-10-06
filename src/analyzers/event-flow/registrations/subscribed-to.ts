@@ -9,15 +9,16 @@ const returnedArray = (method: MethodDeclaration): ArrayLiteralExpression | unde
   return Node.isArrayLiteralExpression(expression) ? expression : undefined;
 };
 
-const siteOf = (method: MethodDeclaration, context: RecogniserContext): RecognisedSite | undefined => {
+const siteOf = (method: MethodDeclaration, context: RecogniserContext): RecognisedSite => {
   const array = returnedArray(method);
   const handler = enclosingClass(method);
   if (array === undefined || handler === undefined) return { kind: 'unresolved', node: method };
   const keys = resolveKeys(array.getElements(), context.isProject);
   if (keys.kind === 'unresolved') return { kind: 'unresolved', node: method };
-  if (keys.classes.length === 0) return undefined;
   return {
     kind: 'resolved',
+    node: method,
+    libraryKeyed: keys.libraryKeyed,
     registrations: keys.classes.map(({ cls, key }) => ({ event: cls, key, handler, method: undefined, payload: { kind: 'unreadable' }, node: method })),
   };
 };
@@ -27,8 +28,5 @@ export const subscribedToRecogniser: RegistrationRecogniser = {
     file
       .getDescendantsOfKind(SyntaxKind.MethodDeclaration)
       .filter((method) => method.getName() === 'subscribedTo')
-      .flatMap((method) => {
-        const site = siteOf(method, context);
-        return site === undefined ? [] : [site];
-      }),
+      .map((method) => siteOf(method, context)),
 };

@@ -50,6 +50,28 @@ describe('sagaMissingFailurePath', () => {
     ]).toEqual([[], []]);
   });
 
+  it('stays silent for an outcome whose success or failure hierarchy is opaque', () => {
+    expect([
+      sagaMissingFailurePath(sagaModel([handles('Paid')], { events: new Map([['Paid', eventClass('Paid', { opaque: true })], ['Failed', eventClass('Failed')]]) })),
+      sagaMissingFailurePath(sagaModel([handles('Paid')], { events: new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed', { opaque: true })]]) })),
+    ]).toEqual([[], []]);
+  });
+
+  it('stays silent for a library-based failure when the saga or its ancestor has a library-keyed site', () => {
+    const libraryFailure = new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed', { extendsLibrary: true })]]);
+
+    expect([
+      sagaMissingFailurePath(sagaModel([handles('Paid')], { events: libraryFailure, libraryKeyed: ['OrderSaga'] })),
+      sagaMissingFailurePath(sagaModel([handles('Paid')], { events: libraryFailure, libraryKeyed: ['Base'], sagas: [{ ...SAGA, ancestors: ['Base'] }] })),
+    ]).toEqual([[], []]);
+  });
+
+  it('still reports a library-based failure when only other classes have library-keyed sites', () => {
+    const libraryFailure = new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed', { extendsLibrary: true })]]);
+
+    expect(sagaMissingFailurePath(sagaModel([handles('Paid')], { events: libraryFailure, libraryKeyed: ['PaidHandler', undefined] })).length).toBe(1);
+  });
+
   it('ignores another class handling the failure', () => {
     expect(sagaMissingFailurePath(sagaModel([handles('Paid'), handles('Failed', 'PaidHandler')])).length).toBe(1);
   });
@@ -64,6 +86,7 @@ describe('sagaProblems', () => {
     expect([
       sagaProblems(sagaModel([], { sagas: [{ ...SAGA, extendsForeign: true }] })),
       sagaProblems(sagaModel([handles('Failed')])),
-    ]).toEqual([[], []]);
+      sagaProblems(sagaModel([], { events: new Map([['Paid', eventClass('Paid', { opaque: true })], ['Failed', eventClass('Failed')]]) })),
+    ]).toEqual([[], [], []]);
   });
 });

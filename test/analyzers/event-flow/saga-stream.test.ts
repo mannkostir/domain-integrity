@@ -5,7 +5,7 @@ import { recognise } from './recognise';
 const run = (body: string) =>
   recognise(sagaStreamRecogniser, {
     '/src/events.ts': 'export class Paid {}\nexport class Failed {}\nexport const Saga = () => (target: unknown, key: string) => undefined;\nexport const ofType = (...types: unknown[]) => types;\nexport type Stream = { pipe: (...operators: unknown[]) => unknown };',
-    '/src/saga.ts': `import { Paid, Failed, Saga, ofType, Stream } from './events';\ndeclare const dynamicType: unknown; declare const deco: ((target: unknown, key: string) => undefined)[]; declare const curry: () => () => (target: unknown, key: string) => undefined;\n${body}`,
+    '/src/saga.ts': `import { Paid, Failed, Saga, ofType, Stream } from './events'; import { LibraryEvent } from '../types/lib';\ndeclare const dynamicType: unknown; declare const deco: ((target: unknown, key: string) => undefined)[]; declare const curry: () => () => (target: unknown, key: string) => undefined;\n${body}`,
   });
 
 describe('sagaStreamRecogniser', () => {
@@ -27,5 +27,9 @@ describe('sagaStreamRecogniser', () => {
     expect(
       run('export class A { @(deco[0]!) all = (events$: Stream) => events$.pipe(ofType(Paid)); }\nexport class B { @curry()() some = (events$: Stream) => events$.pipe(ofType(Paid)); }'),
     ).toEqual([]);
+  });
+
+  it('registers nothing for a library ofType argument but notes it', () => {
+    expect(run('export class OrderSaga { @Saga() external = (events$: Stream) => events$.pipe(ofType(LibraryEvent)); }')).toEqual(['library']);
   });
 });

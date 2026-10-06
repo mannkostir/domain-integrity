@@ -5,7 +5,7 @@ import { RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingCla
 const ofTypeCalls = (node: Node): readonly CallExpression[] =>
   node.getDescendantsOfKind(SyntaxKind.CallExpression).filter((call) => call.getExpression().getText() === 'ofType');
 
-const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSite | undefined => {
+const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSite => {
   const unresolved: RecognisedSite = { kind: 'unresolved', node: decorator };
   const property = decorator.getParent();
   const handler = enclosingClass(decorator);
@@ -15,9 +15,10 @@ const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSit
   if (calls.length === 0) return unresolved;
   const keys = resolveKeys(calls.flatMap((call) => call.getArguments()), context.isProject);
   if (keys.kind === 'unresolved') return unresolved;
-  if (keys.classes.length === 0) return undefined;
   return {
     kind: 'resolved',
+    node: decorator,
+    libraryKeyed: keys.libraryKeyed,
     registrations: keys.classes.map(({ cls, key }) => ({
       event: cls,
       key,
@@ -34,8 +35,5 @@ export const sagaStreamRecogniser: RegistrationRecogniser = {
     file
       .getDescendantsOfKind(SyntaxKind.Decorator)
       .filter((decorator) => decoratorName(decorator) === 'Saga')
-      .flatMap((decorator) => {
-        const site = siteOf(decorator, context);
-        return site === undefined ? [] : [site];
-      }),
+      .map((decorator) => siteOf(decorator, context)),
 };

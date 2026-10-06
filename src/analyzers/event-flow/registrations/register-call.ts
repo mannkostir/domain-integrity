@@ -40,10 +40,12 @@ const siteOf = (call: CallExpression, context: RecogniserContext): RecognisedSit
   const callback = callbackOf(first, call, context);
   if (callback === undefined) return undefined;
   const resolution = resolveKey(key, context.isProject);
-  if (resolution.kind === 'foreign') return undefined;
+  if (resolution.kind === 'foreign') return { kind: 'resolved', node: call, registrations: [], libraryKeyed: true };
   if (resolution.kind === 'unresolved') return { kind: 'unresolved', node: call };
   return {
     kind: 'resolved',
+    node: call,
+    libraryKeyed: false,
     registrations: [{ event: resolution.cls, key, handler: enclosingClass(call), method: callback.method, payload: callback.payload, node: call }],
   };
 };

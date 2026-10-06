@@ -1,17 +1,17 @@
 import { ClassDeclaration } from 'ts-morph';
-import { RecognisedSite, RegistrationRecogniser } from '../../../src/analyzers/event-flow/registrations/recogniser';
+import { RawRegistration, RecognisedSite, RegistrationRecogniser } from '../../../src/analyzers/event-flow/registrations/recogniser';
 import { DEFAULT_DECLARATION, DeclaredEvents } from '../../../src/engine/declaration';
 import { inMemoryProject } from '../../helpers/in-memory';
+
+const describeRegistration = (registration: RawRegistration): string => {
+  const payload = registration.payload.kind === 'classes' ? registration.payload.classes.map((cls) => cls.getName()).join('|') : '?';
+  return `${registration.event.getName()} -> ${registration.handler?.getName() ?? '-'}.${registration.method ?? '-'} (${payload})`;
+};
 
 const describeSite = (site: RecognisedSite): string =>
   site.kind === 'unresolved'
     ? `unresolved@${site.node.getStartLineNumber()}`
-    : site.registrations
-        .map((registration) => {
-          const payload = registration.payload.kind === 'classes' ? registration.payload.classes.map((cls) => cls.getName()).join('|') : '?';
-          return `${registration.event.getName()} -> ${registration.handler?.getName() ?? '-'}.${registration.method ?? '-'} (${payload})`;
-        })
-        .join(', ');
+    : [...site.registrations.map(describeRegistration), ...(site.libraryKeyed ? ['library'] : [])].join(', ');
 
 export const recognise = (
   recogniser: RegistrationRecogniser,

@@ -5,7 +5,7 @@ import { acceptedIds, handlerLabel, nameOf } from './handler-label';
 export const handlerPayloadMismatch = (model: EventFlowModel): EventFlowFinding[] =>
   model.registrations.flatMap((registration: Registration): EventFlowFinding[] => {
     const payload = registration.payload;
-    if (registration.inTest || payload.kind !== 'classes') return [];
+    if (registration.inTest || payload.kind !== 'classes' || model.events.get(registration.event)?.opaque === true) return [];
     const accepted = acceptedIds(model, registration.event);
     if (payload.classes.some((id) => accepted.has(id))) return [];
     const event = nameOf(model, registration.event);

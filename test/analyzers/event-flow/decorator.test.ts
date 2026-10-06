@@ -38,8 +38,10 @@ describe('decoratorRecogniser', () => {
     ]);
   });
 
-  it('ignores a library event key', () => {
-    expect(run('@EventsHandler(LibraryEvent) export class External { handle(event: LibraryEvent) {} }')).toEqual([]);
+  it('registers nothing for a library event key but notes it', () => {
+    expect(
+      run('@EventsHandler(LibraryEvent) export class External { handle(event: LibraryEvent) {} }\n@EventsHandler(Paid, LibraryEvent) export class Mixed { handle(event: Paid) {} }'),
+    ).toEqual(['library', 'Paid -> Mixed.handle (Paid), library']);
   });
 
   it('ignores decorators that are not configured and reads configured ones', () => {
