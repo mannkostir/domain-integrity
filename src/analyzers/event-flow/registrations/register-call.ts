@@ -16,7 +16,9 @@ const calledName = (call: CallExpression): string | undefined => {
 const unbound = (expression: Node): Node => {
   if (!Node.isCallExpression(expression)) return expression;
   const callee = expression.getExpression();
-  return Node.isPropertyAccessExpression(callee) && callee.getName() === 'bind' ? callee.getExpression() : expression;
+  const [argument] = expression.getArguments();
+  const bindsThis = expression.getArguments().length === 1 && argument !== undefined && Node.isThisExpression(argument);
+  return Node.isPropertyAccessExpression(callee) && callee.getName() === 'bind' && bindsThis ? callee.getExpression() : expression;
 };
 
 const thisMethodName = (expression: Node): string | undefined => {

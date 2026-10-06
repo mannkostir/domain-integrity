@@ -29,6 +29,16 @@ describe('registerCallRecogniser', () => {
     expect(run('declare const callback: (event: Paid) => void;\nDomainEvents.register(callback, Paid.name);')).toEqual(['Paid -> -.- (?)']);
   });
 
+  it('treats a callback bound to something other than this as opaque', () => {
+    expect(run('export class AfterPaid { constructor(other: object) { DomainEvents.register(this.onPaid.bind(other), Paid.name); } onPaid(event: Paid) {} }')).toEqual([
+      'Paid -> AfterPaid.- (?)',
+    ]);
+  });
+
+  it('reads a function expression callback', () => {
+    expect(run('DomainEvents.register(function (event: Paid) { return event; }, Paid.name);')).toEqual(['Paid -> -.- (Paid)']);
+  });
+
   it('marks any other register call unresolved', () => {
     expect(run("container.register('token', {});\nDomainEvents.register(Paid.name);\nDomainEvents.register(Paid, Failed);")).toEqual([
       'unresolved@5',
