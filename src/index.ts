@@ -1,2 +1,12 @@
-export { defineDomain, lifecycle } from './config/define';
-export type { DomainConfig, FieldSpec, LifecycleDeclaration, LifecycleSpec, StateToken } from './config/define';
+export { defineDomain, lifecycle, saga } from './config/define';
+export type {
+  DomainConfig,
+  EventClass,
+  EventsConfig,
+  FieldSpec,
+  LifecycleDeclaration,
+  LifecycleSpec,
+  SagaDeclaration,
+  SagaSpec,
+  StateToken,
+} from './config/define';

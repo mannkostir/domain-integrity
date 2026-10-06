@@ -1,7 +1,7 @@
 {
   "name": "domain-integrity",
   "version": "0.1.1",
-  "description": "Checks that a TypeScript domain's aggregate lifecycles match their declared intent.",
+  "description": "Checks that a TypeScript domain's aggregate lifecycles and in-process event flows match their declared intent.",
   "type": "module",
   "license": "MIT",
   "author": "mannkostir",
@@ -19,6 +19,9 @@
     "aggregate",
     "lifecycle",
     "state-machine",
+    "domain-events",
+    "event-handlers",
+    "saga",
     "typescript",
     "static-analysis",
     "ts-morph",

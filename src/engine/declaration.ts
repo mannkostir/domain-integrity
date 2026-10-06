@@ -13,6 +13,18 @@ export type DeclaredLifecycle = {
   readonly allowAfterTerminal: readonly string[];
 };
 
+export type DeclaredSaga = {
+  readonly target: ClassDeclaration;
+  readonly outcomes: readonly (readonly [ClassDeclaration, ClassDeclaration])[];
+};
+
+export type DeclaredEvents = {
+  readonly handlerDecorators: readonly string[];
+  readonly registerMethods: readonly string[];
+  readonly inProcess: readonly ClassDeclaration[];
+  readonly sagas: readonly DeclaredSaga[];
+};
+
 export type DomainDeclaration = {
   readonly aggregateBaseClasses: readonly string[];
   readonly auditFields: readonly string[];
@@ -20,6 +32,7 @@ export type DomainDeclaration = {
   readonly inertEventMethods: readonly string[];
   readonly inertMembers: readonly string[];
   readonly lifecycles: readonly DeclaredLifecycle[];
+  readonly events: DeclaredEvents;
 };
 
 export const DEFAULT_DECLARATION: DomainDeclaration = {
@@ -29,4 +42,5 @@ export const DEFAULT_DECLARATION: DomainDeclaration = {
   inertEventMethods: [],
   inertMembers: [],
   lifecycles: [],
+  events: { handlerDecorators: ['EventsHandler', 'OnEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
 };

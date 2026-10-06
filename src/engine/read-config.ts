@@ -8,7 +8,14 @@ import {
   SourceFile,
   ts,
 } from 'ts-morph';
-import { DEFAULT_DECLARATION, DeclaredField, DeclaredLifecycle, DomainDeclaration } from './declaration';
+import {
+  DEFAULT_DECLARATION,
+  DeclaredEvents,
+  DeclaredField,
+  DeclaredLifecycle,
+  DeclaredSaga,
+  DomainDeclaration,
+} from './declaration';
 import { ConfigError } from './errors';
 import { SET, UNSET, literalToken } from './value-token';
 
@@ -134,6 +141,57 @@ const readLifecycle = (element: Expression): DeclaredLifecycle => {
   };
 };
 
+const projectClass = (expression: Node, what: string): ClassDeclaration => {
+  const declaration = Node.isIdentifier(expression)
+    ? expression.getDefinitionNodes().find((node) => Node.isClassDeclaration(node))
+    : undefined;
+  if (!Node.isClassDeclaration(declaration)) throw unsupported(expression, `${what} must be a class reference`);
+  const file = declaration.getSourceFile();
+  if (file.isDeclarationFile() || file.isInNodeModules()) {
+    throw unsupported(expression, `${what} must be a class declared in the project`);
+  }
+  return declaration;
+};
+
+const readOutcome = (sagaName: string) => (element: Expression): readonly [ClassDeclaration, ClassDeclaration] => {
+  if (!Node.isArrayLiteralExpression(element) || element.getElements().length !== 2) {
+    throw unsupported(element, 'each outcome must be a [success, failure] array literal');
+  }
+  const [success, failure] = element.getElements().map((item) => projectClass(item, 'an outcome element'));
+  if (success === undefined || failure === undefined) throw unsupported(element, 'each outcome must be a [success, failure] array literal');
+  if (success === failure) {
+    throw new ConfigError(
+      `domain.config.ts:${element.getStartLineNumber()} an outcome of saga(${sagaName}) lists ${success.getName() ?? 'a class'} as both success and failure.`,
+    );
+  }
+  return [success, failure];
+};
+
+const readSaga = (element: Expression): DeclaredSaga => {
+  const call = callNamed(element, 'saga');
+  if (!call) throw unsupported(element, 'each entry of "events.sagas" must be a saga(...) call');
+  const [targetArgument] = call.getArguments();
+  if (targetArgument === undefined) throw unsupported(call, 'saga() needs a class');
+  const target = projectClass(targetArgument, 'the first argument of saga()');
+  const outcomes = valueOf(objectArgument(call, 1), 'outcomes');
+  if (outcomes === undefined) throw unsupported(call, 'saga() needs "outcomes"');
+  return { target, outcomes: arrayElements(outcomes).map(readOutcome(target.getName() ?? 'anonymous')) };
+};
+
+const readEvents = (expression: Expression | undefined): DeclaredEvents => {
+  const defaults = DEFAULT_DECLARATION.events;
+  if (expression === undefined) return defaults;
+  if (!Node.isObjectLiteralExpression(expression)) throw unsupported(expression, '"events" must be an object literal');
+  const inProcess = valueOf(expression, 'inProcess');
+  const sagas = valueOf(expression, 'sagas');
+  return {
+    handlerDecorators: stringList(valueOf(expression, 'handlerDecorators'), defaults.handlerDecorators),
+    registerMethods: stringList(valueOf(expression, 'registerMethods'), defaults.registerMethods),
+    inProcess: inProcess === undefined ? [] : arrayElements(inProcess).map((element) => projectClass(element, 'each entry of "events.inProcess"')),
+    sagas: sagas === undefined ? [] : arrayElements(sagas).map(readSaga),
+  };
+};
+
 export const readDeclaration = (file: SourceFile): DomainDeclaration => {
   assertNoTypeErrors(file);
   const exported = file.getExportAssignment((assignment) => !assignment.isExportEquals());
@@ -154,5 +212,6 @@ export const readDeclaration = (file: SourceFile): DomainDeclaration => {
     ),
     inertMembers: stringList(valueOf(config, 'inertMembers'), DEFAULT_DECLARATION.inertMembers),
     lifecycles: lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle),
+    events: readEvents(valueOf(config, 'events')),
   };
 };

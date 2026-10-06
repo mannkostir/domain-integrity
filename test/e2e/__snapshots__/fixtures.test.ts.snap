@@ -67,3 +67,182 @@ error terminal-state-leak  Order.annotate()  src/order.ts:36
 4 errors, 1 warning
 "
 `;
+
+exports[`fixture projects > event-flows: diagram 1`] = `
+"## Event flows
+
+\`\`\`mermaid
+flowchart LR
+  event_0["InvoiceSent"] --> handler_0["InvoiceHandler.handle"]
+  event_1["OrderPlaced"] --> handler_1["OrderPlacedHandler.handle"]
+  event_2["PaymentCaptured"] --> handler_2["OrderSaga.captured"]
+  event_3["RefundIssued"] --> handler_3["RefundHandler.handle"]
+\`\`\`
+"
+`;
+
+exports[`fixture projects > event-flows: sarif report 1`] = `
+"{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "domain-integrity",
+          "rules": [
+            {
+              "id": "terminal-state-leak",
+              "shortDescription": {
+                "text": "A method can change an aggregate after it reached a terminal state."
+              }
+            },
+            {
+              "id": "unreachable-state",
+              "shortDescription": {
+                "text": "A declared state value is never assigned."
+              }
+            },
+            {
+              "id": "outside-mutation",
+              "shortDescription": {
+                "text": "Aggregate state is assigned outside the aggregate."
+              }
+            },
+            {
+              "id": "transition-drift",
+              "shortDescription": {
+                "text": "A method's allowed source states differ from its declared transition."
+              }
+            },
+            {
+              "id": "dead-handler",
+              "shortDescription": {
+                "text": "A handler is registered for an event class that production code never constructs."
+              }
+            },
+            {
+              "id": "handler-payload-mismatch",
+              "shortDescription": {
+                "text": "A handler is registered for one event class but declares its event as an unrelated class."
+              }
+            },
+            {
+              "id": "unhandled-event",
+              "shortDescription": {
+                "text": "A declared in-process event is constructed but has no handler."
+              }
+            },
+            {
+              "id": "saga-missing-failure-path",
+              "shortDescription": {
+                "text": "A saga handles the success event of a declared outcome but not its failure event."
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "dead-handler",
+          "level": "error",
+          "message": {
+            "text": "RefundHandler.handle handles RefundIssued, but no production code constructs RefundIssued. Fix: Publish RefundIssued where it happens, or delete the handler."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/handlers.ts"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "handler-payload-mismatch",
+          "level": "error",
+          "message": {
+            "text": "OrderPlacedHandler.handle is registered for OrderPlaced but declares its event as PaymentCaptured. Fix: Type the parameter as OrderPlaced, or register the handler for PaymentCaptured."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/handlers.ts"
+                },
+                "region": {
+                  "startLine": 13
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "unhandled-event",
+          "level": "error",
+          "message": {
+            "text": "Shipped is declared in-process and constructed, but no handler is registered for it. Fix: Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/order.ts"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "saga-missing-failure-path",
+          "level": "error",
+          "message": {
+            "text": "OrderSaga handles PaymentCaptured but not its declared failure PaymentFailed. Fix: Handle PaymentFailed in OrderSaga, for example with a compensating command."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/saga.ts"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+"
+`;
+
+exports[`fixture projects > event-flows: text report 1`] = `
+"error dead-handler  RefundIssued → RefundHandler.handle  src/handlers.ts:4
+  RefundHandler.handle handles RefundIssued, but no production code constructs RefundIssued.
+  Fix: Publish RefundIssued where it happens, or delete the handler.
+
+error handler-payload-mismatch  OrderPlaced → OrderPlacedHandler.handle  src/handlers.ts:13
+  OrderPlacedHandler.handle is registered for OrderPlaced but declares its event as PaymentCaptured.
+  Fix: Type the parameter as OrderPlaced, or register the handler for PaymentCaptured.
+
+error unhandled-event  Shipped  src/order.ts:6
+  Shipped is declared in-process and constructed, but no handler is registered for it.
+  Fix: Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere.
+
+error saga-missing-failure-path  PaymentFailed → OrderSaga  src/saga.ts:4
+  OrderSaga handles PaymentCaptured but not its declared failure PaymentFailed.
+  Fix: Handle PaymentFailed in OrderSaga, for example with a compensating command.
+
+4 errors, 0 warnings
+"
+`;

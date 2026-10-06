@@ -1,11 +1,12 @@
-import { Finding, Severity } from '../../../analyzer';
+import { LifecycleFinding, Severity } from '../../../analyzer';
 import { AggregateModel, FieldBehaviour, MethodModel, StateField } from '../model';
 import { writesField } from '../values';
 import { fieldOf, quoted } from './format';
 
 type Drift = { readonly severity: Severity; readonly subject: string; readonly message: string; readonly fix: string };
 
-const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodModel, drift: Drift): Finding => ({
+const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodModel, drift: Drift): LifecycleFinding => ({
+  analyzer: 'lifecycle',
   checkId: 'transition-drift',
   aggregate: aggregate.name,
   aggregateId: aggregate.id,
@@ -66,7 +67,7 @@ const driftOf = (field: StateField, method: MethodModel, transitions: ReadonlyMa
   ];
 };
 
-export const transitionDrift = (aggregate: AggregateModel): Finding[] =>
+export const transitionDrift = (aggregate: AggregateModel): LifecycleFinding[] =>
   [...aggregate.declarations].flatMap(([name, declaration]) => {
     const transitions = declaration.transitions;
     if (!transitions) return [];

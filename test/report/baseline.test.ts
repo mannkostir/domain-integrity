@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { UsageError } from '../../src/engine/errors';
 import { partitionByBaseline, readBaseline, serializeBaseline } from '../../src/report/baseline';
-import { finding } from '../helpers/model';
+import { finding, flowFinding } from '../helpers/model';
 
 const tempFile = (content: string): string => {
   const path = join(mkdtempSync(join(tmpdir(), 'baseline-')), 'baseline.json');
@@ -46,5 +46,17 @@ describe('baseline', () => {
 
   it('keys a finding of a uniquely named aggregate by its class name', () => {
     expect(JSON.parse(serializeBaseline([finding({})])).findings).toEqual(['terminal-state-leak|Order|annotate|status|CANCELLED']);
+  });
+
+  it('keys an event-flow finding by event, handler and subject', () => {
+    expect(JSON.parse(serializeBaseline([flowFinding({ checkId: 'handler-payload-mismatch', subject: 'PaymentCaptured' })])).findings).toEqual([
+      'handler-payload-mismatch|RefundIssued|RefundHandler.handle|PaymentCaptured',
+    ]);
+  });
+
+  it('keys an event-flow finding without a handler with an empty handler segment', () => {
+    expect(JSON.parse(serializeBaseline([flowFinding({ checkId: 'unhandled-event', handler: undefined })])).findings).toEqual([
+      'unhandled-event|RefundIssued||',
+    ]);
   });
 });

@@ -7,7 +7,7 @@ import { openSession } from './session';
 
 export const contextCommand = (paths: Paths, write: string | undefined, io: Io): number => {
   const { results } = openSession(paths);
-  const summary = results.map((result) => result.summary(paths.root)).join('\n');
+  const summary = results.map((result) => result.summary(paths.root)).filter((text) => text.length > 0).join('\n');
   if (write === undefined) {
     io.out(summary);
     return 0;

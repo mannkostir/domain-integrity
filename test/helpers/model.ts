@@ -1,4 +1,4 @@
-import { Finding } from '../../src/analyzer';
+import { EventFlowFinding, Finding, LifecycleFinding } from '../../src/analyzer';
 import {
   AggregateModel,
   AssignedValues,
@@ -84,7 +84,8 @@ export const DECLARED_ORDER = aggregate({
   ],
 });
 
-export const finding = (overrides: Partial<Finding>): Finding => ({
+export const finding = (overrides: Partial<LifecycleFinding>): LifecycleFinding => ({
+  analyzer: 'lifecycle',
   checkId: 'terminal-state-leak',
   severity: 'error',
   aggregate: 'Order',
@@ -98,3 +99,21 @@ export const finding = (overrides: Partial<Finding>): Finding => ({
   fix: 'F1',
   ...overrides,
 });
+
+export const flowFinding = (overrides: Partial<EventFlowFinding>): EventFlowFinding => ({
+  analyzer: 'event-flow',
+  checkId: 'dead-handler',
+  severity: 'error',
+  event: 'RefundIssued',
+  eventId: 'RefundIssued',
+  handler: 'RefundHandler.handle',
+  subject: '',
+  file: '/app/src/handlers.ts',
+  line: 4,
+  message: 'M3',
+  fix: 'F3',
+  ...overrides,
+});
+
+export const lifecycleFindings = (findings: readonly Finding[]): LifecycleFinding[] =>
+  findings.filter((candidate): candidate is LifecycleFinding => candidate.analyzer === 'lifecycle');

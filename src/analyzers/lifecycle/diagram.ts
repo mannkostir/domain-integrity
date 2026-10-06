@@ -1,13 +1,10 @@
 import { posix } from 'node:path';
 import { AmbiguousReference, DiagramOutcome } from '../../analyzer';
+import { escapeLabel } from '../mermaid-label';
 import { leakedTerminalTokens } from './checks/terminal-state-leak';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField } from './model';
 
 type Edge = { readonly from: string; readonly to: string; readonly label: string; readonly leak: boolean };
-
-const LABEL_ESCAPES: Readonly<Record<string, string>> = { '#': '#35;', '"': '#quot;', ';': '#59;' };
-
-const escapeLabel = (label: string): string => label.replace(/[#";]/g, (character) => LABEL_ESCAPES[character] ?? character);
 
 const stateId = (field: StateField, token: string): string =>
   `${field.name}_${field.values.findIndex((value) => value.token === token)}`;

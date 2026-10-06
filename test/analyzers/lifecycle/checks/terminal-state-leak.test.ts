@@ -28,6 +28,7 @@ describe('terminalStateLeak', () => {
 
     expect(findings).toEqual([
       {
+        analyzer: 'lifecycle',
         checkId: 'terminal-state-leak',
         severity: 'error',
         aggregate: 'Order',

@@ -11,9 +11,14 @@ export type Report = {
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
 
+const location = (finding: Finding): string =>
+  finding.analyzer === 'lifecycle'
+    ? `${finding.aggregateId}${finding.method ? `.${finding.method}()` : ''}`
+    : `${finding.eventId}${finding.handler ? ` → ${finding.handler}` : ''}`;
+
 const entry = (finding: Finding, root: string, suffix: string): string =>
   [
-    `${finding.severity} ${finding.checkId}  ${finding.aggregateId}${finding.method ? `.${finding.method}()` : ''}  ${toPosixRelative(root, finding.file)}:${finding.line}${suffix}`,
+    `${finding.severity} ${finding.checkId}  ${location(finding)}  ${toPosixRelative(root, finding.file)}:${finding.line}${suffix}`,
     `  ${finding.message}`,
     `  Fix: ${finding.fix}`,
   ].join('\n');

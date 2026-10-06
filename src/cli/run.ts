@@ -21,11 +21,11 @@ const withCommonOptions = (command: Command): Command =>
 
 const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
   const program = new Command('domain-integrity')
-    .description('Check that aggregate lifecycles match their declared intent.')
+    .description('Check aggregate lifecycles and in-process event flows against their declared intent.')
     .exitOverride()
     .configureOutput({ writeOut: io.out, writeErr: io.err });
 
-  withCommonOptions(program.command('check').description('report lifecycle findings'))
+  withCommonOptions(program.command('check').description('report lifecycle and event-flow findings'))
     .option('--format <format>', 'text, json or sarif', 'text')
     .option('--baseline <path>', 'treat findings in this baseline file as known')
     .option('--update-baseline', 'write the current findings to the baseline file')
@@ -33,12 +33,12 @@ const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
       outcome.exitCode = checkCommand(pathsFrom(options, io), options, io);
     });
 
-  withCommonOptions(program.command('show').description('print Mermaid state diagrams').argument('[aggregate]'))
-    .action((aggregate: string | undefined, options: CommonOptions) => {
-      outcome.exitCode = showCommand(pathsFrom(options, io), aggregate, io);
+  withCommonOptions(program.command('show').description('print Mermaid state and event-flow diagrams').argument('[name]'))
+    .action((name: string | undefined, options: CommonOptions) => {
+      outcome.exitCode = showCommand(pathsFrom(options, io), name, io);
     });
 
-  withCommonOptions(program.command('context').description('print or write the lifecycle summary for agents'))
+  withCommonOptions(program.command('context').description('print or write the domain summary for agents'))
     .option('--write <file>', 'replace the domain-integrity section in this file')
     .action((options: CommonOptions & { readonly write?: string }) => {
       outcome.exitCode = contextCommand(pathsFrom(options, io), options.write, io);

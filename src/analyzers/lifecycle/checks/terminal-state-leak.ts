@@ -1,4 +1,4 @@
-import { Finding } from '../../../analyzer';
+import { LifecycleFinding } from '../../../analyzer';
 import { AggregateModel, FieldDeclaration, MethodModel, StateField } from '../model';
 import { fieldOf, quoted } from './format';
 
@@ -7,7 +7,8 @@ const leakFinding = (
   field: StateField,
   method: MethodModel,
   leaked: readonly string[],
-): Finding => ({
+): LifecycleFinding => ({
+  analyzer: 'lifecycle',
   checkId: 'terminal-state-leak',
   severity: 'error',
   aggregate: aggregate.name,
@@ -41,13 +42,13 @@ export const leakedTerminalTokens = (
     .filter((token) => declaration.terminal.has(token) && sources.values.has(token));
 };
 
-const leaksOf = (aggregate: AggregateModel, field: StateField, declaration: FieldDeclaration): Finding[] =>
+const leaksOf = (aggregate: AggregateModel, field: StateField, declaration: FieldDeclaration): LifecycleFinding[] =>
   aggregate.methods.flatMap((method) => {
     const leaked = leakedTerminalTokens(aggregate, method, field, declaration);
     return leaked.length === 0 ? [] : [leakFinding(aggregate, field, method, leaked)];
   });
 
-export const terminalStateLeak = (aggregate: AggregateModel): Finding[] =>
+export const terminalStateLeak = (aggregate: AggregateModel): LifecycleFinding[] =>
   [...aggregate.declarations].flatMap(([name, declaration]) =>
     leaksOf(aggregate, fieldOf(aggregate, name), declaration),
   );

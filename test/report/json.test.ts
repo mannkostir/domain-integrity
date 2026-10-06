@@ -8,4 +8,10 @@ describe('formatJson', () => {
 
     expect(parsed).toEqual({ findings: [{ ...finding({}), file: 'src/order.ts' }], known: [], problems: ['p'] });
   });
+
+  it('tags lifecycle findings with their analyzer', () => {
+    const parsed = JSON.parse(formatJson({ fresh: [finding({})], known: [], problems: [], rules: [], root: '/app' }));
+
+    expect(parsed.findings[0].analyzer).toBe('lifecycle');
+  });
 });

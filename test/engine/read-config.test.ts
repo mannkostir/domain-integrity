@@ -13,6 +13,11 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
   cancel(): void { this.props.status = OrderStatus.cancelled; }
 }
 `,
+  '/src/payments.ts': `
+export class PaymentCaptured { private constructor() {} }
+export class PaymentFailed {}
+export class OrderSaga {}
+`,
 };
 
 const read = (config: string, compilerOptionOverrides: CompilerOptions = {}) => {
@@ -34,6 +39,7 @@ export default defineDomain({});
       inertEventMethods: [],
       inertMembers: [],
       lifecycles: [],
+      events: { handlerDecorators: ['EventsHandler', 'OnEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
     });
   });
 
@@ -266,5 +272,125 @@ const name = 'addDomainEvent' as string;
 export default defineDomain({ inertEventMethods: [name] });
 `),
     ).toThrow(/expected a string literal/);
+  });
+});
+
+describe('readDeclaration events', () => {
+  const header = `
+import { defineDomain, saga } from 'domain-integrity';
+import { OrderSaga, PaymentCaptured, PaymentFailed } from './src/payments';
+`;
+
+  it('resolves in-process classes, saga targets and outcomes', () => {
+    const { events } = read(`${header}
+export default defineDomain({ events: { handlerDecorators: ['HandleEvent'], registerMethods: [], inProcess: [PaymentFailed], sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured, PaymentFailed]] })] } });
+`);
+
+    expect({
+      handlerDecorators: events.handlerDecorators,
+      registerMethods: events.registerMethods,
+      inProcess: events.inProcess.map((cls) => cls.getName()),
+      sagas: events.sagas.map((declared) => [declared.target.getName(), declared.outcomes.map((pair) => pair.map((cls) => cls.getName()))]),
+    }).toEqual({
+      handlerDecorators: ['HandleEvent'],
+      registerMethods: [],
+      inProcess: ['PaymentFailed'],
+      sagas: [['OrderSaga', [['PaymentCaptured', 'PaymentFailed']]]],
+    });
+  });
+
+  it('rejects an outcome whose success and failure are the same class', () => {
+    expect(() => read(`${header}
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentFailed, PaymentFailed]] })] } });
+`)).toThrow(/both success and failure/);
+  });
+
+  it('rejects an in-process entry that is not a class reference', () => {
+    expect(() => read(`${header}
+const Alias = PaymentFailed;
+export default defineDomain({ events: { inProcess: [Alias] } });
+`)).toThrow(/each entry of "events.inProcess" must be a class reference/);
+  });
+
+  it('rejects an outcome that is not an array literal', () => {
+    expect(() => read(`${header}
+const pair = [PaymentCaptured, PaymentFailed] as const;
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [pair] })] } });
+`)).toThrow(/each outcome must be a \[success, failure\] array literal/);
+  });
+
+  it('rejects a saga entry that is not a saga() call', () => {
+    expect(() => read(`${header}
+const declared = saga(OrderSaga, { outcomes: [] });
+export default defineDomain({ events: { sagas: [declared] } });
+`)).toThrow(/saga\(\.\.\.\) call/);
+  });
+
+  it('rejects a class declared only in a .d.ts file', () => {
+    const project = inMemoryProject({
+      ...DOMAIN,
+      '/types/external.d.ts': 'export declare class ExternalEvent {}',
+      '/domain.config.ts': `
+import { defineDomain } from 'domain-integrity';
+import { ExternalEvent } from './types/external';
+export default defineDomain({ events: { inProcess: [ExternalEvent] } });
+`,
+    });
+
+    expect(() => readDeclaration(project.getSourceFileOrThrow('/domain.config.ts'))).toThrow(/declared in the project/);
+  });
+
+  it('rejects events that is not an object literal', () => {
+    expect(() => read(`${header}
+const declared = {};
+export default defineDomain({ events: declared });
+`)).toThrow(/"events" must be an object literal/);
+  });
+
+  it('rejects a saga spec that is not an object literal', () => {
+    expect(() => read(`${header}
+const spec = { outcomes: [] };
+export default defineDomain({ events: { sagas: [saga(OrderSaga, spec)] } });
+`)).toThrow(/argument 2 of saga\(\) must be an object literal/);
+  });
+
+  it('rejects outcomes that is not an array literal', () => {
+    expect(() => read(`${header}
+const list: [] = [];
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: list })] } });
+`)).toThrow(/expected an array literal/);
+  });
+
+  it('rejects an outcome with one element', () => {
+    expect(() => read(`${header}
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured]] })] } });
+`)).toThrow(/Type errors in domain.config.ts/);
+  });
+
+  it('rejects an outcome with three elements', () => {
+    expect(() => read(`${header}
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured, PaymentFailed, PaymentFailed]] })] } });
+`)).toThrow(/Type errors in domain.config.ts/);
+  });
+
+  it('rejects a handler decorator that is not a string literal', () => {
+    expect(() => read(`${header}
+const decorator = 'HandleEvent';
+export default defineDomain({ events: { handlerDecorators: [decorator] } });
+`)).toThrow(/expected a string literal/);
+  });
+
+  it('rejects a saga target that is not a project class', () => {
+    expect(() => read(`${header}
+const Alias = OrderSaga;
+export default defineDomain({ events: { sagas: [saga(Alias, { outcomes: [] })] } });
+`)).toThrow(/the first argument of saga\(\) must be a class reference/);
+  });
+
+  it('rejects an outcome element that is not a project class', () => {
+    expect(() => read(`${header}
+const Alias = PaymentFailed;
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured, Alias]] })] } });
+`)).toThrow(/an outcome element must be a class reference/);
   });
 });

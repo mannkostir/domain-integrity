@@ -3,6 +3,7 @@ import { analyse } from '../../../src/analyzer';
 import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
+import { lifecycleFindings } from '../../helpers/model';
 
 const project = inMemoryProject({
   '/src/aggregate-root.ts': AGGREGATE_ROOT,
@@ -30,7 +31,7 @@ describe('lifecycleAnalyzer', () => {
       root: '/',
     });
 
-    expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
+    expect(lifecycleFindings(result.findings).map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
   });
 
   it('reports the leak for an unguarded method that emits the state it just assigned', () => {
@@ -56,7 +57,7 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
       root: '/',
     });
 
-    expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak pay']);
+    expect(lifecycleFindings(result.findings).map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak pay']);
   });
 
   it('a truthy exit on a number field keeps set as a source', () => {
@@ -109,7 +110,7 @@ export class Account {
       root: '/',
     });
 
-    expect(result.findings.map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
+    expect(lifecycleFindings(result.findings).map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
   });
 
   it('describes its four rules', () => {
