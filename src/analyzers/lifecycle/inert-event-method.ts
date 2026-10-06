@@ -80,12 +80,28 @@ export const assertedInertEventMethods = (
     ? new Set()
     : new Set(names.filter((name) => isAssertable(name, files)));
 
-const hasResolvedBase = (cls: ClassDeclaration): boolean => {
-  const heritage = cls.getExtends();
-  return heritage === undefined || !heritage.getType().isAny();
+const hasUnresolvedExtends = (declaration: Node): boolean => {
+  const heritage = Node.isClassDeclaration(declaration) || Node.isClassExpression(declaration) ? declaration.getExtends() : undefined;
+  return heritage !== undefined && heritage.getExpression().getType().isAny();
 };
 
-export const hasResolvedBases = (chain: readonly ClassDeclaration[]): boolean => chain.every(hasResolvedBase);
+const declaresUnresolvedExtends = (type: Type): boolean =>
+  (type.getSymbol()?.getDeclarations() ?? []).some(hasUnresolvedExtends);
+
+const hasUnresolvedHeritage = (type: Type, seen: ReadonlySet<ts.Type>): boolean => {
+  const declared = type.getTargetType() ?? type;
+  if (seen.has(declared.compilerType)) return false;
+  const next = new Set([...seen, declared.compilerType]);
+  return (
+    declared.isAny() ||
+    declaresUnresolvedExtends(declared) ||
+    [...declared.getUnionTypes(), ...declared.getIntersectionTypes(), ...declared.getBaseTypes()].some((base) =>
+      hasUnresolvedHeritage(base, next),
+    )
+  );
+};
+
+export const hasResolvedBases = (cls: ClassDeclaration): boolean => !hasUnresolvedHeritage(cls.getType(), new Set());
 
 export const isDeclaredOnlyAsMethods = (declarations: readonly Node[]): boolean =>
   declarations.length > 0 &&
