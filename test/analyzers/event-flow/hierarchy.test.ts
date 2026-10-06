@@ -5,7 +5,7 @@ import { inMemoryProject } from '../../helpers/in-memory';
 const of = (name: string) => {
   const project = inMemoryProject({
     '/types/lib.d.ts': 'export declare class LibrarySaga {}',
-    '/src/classes.ts': "import { LibrarySaga } from '../types/lib';\ndeclare const Unknown: new () => object;\nexport class Base {}\nexport class Middle extends Base {}\nexport class Leaf extends Middle {}\nexport class OnLibrary extends LibrarySaga {}\nexport class OnUnknown extends Unknown {}",
+    '/src/classes.ts': "import { LibrarySaga } from '../types/lib';\ndeclare const Unknown: new () => object;\ndeclare const Mixin: <T>(base: T) => T;\nexport class Base {}\nexport class Middle extends Base {}\nexport class Leaf extends Middle {}\nexport class OnLibrary extends LibrarySaga {}\nexport class OnUnknown extends Unknown {}\nexport class Mixed extends Mixin(Base) {}",
   });
   const hierarchy = hierarchyOf(project.getSourceFileOrThrow('/src/classes.ts').getClassOrThrow(name), (cls) => !cls.getSourceFile().isDeclarationFile());
   return { ancestors: hierarchy.ancestors.map((cls) => cls.getName()), extendsForeign: hierarchy.extendsForeign };
@@ -19,5 +19,9 @@ describe('hierarchyOf', () => {
       { ancestors: [], extendsForeign: true },
       { ancestors: [], extendsForeign: true },
     ]);
+  });
+
+  it('treats a base built by a call as foreign', () => {
+    expect(of('Mixed')).toEqual({ ancestors: [], extendsForeign: true });
   });
 });
