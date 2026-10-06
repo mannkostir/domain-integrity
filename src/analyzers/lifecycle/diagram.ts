@@ -1,4 +1,5 @@
-import { DiagramOutcome } from '../../analyzer';
+import { posix } from 'node:path';
+import { AmbiguousReference, DiagramOutcome } from '../../analyzer';
 import { leakedTerminalTokens } from './checks/terminal-state-leak';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField } from './model';
 
@@ -68,17 +69,24 @@ export const fieldDiagram = (aggregate: AggregateModel, field: StateField): stri
 
 type Selection =
   | { readonly kind: 'selected'; readonly aggregates: readonly AggregateModel[] }
-  | { readonly kind: 'ambiguous'; readonly candidates: readonly string[] };
+  | AmbiguousReference;
+
+const normalisedReference = (reference: string): string => {
+  const separator = reference.lastIndexOf(':');
+  return separator < 0
+    ? reference
+    : `${posix.normalize(reference.slice(0, separator).replaceAll('\\', '/'))}${reference.slice(separator)}`;
+};
 
 const isNamed = (aggregate: AggregateModel, only: string): boolean =>
-  aggregate.qualifiedName === only || aggregate.name === only;
+  aggregate.qualifiedName === normalisedReference(only) || aggregate.name === only;
 
 const selectDeclared = (aggregates: readonly AggregateModel[], only: string | undefined): Selection => {
   const declared = aggregates.filter((aggregate) => aggregate.declared);
   if (only === undefined) return { kind: 'selected', aggregates: declared };
   const matches = declared.filter((aggregate) => isNamed(aggregate, only));
   return matches.length > 1
-    ? { kind: 'ambiguous', candidates: matches.map((aggregate) => aggregate.qualifiedName) }
+    ? { kind: 'ambiguous', reference: only, candidates: matches.map((aggregate) => aggregate.qualifiedName) }
     : { kind: 'selected', aggregates: matches };
 };
 

@@ -112,9 +112,24 @@ describe('lifecycleDiagrams', () => {
     });
   });
 
+  it('selects an aggregate by a qualified name with a leading dot segment', () => {
+    expect(lifecycleDiagrams({ aggregates: [TICKET_A, TICKET_B], problems: [] }, './src/b/ticket.ts:Ticket')).toEqual({
+      kind: 'diagram',
+      text: diagramOf(TICKET_B),
+    });
+  });
+
+  it('selects an aggregate by a qualified name with backslash separators', () => {
+    expect(lifecycleDiagrams({ aggregates: [TICKET_A, TICKET_B], problems: [] }, 'src\\b\\ticket.ts:Ticket')).toEqual({
+      kind: 'diagram',
+      text: diagramOf(TICKET_B),
+    });
+  });
+
   it('reports a plain name shared by two declared aggregates as ambiguous', () => {
     expect(lifecycleDiagrams({ aggregates: [TICKET_A, TICKET_B], problems: [] }, 'Ticket')).toEqual({
       kind: 'ambiguous',
+      reference: 'Ticket',
       candidates: ['src/a/ticket.ts:Ticket', 'src/b/ticket.ts:Ticket'],
     });
   });

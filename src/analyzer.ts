@@ -26,9 +26,9 @@ export type Finding = {
 export const findingKey = (finding: Finding): string =>
   [finding.checkId, finding.aggregateId, finding.method ?? '', finding.field, finding.subject].join('|');
 
-export type DiagramOutcome =
-  | { readonly kind: 'diagram'; readonly text: string }
-  | { readonly kind: 'ambiguous'; readonly candidates: readonly string[] };
+export type AmbiguousReference = { readonly kind: 'ambiguous'; readonly reference: string; readonly candidates: readonly string[] };
+
+export type DiagramOutcome = { readonly kind: 'diagram'; readonly text: string } | AmbiguousReference;
 
 export type RuleDescription = { readonly id: string; readonly description: string };
 

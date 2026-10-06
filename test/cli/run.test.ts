@@ -197,6 +197,15 @@ describe('same-named aggregates', () => {
     });
   });
 
+  it('shows the aggregate named by a dot-prefixed path', async () => {
+    const { io, stdout } = captureIo(writeProject(SAME_NAMED_PROJECT));
+
+    expect({ code: await run(['show', './src/b/ticket.ts:Ticket'], io), output: stdout().match(/^## .*$/gm) }).toEqual({
+      code: 0,
+      output: ['## src/b/ticket.ts:Ticket.status'],
+    });
+  });
+
   it('writes path-qualified baseline keys', async () => {
     const dir = writeProject(SAME_NAMED_PROJECT);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
