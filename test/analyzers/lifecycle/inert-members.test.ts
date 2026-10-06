@@ -49,6 +49,16 @@ export class LeakyTodo extends Entity<{ status: Status }> {
   close(): void { if (this.props.status === 'closed') throw new Error('x'); this.props.status = 'closed'; }
 }
 `,
+  '/src/override-todo.ts': `
+import { Entity } from '../types/ddd';
+export type Status = 'open' | 'closed';
+export class ClearingTodo extends Entity<{ status: Status }> {
+  private note = '';
+  override clearDomainEvents(): void { super.clearDomainEvents(); }
+  commitViaOverride(): void { this.note = ''; this.clearDomainEvents(); }
+  close(): void { if (this.props.status === 'closed') throw new Error('x'); this.props.status = 'closed'; }
+}
+`,
   '/src/mixed-todo.ts': `
 export type Status = 'open' | 'closed';
 export class Core { protected props: { status: Status } = { status: 'open' }; }
@@ -151,6 +161,16 @@ describe('inertMembers', () => {
 
   it('lets a listed library method be called, directly or through super, without silencing the method', () => {
     expect(leaks(todo, ['clearDomainEvents'])).toEqual(['commit', 'resetBySuper']);
+  });
+
+  it('lets a project override that delegates a listed method through super be called without silencing the method', () => {
+    expect(leaks(classNamed('/src/override-todo.ts', 'ClearingTodo'), ['clearDomainEvents'])).toEqual([
+      'commitViaOverride',
+    ]);
+  });
+
+  it('leaves an unlisted library method reached through a project override silencing the method', () => {
+    expect(leaks(classNamed('/src/override-todo.ts', 'ClearingTodo'), [])).toEqual([]);
   });
 
   it('does not make a method that only calls a listed method count as changing the aggregate', () => {
