@@ -108,6 +108,16 @@ export abstract class Root {
 }
 `;
 
+const UNRESOLVED_ROOT = `
+import { Lib } from 'missing-lib';
+import { Registry } from './registry';
+export abstract class Root extends Lib {
+  readonly id: string = 'id';
+  private events: object[] = [];
+  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
+}
+`;
+
 const PAYMENT = `
 import { Root } from './root';
 import { Paid } from './registry';
@@ -189,6 +199,7 @@ const computedKey = projectWith(PLAIN_ROOT, PAYMENT + COMPUTED_KEY_SUBCLASS, DEF
 const openKey = projectWith(PLAIN_ROOT, PAYMENT + OPEN_KEY_SUBCLASS, DEFINE);
 const assigningClassExpression = projectWith(PLAIN_ROOT, PAYMENT + ASSIGNING_CLASS_EXPRESSION, DEFINE);
 const decoratedClassExpression = projectWith(PLAIN_ROOT, PAYMENT + DECORATED_CLASS_EXPRESSION, DEFINE);
+const unresolvedBase = projectWith(UNRESOLVED_ROOT, PAYMENT, DEFINE);
 
 const leaks = (project: Project, inertEventMethods: readonly string[]) => {
   const target = project.getSourceFileOrThrow('/src/payment.ts').getClassOrThrow('Payment');
@@ -281,5 +292,9 @@ describe('event methods that cannot be asserted inert', () => {
 
   it('ignores the entry when a class expression is decorated', () => {
     expect(leaks(decoratedClassExpression, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a base class of the aggregate cannot be resolved', () => {
+    expect(leaks(unresolvedBase, ['addDomainEvent'])).toEqual([]);
   });
 });

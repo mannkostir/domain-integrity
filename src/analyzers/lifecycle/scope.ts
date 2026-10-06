@@ -1,8 +1,8 @@
 import { ClassDeclaration, SourceFile } from 'ts-morph';
 import { DomainDeclaration } from '../../engine/declaration';
-import { AggregateScope } from './field-ref';
+import { AggregateScope, inheritanceChain } from './field-ref';
 import { plainEventArrays } from './array-store';
-import { assertedInertEventMethods } from './inert-event-method';
+import { assertedInertEventMethods, hasResolvedBases } from './inert-event-method';
 import { classFamily, leaksThis } from './this-leak';
 
 export const aggregateScope = (
@@ -14,7 +14,9 @@ export const aggregateScope = (
   return {
     cls,
     eventMethods: new Set(declaration.eventMethods),
-    inertEventMethods: assertedInertEventMethods(declaration.inertEventMethods, family, files),
+    inertEventMethods: hasResolvedBases(inheritanceChain(cls))
+      ? assertedInertEventMethods(declaration.inertEventMethods, family, files)
+      : new Set(),
     inertMembers: new Set(declaration.inertMembers),
     leaksThis: leaksThis(cls, files),
     plainEventArrays: plainEventArrays(family, files),

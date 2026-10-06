@@ -71,6 +71,13 @@ export const assertedInertEventMethods = (
     ? new Set()
     : new Set(names.filter((name) => isAssertable(name, files)));
 
+const hasResolvedBase = (cls: ClassDeclaration): boolean => {
+  const heritage = cls.getExtends();
+  return heritage === undefined || !heritage.getType().isAny();
+};
+
+export const hasResolvedBases = (chain: readonly ClassDeclaration[]): boolean => chain.every(hasResolvedBase);
+
 export const isDeclaredOnlyAsMethods = (declarations: readonly Node[]): boolean =>
   declarations.length > 0 &&
   declarations.every((declaration) => Node.isMethodDeclaration(declaration) || Node.isMethodSignature(declaration));
