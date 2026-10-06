@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: npm install --global npm@^11.5.1
+      - run: npm install --global npm@^11.15.0
       - run: npm ci
       - run: npm run build
       - shell: bash
@@ -42,7 +42,7 @@ jobs:
         run: |
           dist_tag=latest
           if [ "$PRERELEASE" = true ]; then dist_tag=next; fi
-          npm publish --provenance --access public --tag "$dist_tag"
+          npm stage publish --provenance --access public --tag "$dist_tag"
   move-major-tag:
     needs: publish
     if: startsWith(github.event.release.tag_name, 'v0.') && !github.event.release.prerelease
