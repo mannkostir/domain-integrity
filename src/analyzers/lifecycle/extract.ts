@@ -49,6 +49,7 @@ const resolveDeclaredField = (
     field: resolution.field,
     declaration: {
       terminal: new Set(declared.terminal),
+      allowAfterTerminal: new Set(declared.allowAfterTerminal),
       transitions: declared.transitions && new Map(transitions.map(([method, sources]) => [method, new Set(sources)])),
     },
   };

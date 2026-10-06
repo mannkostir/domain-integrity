@@ -18,9 +18,8 @@ const methodEdges = (
 ): Edge[] => {
   const behaviour = method.fields.get(field.name);
   if (!behaviour || behaviour.sources.kind === 'unknown') return [];
-  const terminal = declaration?.terminal ?? new Set<string>();
   const declared = declaration?.transitions?.get(method.name);
-  const leaks = leakedTerminalTokens(aggregate, method, field, terminal);
+  const leaks = declaration ? leakedTerminalTokens(aggregate, method, field, declaration) : [];
   const targets = [...behaviour.sets.tokens];
   const moves = [...behaviour.sources.values].flatMap((from) =>
     targets

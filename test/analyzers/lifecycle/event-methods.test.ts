@@ -86,7 +86,7 @@ const leaks = (target: ClassDeclaration, eventMethods: readonly string[] = DEFAU
       ...DEFAULT_DECLARATION,
       eventMethods,
       lifecycles: [
-        { target, fields: [{ name: 'status', terminal: ['cancelled'], transitions: undefined }], allowAfterTerminal: [] },
+        { target, fields: [{ name: 'status', terminal: ['cancelled'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] },
       ],
     },
     files: project.getSourceFiles(),

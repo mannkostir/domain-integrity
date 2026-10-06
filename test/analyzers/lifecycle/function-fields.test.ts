@@ -94,7 +94,7 @@ const leaks = () => {
     declaration: {
       ...DEFAULT_DECLARATION,
       lifecycles: [
-        { target: item, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined }], allowAfterTerminal: [] },
+        { target: item, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] },
       ],
     },
     files: project.getSourceFiles(),

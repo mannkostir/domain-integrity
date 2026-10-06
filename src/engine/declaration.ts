@@ -4,6 +4,7 @@ export type DeclaredField = {
   readonly name: string;
   readonly terminal: readonly string[];
   readonly transitions: ReadonlyMap<string, readonly string[]> | undefined;
+  readonly allowAfterTerminal: readonly string[];
 };
 
 export type DeclaredLifecycle = {
