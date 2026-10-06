@@ -6,7 +6,7 @@ const EVENTS = `
 export class Paid {}
 export class Failed {}
 export const EventsHandler = (...events: unknown[]) => (target: unknown) => target;
-export const OnEvent = (event: unknown) => (target: unknown, key: string) => target;
+export const OnEvent = (...args: unknown[]) => (target: unknown, key: string) => target;
 export const HandleEvent = (event: unknown) => (target: unknown) => target;
 `;
 
@@ -59,5 +59,13 @@ describe('decoratorRecogniser', () => {
 
   it('reads a decorator reached through a namespace', () => {
     expect(run('@ns.EventsHandler(Paid) export class Namespaced { handle(event: Paid) {} }')).toEqual(['Paid -> Namespaced.handle (Paid)']);
+  });
+
+  it('skips object-literal options when reading keys', () => {
+    expect(run('export class Listener { @OnEvent(Paid.name, { async: true }) onPaid(event: Paid) {} }')).toEqual(['Paid -> Listener.onPaid (Paid)']);
+  });
+
+  it('marks a decorator with only object-literal arguments unresolved', () => {
+    expect(run('export class Listener { @OnEvent({ async: true }) onPaid(event: Paid) {} }')).toEqual(['unresolved@4']);
   });
 });

@@ -22,7 +22,10 @@ const targetOf = (decorator: Decorator): Target | undefined => {
 
 const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSite | undefined => {
   const target = targetOf(decorator);
-  const keys = resolveKeys(decorator.getArguments(), context.isProject);
+  const keys = resolveKeys(
+    decorator.getArguments().filter((argument) => !Node.isObjectLiteralExpression(argument)),
+    context.isProject,
+  );
   if (target === undefined || keys.kind === 'unresolved') return { kind: 'unresolved', node: decorator };
   const payload = readPayload(target.method?.getParameters()[0], context.isProject);
   const registrations: RawRegistration[] = keys.classes.map(({ cls, key }) => ({
