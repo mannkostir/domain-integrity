@@ -46,6 +46,24 @@ export class ProjectOrder extends AuditedRoot {
   renameWithEvent(n: string): void { this.note = n; this.addEvent({ type: 'renamed' }); }
 }
 `,
+  '/src/mixin-todo.ts': `
+export type Status = 'open' | 'cancelled';
+export class Core { protected props: { status: Status } = { status: 'open' }; }
+type Constructor<T> = new (...args: never[]) => T;
+export const WithEvents = <B extends Constructor<Core>>(Base: B) =>
+  class extends Base {
+    private events: object[] = [];
+    addEvent(event: object): void {
+      if (this.props.status === 'cancelled') throw new Error('x');
+      this.events.push(event);
+    }
+  };
+export class MixinTodo extends WithEvents(Core) {
+  private note = '';
+  rename(n: string): void { this.addEvent({ type: 'renamed' }); this.note = n; }
+  cancel(): void { if (this.props.status === 'cancelled') throw new Error('x'); this.props.status = 'cancelled'; }
+}
+`,
 });
 
 const classNamed = (path: string, name: string): ClassDeclaration =>
@@ -88,5 +106,9 @@ describe('configured event methods without a body in the project', () => {
 
   it('are still traced when the project declares their body', () => {
     expect(leaks(classNamed('/src/project-order.ts', 'ProjectOrder'))).toEqual([]);
+  });
+
+  it('are traced as reading the field when a project mixin declares them', () => {
+    expect(leaks(classNamed('/src/mixin-todo.ts', 'MixinTodo'))).toEqual([]);
   });
 });

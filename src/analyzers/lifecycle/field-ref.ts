@@ -145,7 +145,7 @@ const isListedLibraryMember = (scope: AggregateScope, name: string): boolean =>
   scope.inertMembers.has(name) && isDeclaredOnlyInLibraries(scope.cls, name);
 
 const isInertEventMethod = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
-  member.kind === 'untraceable' && scope.eventMethods.has(name);
+  member.kind === 'untraceable' && scope.eventMethods.has(name) && isDeclaredOnlyInLibraries(scope.cls, name);
 
 const isInertUntraceable = (scope: AggregateScope, name: string, member: MemberLookup): boolean =>
   member.kind === 'untraceable' && isListedLibraryMember(scope, name);
