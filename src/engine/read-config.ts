@@ -100,6 +100,7 @@ const readField = (field: PropertyAssignment): DeclaredField => {
     name: propertyName(field),
     terminal: tokens(terminal),
     transitions: transitions === undefined ? undefined : readTransitions(transitions),
+    allowAfterTerminal: stringList(valueOf(spec, 'allowAfterTerminal'), []),
   };
 };
 

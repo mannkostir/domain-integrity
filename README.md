@@ -242,7 +242,12 @@ export default defineDomain({
       },
       allowAfterTerminal: ['remove'],
     }),
-    lifecycle(Account, { states: { closedAt: { terminal: 'set' } } }),
+    lifecycle(Account, {
+      states: {
+        closedAt: { terminal: 'set' },
+        lockedAt: { terminal: 'set', allowAfterTerminal: ['close'] },
+      },
+    }),
   ],
 });
 ```
@@ -252,7 +257,7 @@ export default defineDomain({
 | `states` | The aggregate's state fields. Supported: enum, string-literal union, boolean, and nullable (`T \| null` or optional; use `'set'` and `'unset'`). Name the data field itself, e.g. `_status` rather than its getter. |
 | `terminal` | Required. The values after which the aggregate must not change. |
 | `transitions` | Optional. The states each method may run from. Method names are type-checked; values are validated when `check` runs. |
-| `allowAfterTerminal` | Methods allowed on a finished aggregate, such as `remove`. |
+| `allowAfterTerminal` | Optional. Methods allowed on a finished aggregate, such as `remove`. Next to `states` it exempts a method for every state field; inside a state field, such as `lockedAt` above, only for that field, so `close()` may run on a locked account but is still judged after `closedAt` is set. The two lists combine. Method names are type-checked. |
 | `aggregateBaseClasses` | Base classes or interfaces that mark an aggregate: a class that extends or implements one, directly or through its base classes and interfaces. Abstract classes are skipped. Method collection also stops at a listed name: if it names a project class in the middle of an aggregate's inheritance chain, that class's methods and those above it are not analysed, so pick interface names that do not clash with your project's base classes. Default: `['AggregateRoot', 'Entity']`. |
 | `auditFields` | Fields `init` never suggests. Default: `['createdAt', 'updatedAt', 'version']`. |
 | `eventMethods` | Calls that emit domain events. Default: `['addEvent', 'addDomainEvent', 'apply']`. |

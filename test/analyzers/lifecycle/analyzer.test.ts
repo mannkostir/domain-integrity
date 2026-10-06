@@ -24,7 +24,7 @@ describe('lifecycleAnalyzer', () => {
     const result = analyse(lifecycleAnalyzer, {
       declaration: {
         ...DEFAULT_DECLARATION,
-        lifecycles: [{ target: ticket, fields: [{ name: 'status', terminal: ['CLOSED'], transitions: undefined }], allowAfterTerminal: [] }],
+        lifecycles: [{ target: ticket, fields: [{ name: 'status', terminal: ['CLOSED'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: project.getSourceFiles(),
     });
@@ -49,7 +49,7 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
     const result = analyse(lifecycleAnalyzer, {
       declaration: {
         ...DEFAULT_DECLARATION,
-        lifecycles: [{ target: order, fields: [{ name: 'status', terminal: ['PAID'], transitions: undefined }], allowAfterTerminal: [] }],
+        lifecycles: [{ target: order, fields: [{ name: 'status', terminal: ['PAID'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: orderProject.getSourceFiles(),
     });
@@ -74,7 +74,7 @@ export class Meter {
         lifecycles: [
           {
             target: meter,
-            fields: [{ name: 'reading', terminal: [], transitions: new Map([['record', ['set', 'unset']]]) }],
+            fields: [{ name: 'reading', terminal: [], transitions: new Map([['record', ['set', 'unset']]]), allowAfterTerminal: [] }],
             allowAfterTerminal: [],
           },
         ],
@@ -100,7 +100,7 @@ export class Account {
     const result = analyse(lifecycleAnalyzer, {
       declaration: {
         ...DEFAULT_DECLARATION,
-        lifecycles: [{ target: account, fields: [{ name: 'label', terminal: ['set'], transitions: undefined }], allowAfterTerminal: [] }],
+        lifecycles: [{ target: account, fields: [{ name: 'label', terminal: ['set'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: accountProject.getSourceFiles(),
     });

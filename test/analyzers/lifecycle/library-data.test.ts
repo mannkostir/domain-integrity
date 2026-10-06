@@ -49,7 +49,7 @@ const leaks = () => {
       lifecycles: [
         {
           target: ticket,
-          fields: [{ name: 'status', terminal: ['closed'], transitions: undefined }],
+          fields: [{ name: 'status', terminal: ['closed'], transitions: undefined, allowAfterTerminal: [] }],
           allowAfterTerminal: [],
         },
       ],
