@@ -157,7 +157,7 @@ npx domain-integrity check -p tsconfig.domain.json
 |---|---|
 | `init [--yes]` | Suggests and writes declarations. On an existing config it only adds new aggregates. |
 | `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error. |
-| `show [Aggregate]` | Prints Mermaid state diagrams. |
+| `show [Aggregate]` | Prints Mermaid state diagrams. Takes a class name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a lifecycle summary for coding agents. |
 
 Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. The config is read statically and never executed.
@@ -182,6 +182,8 @@ npx domain-integrity check --baseline domain-integrity.baseline.json
 ```
 
 Baseline entries are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
+
+Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregates share a class name, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`.
 
 ## CI
 
