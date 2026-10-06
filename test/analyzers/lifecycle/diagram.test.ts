@@ -111,6 +111,13 @@ describe('lifecycleDiagrams', () => {
     });
   });
 
+  it('selects the declared aggregate when a same-named one is undeclared', () => {
+    expect(lifecycleDiagrams({ aggregates: [TICKET_A, { ...TICKET_B, declared: false }], problems: [] }, 'Ticket')).toEqual({
+      kind: 'diagram',
+      text: diagramOf(TICKET_A),
+    });
+  });
+
   it('titles each section with the aggregate id', () => {
     expect(lifecycleDiagrams({ aggregates: [TICKET_A], problems: [] }, undefined)).toEqual({
       kind: 'diagram',

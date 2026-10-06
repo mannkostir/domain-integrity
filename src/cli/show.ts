@@ -3,7 +3,7 @@ import { UsageError } from '../engine/errors';
 import { Io, Paths } from './io';
 import { openSession } from './session';
 
-const ambiguityError = (aggregate: string | undefined, candidates: readonly string[]): UsageError =>
+const ambiguityError = (aggregate: string, candidates: readonly string[]): UsageError =>
   new UsageError(`Aggregate name "${aggregate}" is ambiguous. Use one of: ${candidates.join(', ')}`);
 
 const diagramText = (outcomes: readonly DiagramOutcome[]): string =>
@@ -18,7 +18,7 @@ export const showCommand = (paths: Paths, aggregate: string | undefined, io: Io)
   const { results } = openSession(paths);
   const outcomes = results.map((result) => result.diagram(aggregate));
   const candidates = ambiguousCandidates(outcomes);
-  if (candidates.length > 0) throw ambiguityError(aggregate, candidates);
+  if (aggregate !== undefined && candidates.length > 0) throw ambiguityError(aggregate, candidates);
   const output = diagramText(outcomes);
   if (output.length === 0) {
     throw new UsageError(

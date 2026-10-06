@@ -183,7 +183,7 @@ npx domain-integrity check --baseline domain-integrity.baseline.json
 
 Baseline entries are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
 
-Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregates share a class name, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`.
+Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregates share a class name, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding a class that shares an existing aggregate's name therefore changes that aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
 
 ## CI
 
