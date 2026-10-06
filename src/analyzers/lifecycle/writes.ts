@@ -1,4 +1,4 @@
-import { ClassDeclaration, ElementAccessExpression, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
+import { ClassDeclaration, ClassExpression, ElementAccessExpression, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
 import { outermostWrapper, unwrap } from './wrappers';
 
 const isAssignmentOperator = (kind: SyntaxKind): boolean =>
@@ -76,11 +76,11 @@ const isComputedWriteOnThis = (node: Node): boolean =>
   !isLiteralKey(node.getArgumentExpression()) &&
   isWritten(outermostWrapper(node));
 
-export const writesUnknownMembers = (cls: ClassDeclaration): boolean =>
+export const writesUnknownMembers = (cls: ClassDeclaration | ClassExpression): boolean =>
   cls.getDescendantsOfKind(SyntaxKind.CallExpression).some(isAssignOntoThis) ||
   cls.getDescendantsOfKind(SyntaxKind.ElementAccessExpression).some(isComputedWriteOnThis);
 
-export const isDecorated = (cls: ClassDeclaration): boolean => cls.getDecorators().length > 0;
+export const isDecorated = (cls: ClassDeclaration | ClassExpression): boolean => cls.getDecorators().length > 0;
 
 const writtenBracketAccess =
   (name: string) =>

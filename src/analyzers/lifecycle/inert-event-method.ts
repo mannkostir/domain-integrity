@@ -56,15 +56,18 @@ const isWrittenByName = (name: string, files: readonly SourceFile[]): boolean =>
 const isAssertable = (name: string, files: readonly SourceFile[]): boolean =>
   !declaresNonMethodMember(name, files) && !isWrittenByName(name, files) && bracketWritesOf(name, files).length === 0;
 
-const installsUnknownMembers = (family: readonly ClassDeclaration[]): boolean =>
-  family.some(isDecorated) || family.some(writesUnknownMembers);
+const classExpressionsIn = (files: readonly SourceFile[]): readonly ClassExpression[] =>
+  files.flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassExpression));
+
+const installsUnknownMembers = (classes: readonly (ClassDeclaration | ClassExpression)[]): boolean =>
+  classes.some(isDecorated) || classes.some(writesUnknownMembers);
 
 export const assertedInertEventMethods = (
   names: readonly string[],
   family: readonly ClassDeclaration[],
   files: readonly SourceFile[],
 ): ReadonlySet<string> =>
-  names.length === 0 || installsUnknownMembers(family)
+  names.length === 0 || installsUnknownMembers([...family, ...classExpressionsIn(files)])
     ? new Set()
     : new Set(names.filter((name) => isAssertable(name, files)));
 

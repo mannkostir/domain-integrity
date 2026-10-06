@@ -146,6 +146,21 @@ export class LoudPayment extends Payment {
 }
 `;
 
+const ASSIGNING_CLASS_EXPRESSION = `
+export const Guarded = class extends Payment {
+  constructor() {
+    super();
+    const self = this;
+    Object.assign(this, { addDomainEvent(event: object): void { if (self.status === 'closed') throw new Error('x'); void event; } });
+  }
+};
+`;
+
+const DECORATED_CLASS_EXPRESSION = `
+const replace = <T>(target: T, context: unknown): T => { void context; return target; };
+export const Guarded = @replace class extends Payment {};
+`;
+
 const MIXIN = `
 export function Loud<T extends new (...args: any[]) => object>(Base: T) {
   return class extends Base { addDomainEvent = (event: object): void => { void event; }; };
@@ -172,6 +187,8 @@ const prototypeWrite = projectWith(PLAIN_ROOT, PAYMENT + PROTOTYPE_WRITE, DEFINE
 const accessor = projectWith(ACCESSOR_ROOT, PAYMENT, DEFINE);
 const computedKey = projectWith(PLAIN_ROOT, PAYMENT + COMPUTED_KEY_SUBCLASS, DEFINE);
 const openKey = projectWith(PLAIN_ROOT, PAYMENT + OPEN_KEY_SUBCLASS, DEFINE);
+const assigningClassExpression = projectWith(PLAIN_ROOT, PAYMENT + ASSIGNING_CLASS_EXPRESSION, DEFINE);
+const decoratedClassExpression = projectWith(PLAIN_ROOT, PAYMENT + DECORATED_CLASS_EXPRESSION, DEFINE);
 
 const leaks = (project: Project, inertEventMethods: readonly string[]) => {
   const target = project.getSourceFileOrThrow('/src/payment.ts').getClassOrThrow('Payment');
@@ -256,5 +273,13 @@ describe('event methods that cannot be asserted inert', () => {
 
   it('ignores the entry when a subclass field has a computed string key', () => {
     expect(leaks(openKey, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a class expression assigns onto this', () => {
+    expect(leaks(assigningClassExpression, ['addDomainEvent'])).toEqual([]);
+  });
+
+  it('ignores the entry when a class expression is decorated', () => {
+    expect(leaks(decoratedClassExpression, ['addDomainEvent'])).toEqual([]);
   });
 });
