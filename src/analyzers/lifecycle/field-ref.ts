@@ -10,6 +10,7 @@ import {
   Type,
 } from 'ts-morph';
 import { isPlainArrayPush, isPushOnlyMethod } from './array-store';
+import { isDeclaredOnlyAsMethods } from './inert-event-method';
 import { isDefaultLibraryNode, isLibraryNode } from './library';
 import { namedClassChain } from './named-chain';
 import { isTransparentConstruction } from './transparent-constructor';
@@ -53,6 +54,7 @@ const STATE_HOLDER = 'props';
 export type AggregateScope = {
   readonly cls: ClassDeclaration;
   readonly eventMethods: ReadonlySet<string>;
+  readonly inertEventMethods: ReadonlySet<string>;
   readonly inertMembers: ReadonlySet<string>;
   readonly leaksThis: boolean;
   readonly plainEventArrays: ReadonlySet<Node>;
@@ -147,6 +149,10 @@ const superDeclaringClass = (access: Node): ClassDeclaration | undefined =>
 const lookupStartTypes = (cls: ClassDeclaration, access: Node): readonly Type[] =>
   superDeclaringClass(access)?.getType().getBaseTypes() ?? [cls.getType()];
 
+const isAssertedInertEventMethod = (scope: AggregateScope, access: Node, name: string): boolean =>
+  scope.inertEventMethods.has(name) &&
+  isDeclaredOnlyAsMethods(lookupStartTypes(scope.cls, access).flatMap((type) => declarationsAcrossHierarchy(type, name)));
+
 const isReachedOnlyInLibraries = (scope: AggregateScope, access: Node, name: string): boolean =>
   isDeclaredOnlyInLibraries(lookupStartTypes(scope.cls, access), name);
 
@@ -168,6 +174,7 @@ const isAssumedInert = (scope: AggregateScope, access: Node, name: string, membe
   isInertLibraryData(scope, access, name, member);
 
 const lookupMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
+  if (isAssertedInertEventMethod(scope, access, name)) return { kind: 'inert' };
   const member = tracedMember(scope.cls, access, name);
   return isAssumedInert(scope, access, name, member) ? { kind: 'inert' } : member;
 };
@@ -333,7 +340,9 @@ const isTrustedEventCall = (call: CallExpression, scope: AggregateScope): boolea
     Node.isPropertyAccessExpression(callee) &&
     isThis(callee.getExpression()) &&
     scope.eventMethods.has(callee.getName()) &&
-    (isTrustedLibraryEventCall(callee, scope) || isTrustedProjectEventCall(callee, scope))
+    (isTrustedLibraryEventCall(callee, scope) ||
+      isTrustedProjectEventCall(callee, scope) ||
+      isAssertedInertEventMethod(scope, callee, callee.getName()))
   );
 };
 
