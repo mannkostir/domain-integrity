@@ -31,6 +31,7 @@ export default defineDomain({});
       aggregateBaseClasses: ['AggregateRoot', 'Entity'],
       auditFields: ['createdAt', 'updatedAt', 'version'],
       eventMethods: ['addEvent', 'addDomainEvent', 'apply'],
+      inertEventMethods: [],
       inertMembers: [],
       lifecycles: [],
     });
@@ -219,5 +220,51 @@ const names = ['id'];
 export default defineDomain({ inertMembers: names });
 `),
     ).toThrow(/domain.config.ts:4 expected an array literal/);
+  });
+
+  it('reads inertEventMethods listed in eventMethods', () => {
+    const declaration = read(`
+import { defineDomain } from 'domain-integrity';
+export default defineDomain({ eventMethods: ['record'], inertEventMethods: ['record'] });
+`);
+
+    expect(declaration.inertEventMethods).toEqual(['record']);
+  });
+
+  it('accepts inertEventMethods from the default eventMethods', () => {
+    const declaration = read(`
+import { defineDomain } from 'domain-integrity';
+export default defineDomain({ inertEventMethods: ['addDomainEvent'] });
+`);
+
+    expect(declaration.inertEventMethods).toEqual(['addDomainEvent']);
+  });
+
+  it('rejects an inertEventMethods entry outside eventMethods', () => {
+    expect(() =>
+      read(`
+import { defineDomain } from 'domain-integrity';
+export default defineDomain({ eventMethods: ['apply'], inertEventMethods: ['addDomainEvent'] });
+`),
+    ).toThrow('"inertEventMethods" lists "addDomainEvent", which is not in "eventMethods".');
+  });
+
+  it('rejects a misspelled inertEventMethods entry with a ConfigError', () => {
+    expect(() =>
+      read(`
+import { defineDomain } from 'domain-integrity';
+export default defineDomain({ inertEventMethods: ['addDomainEvents'] });
+`),
+    ).toThrow(ConfigError);
+  });
+
+  it('rejects a non-string entry in inertEventMethods', () => {
+    expect(() =>
+      read(`
+import { defineDomain } from 'domain-integrity';
+const name = 'addDomainEvent' as string;
+export default defineDomain({ inertEventMethods: [name] });
+`),
+    ).toThrow(/expected a string literal/);
   });
 });
