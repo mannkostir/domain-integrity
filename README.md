@@ -10,6 +10,8 @@ Your tests pass and your types check, yet a closed account still accepts deposit
 
 `domain-integrity` reads your aggregates with the TypeScript type checker. It works out which states each method can actually run from, compares that with a three-line declaration of what you intended, and fails CI where the two disagree.
 
+It also follows in-process domain events. It finds the handlers registered for each event class and reports the ones that can never run, the ones that do not match their event, events nobody handles, and sagas with no failure path.
+
 ## See it catch a bug
 
 A typical aggregate. Once an account is closed, nothing should happen to it, but nothing enforces that:
@@ -136,6 +138,25 @@ npx domain-integrity check
 | `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. |
 | `transition-drift` | A method that can run from states you did not declare (error), or no longer from states you did (warning) |
 
+Four more checks cover in-process event flows. All of them are errors:
+
+| Check | Catches |
+|---|---|
+| `dead-handler` | A handler is registered for an event class that production code never constructs |
+| `handler-payload-mismatch` | A handler is registered for one event class but declares its event as an unrelated class |
+| `unhandled-event` | A declared in-process event is constructed but has no handler |
+| `saga-missing-failure-path` | A saga handles the success event of a declared outcome but not its failure event |
+
+`dead-handler` and `handler-payload-mismatch` always run. `unhandled-event` runs only for the classes listed in `events.inProcess`, and `saga-missing-failure-path` only for sagas declared with `saga()`. See "The declaration".
+
+These shapes are recognised as handlers:
+- a configured decorator on a class, where the `handle` method is the handler and its first parameter is the event, or on a method;
+- `register(callback, X)` or `register(callback, X.name)`, where the callback is `this.m`, `this.m.bind(this)` or an inline function;
+- `subscribedTo()` returning an array literal, such as `[X, Y]`;
+- a `@Saga()` property that uses `ofType(X, …)`.
+
+A project with event handlers and no aggregates is accepted. `check` reports "No aggregates found" only when it finds neither aggregates nor event flows.
+
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
 
 Every file your tsconfig includes is scanned, tests too, so an assignment in a test is reported as `outside-mutation`. To leave tests out, give `check` a tsconfig that excludes them:
@@ -157,8 +178,8 @@ npx domain-integrity check -p tsconfig.domain.json
 |---|---|
 | `init [--yes]` | Suggests and writes declarations. On an existing config it only adds new aggregates. |
 | `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error. |
-| `show [Aggregate]` | Prints Mermaid state diagrams. Takes a class name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
-| `context [--write AGENTS.md]` | Writes a lifecycle summary for coding agents. |
+| `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
+| `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents. |
 
 Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. The config is read statically and never executed.
 
@@ -170,7 +191,7 @@ Agents produce code that passes tests and still breaks the domain. Give them the
 npx domain-integrity context --write AGENTS.md
 ```
 
-This writes each aggregate's states, terminal values and allowed transitions into a marked section of `AGENTS.md`, or `CLAUDE.md`, and leaves the rest of the file untouched. The agent reads the rules up front, and `check` catches whatever slips through.
+This writes each aggregate's states, terminal values and allowed transitions, plus an "Event flows" section, into a marked section of `AGENTS.md`, or `CLAUDE.md`, and leaves the rest of the file untouched. The agent reads the rules up front, and `check` catches whatever slips through.
 
 ## Adopt it in an existing codebase
 
@@ -181,9 +202,11 @@ npx domain-integrity check --update-baseline
 npx domain-integrity check --baseline domain-integrity.baseline.json
 ```
 
-Baseline entries are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
+Baseline entries for lifecycle findings are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
 
 Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
+
+Event-flow findings have the key `checkId|eventId|handler|subject`. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields.
 
 ## CI
 
@@ -254,6 +277,30 @@ export default defineDomain({
 });
 ```
 
+Event flows go in an `events` block. It is optional, and handlers are found without it:
+
+```ts
+import { defineDomain, saga } from 'domain-integrity';
+import { InvoiceSent, PaymentCaptured, PaymentFailed, Shipped } from './src/events';
+import { OrderSaga } from './src/saga';
+
+export default defineDomain({
+  events: {
+    inProcess: [Shipped, InvoiceSent],
+    sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured, PaymentFailed]] })],
+  },
+});
+```
+
+| Option | Meaning |
+|---|---|
+| `events.handlerDecorators` | Decorator names that mark a handler. Default: `['EventsHandler', 'OnEvent']`. |
+| `events.registerMethods` | Method names whose calls register a handler. Default: `['register']`. |
+| `events.inProcess` | Event classes that are dispatched inside the process. `unhandled-event` runs only for these. |
+| `events.sagas` | `saga(Target, { outcomes: [[Success, Failure]] })`. `saga-missing-failure-path` runs only for these. |
+
+An outcome that lists one class as both success and failure exits `2`. So does a declared class outside the analysed files, or a saga that handles neither side of an outcome; the last two are reported as `problem:` lines.
+
 | Option | Meaning |
 |---|---|
 | `states` | The aggregate's state fields. Supported: enum, string-literal union, boolean, and nullable (`T \| null` or optional; use `'set'` and `'unset'`). Name the data field itself, e.g. `_status` rather than its getter. |
@@ -287,6 +334,20 @@ The analysis also trusts that nothing tampers with a plain event array from outs
 - a project subclass of the aggregate that overrides the event method, or an instance reassignment of it such as `this.addDomainEvent = …` in a constructor, because `this.` calls are resolved on the declared aggregate class, as for every other member.
 
 A few rare self-wiring shapes can still produce a false finding: a factory or service outside the class (`agg.policy = new Policy(agg)`), the instance held inside another object (`box.o.policy.owner = box.o`), and a module-level factory function. So can a non-callable library property, such as a `boolean`, that a `.d.ts` declares as plain data while its JavaScript implements it as a getter reading the state field, for example through one of your overrides. The property is trusted as written, so a guard through it reads as no guard and the method can be reported as a `terminal-state-leak` or `transition-drift`. Current TypeScript emits accessors as accessors in `.d.ts` files, so this needs an older or hand-written declaration. An `inertMembers` entry for a library member that does read the state field can too. So can an `inertEventMethods` entry for an event method that reads the state field or calls code that does. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
+
+The event-flow analyzer reports nothing for these:
+
+- **String and wildcard topics**, and dispatch on `constructor.name`.
+- **Handlers keyed on an interface or a base type** through shapes it does not recognise.
+- **Transports that cross the process.** Brokers, outboxes and event stores cannot be followed.
+- **Events constructed only outside the analysed files, or only in test files.** Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`.
+- **Getter-declared handlers**, such as `get event()`.
+- **Events raised into an aggregate buffer that is never dispatched.**
+- **Sagas whose class extends a library class or a mixin call.**
+
+Some code keeps a single rule silent for an event class `X`:
+- For `unhandled-event`: an unrecognised `register` call anywhere, an `instanceof X`, a string equal to `X`'s name, or a parameter typed `X`.
+- For `dead-handler`: `X` is abstract, is subclassed, or is used as a value other than `new X`, a registration key or `instanceof`. A factory map, passing `X` to a function, and `X<T>` as a value all count.
 
 <details>
 <summary>The precise rules</summary>
@@ -346,7 +407,7 @@ A few rare self-wiring shapes can still produce a false finding: a factory or se
 
 ## Status
 
-Early: version 0.x. The analysis is validated against nine public TypeScript DDD repositories. Known gaps and the roadmap, including an event and saga flow analyzer, are in the [issues](https://github.com/mannkostir/domain-integrity/issues).
+Early: version 0.x. The analysis is validated against nine public TypeScript DDD repositories. Known gaps and the roadmap are in the [issues](https://github.com/mannkostir/domain-integrity/issues).
 
 ## License
 
