@@ -11,6 +11,7 @@ const leakFinding = (
   checkId: 'terminal-state-leak',
   severity: 'error',
   aggregate: aggregate.name,
+  aggregateId: aggregate.id,
   method: method.name,
   field: field.name,
   subject: leaked.join(','),

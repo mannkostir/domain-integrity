@@ -90,6 +90,7 @@ const leaks = (target: ClassDeclaration, eventMethods: readonly string[] = DEFAU
       ],
     },
     files: project.getSourceFiles(),
+    root: '/',
   });
   return lifecycleAnalyzer
     .check(model)

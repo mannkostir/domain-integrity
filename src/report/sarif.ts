@@ -1,4 +1,4 @@
-import { toPosixRelative } from './path';
+import { toPosixRelative } from '../engine/path';
 import { Report } from './text';
 
 export const formatSarif = (report: Report): string =>

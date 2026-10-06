@@ -9,6 +9,7 @@ export const outsideMutation = (aggregate: AggregateModel): Finding[] =>
       checkId: 'outside-mutation',
       severity: 'error',
       aggregate: aggregate.name,
+      aggregateId: aggregate.id,
       method: undefined,
       field: assignment.field,
       subject: assignment.scope,

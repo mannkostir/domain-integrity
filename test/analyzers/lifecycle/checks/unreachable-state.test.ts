@@ -3,6 +3,7 @@ import { unreachableState } from '../../../../src/analyzers/lifecycle/checks/unr
 import { aggregate, assigned, declared, known, method, stateField, unresolvedValue, mayWriteValue } from '../../../helpers/model';
 
 const CANCEL = method('cancel', true, { status: { sources: known('PENDING'), sets: assigned('CANCELLED') } });
+const QUALIFIED = 'src/a/order.ts:Order';
 
 describe('unreachableState', () => {
   it('flags a value that nothing assigns', () => {
@@ -11,6 +12,7 @@ describe('unreachableState', () => {
         checkId: 'unreachable-state',
         severity: 'error',
         aggregate: 'Order',
+        aggregateId: 'Order',
         method: undefined,
         field: 'status',
         subject: 'CONFIRMED',
@@ -60,5 +62,11 @@ describe('unreachableState', () => {
         aggregate({ fields: [deleted], declarations: new Map([['deleted', declared(['true'])]]), initial: new Map() }),
       ),
     ).toEqual([]);
+  });
+
+  it('identifies findings by the aggregate id', () => {
+    expect(
+      unreachableState(aggregate({ id: QUALIFIED, methods: [CANCEL] })).map((finding) => finding.aggregateId),
+    ).toEqual([QUALIFIED]);
   });
 });

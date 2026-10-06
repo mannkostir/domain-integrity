@@ -50,6 +50,7 @@ const extractWith = (fields: readonly DeclaredField[]) =>
   extractLifecycles({
     declaration: { ...DEFAULT_DECLARATION, lifecycles: [{ target: order, fields, allowAfterTerminal: [] }] },
     files: project.getSourceFiles(),
+    root: '/',
   });
 
 const aggregateNamed = (name: string, fields: readonly DeclaredField[]) =>
@@ -106,6 +107,7 @@ describe('extractLifecycles', () => {
         lifecycles: [{ target: shipment, fields: [{ name: 'status', terminal: [], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: project.getSourceFiles(),
+      root: '/',
     });
 
     expect([...(model.aggregates.find((aggregate) => aggregate.name === 'Shipment')?.mentioned.get('status') ?? [])]).toEqual(['SENT']);
@@ -134,5 +136,40 @@ describe('extractLifecycles', () => {
       'Order: transitions refer to missing method "reopen"',
       'Order has no field "missing"',
     ]);
+  });
+});
+
+describe('extractLifecycles aggregate ids', () => {
+  const duplicated = inMemoryProject({
+    '/src/aggregate-root.ts': AGGREGATE_ROOT,
+    '/src/a/order.ts': `
+import { AggregateRoot } from '../aggregate-root';
+export class Order extends AggregateRoot<{ open: boolean }> {}
+`,
+    '/src/b/order.ts': `
+import { AggregateRoot } from '../aggregate-root';
+export class Order extends AggregateRoot<{ open: boolean }> {}
+`,
+    '/src/invoice.ts': `
+import { AggregateRoot } from './aggregate-root';
+export class Invoice extends AggregateRoot<{ open: boolean }> {}
+`,
+  });
+
+  const { aggregates } = extractLifecycles({ declaration: DEFAULT_DECLARATION, files: duplicated.getSourceFiles(), root: '/' });
+
+  it('qualifies aggregates that share a class name with their relative path', () => {
+    expect(aggregates.filter((aggregate) => aggregate.name === 'Order').map((aggregate) => aggregate.id).sort()).toEqual([
+      'src/a/order.ts:Order',
+      'src/b/order.ts:Order',
+    ]);
+  });
+
+  it('identifies an aggregate with a unique class name by that name', () => {
+    expect(aggregates.find((aggregate) => aggregate.name === 'Invoice')?.id).toBe('Invoice');
+  });
+
+  it('always gives an aggregate a path qualified name', () => {
+    expect(aggregates.find((aggregate) => aggregate.name === 'Invoice')?.qualifiedName).toBe('src/invoice.ts:Invoice');
   });
 });

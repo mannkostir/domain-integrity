@@ -1,6 +1,7 @@
 import { ClassDeclaration, MethodDeclaration, Node, Scope, SourceFile } from 'ts-morph';
 import { AnalysisInput } from '../../analyzer';
 import { DeclaredField, DeclaredLifecycle, DomainDeclaration } from '../../engine/declaration';
+import { toPosixRelative } from '../../engine/path';
 import { setsOf } from './assigned';
 import { candidateFields } from './candidates';
 import { aggregateName, discoverAggregates } from './discover';
@@ -14,6 +15,8 @@ import { mentionedTokens } from './mentions';
 import { outsideAssignments } from './outside';
 import { aggregateScope } from './scope';
 import { resolveStateField } from './state-field';
+
+type AggregateIdentity = { readonly id: string; readonly qualifiedName: string };
 
 type DeclaredOutcome =
   | { readonly kind: 'ok'; readonly field: StateField; readonly declaration: FieldDeclaration }
@@ -95,8 +98,20 @@ const methodModels = (
   }));
 };
 
+const sharedNames = (classes: readonly ClassDeclaration[]): ReadonlySet<string> => {
+  const names = classes.map(aggregateName);
+  return new Set(names.filter((name, index) => names.indexOf(name) !== index));
+};
+
+const identityOf = (cls: ClassDeclaration, root: string, shared: ReadonlySet<string>): AggregateIdentity => {
+  const name = aggregateName(cls);
+  const qualifiedName = `${toPosixRelative(root, cls.getSourceFile().getFilePath())}:${name}`;
+  return { qualifiedName, id: shared.has(name) ? qualifiedName : name };
+};
+
 const extractAggregate = (
   cls: ClassDeclaration,
+  identity: AggregateIdentity,
   declaration: DomainDeclaration,
   files: readonly SourceFile[],
 ): { readonly aggregate: AggregateModel; readonly problems: readonly string[] } => {
@@ -109,6 +124,7 @@ const extractAggregate = (
   return {
     problems: resolved.problems,
     aggregate: {
+      ...identity,
       name: aggregateName(cls),
       file: cls.getSourceFile().getFilePath(),
       line: cls.getStartLineNumber(),
@@ -124,13 +140,14 @@ const extractAggregate = (
   };
 };
 
-export const extractLifecycles = ({ declaration, files }: AnalysisInput): LifecycleModel => {
+export const extractLifecycles = ({ declaration, files, root }: AnalysisInput): LifecycleModel => {
   const classes = discoverAggregates(
     files,
     declaration.aggregateBaseClasses,
     declaration.lifecycles.map((lifecycle) => lifecycle.target),
   );
-  const extracted = classes.map((cls) => extractAggregate(cls, declaration, files));
+  const shared = sharedNames(classes);
+  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(cls, root, shared), declaration, files));
   return {
     aggregates: extracted.map((result) => result.aggregate),
     problems: extracted.flatMap((result) => result.problems),

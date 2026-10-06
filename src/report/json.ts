@@ -1,4 +1,4 @@
-import { toPosixRelative } from './path';
+import { toPosixRelative } from '../engine/path';
 import { Finding } from '../analyzer';
 import { Report } from './text';
 

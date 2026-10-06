@@ -29,7 +29,7 @@ export const initCommand = async (paths: Paths, options: { readonly yes?: boolea
   const project = loadProject(paths.tsconfig);
   const existing = project.getFileSystem().fileExistsSync(paths.config) ? configSourceFile(project, paths.config) : undefined;
   const declaration = existing ? readDeclaration(existing) : DEFAULT_DECLARATION;
-  const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, paths.root, existing) });
+  const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, paths.root, existing), root: paths.root });
   if (lifecycleAnalyzer.isEmpty(model)) throw new ProjectError(noAggregatesMessage(declaration));
   const suggestions = lifecycleAnalyzer.suggest(model);
   if (suggestions.length === 0) {

@@ -1,4 +1,4 @@
-import { toPosixRelative } from './path';
+import { toPosixRelative } from '../engine/path';
 import { Finding, RuleDescription } from '../analyzer';
 
 export type Report = {
@@ -13,7 +13,7 @@ const plural = (count: number, word: string): string => `${count} ${word}${count
 
 const entry = (finding: Finding, root: string, suffix: string): string =>
   [
-    `${finding.severity} ${finding.checkId}  ${finding.aggregate}${finding.method ? `.${finding.method}()` : ''}  ${toPosixRelative(root, finding.file)}:${finding.line}${suffix}`,
+    `${finding.severity} ${finding.checkId}  ${finding.aggregateId}${finding.method ? `.${finding.method}()` : ''}  ${toPosixRelative(root, finding.file)}:${finding.line}${suffix}`,
     `  ${finding.message}`,
     `  Fix: ${finding.fix}`,
   ].join('\n');

@@ -31,4 +31,16 @@ describe('formatText', () => {
   it('prints only the summary when there is nothing to report', () => {
     expect(formatText({ fresh: [], known: [], problems: [], rules: [], root: '/app' })).toBe('0 errors, 0 warnings\n');
   });
+
+  it('names the aggregate by its id', () => {
+    const text = formatText({
+      fresh: [finding({ aggregateId: 'src/order.ts:Order' })],
+      known: [],
+      problems: [],
+      rules: [],
+      root: '/app',
+    });
+
+    expect(text.startsWith('error terminal-state-leak  src/order.ts:Order.annotate()  src/order.ts:10')).toBe(true);
+  });
 });

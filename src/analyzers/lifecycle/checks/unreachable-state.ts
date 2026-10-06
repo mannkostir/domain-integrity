@@ -23,6 +23,7 @@ const unreachableValues = (aggregate: AggregateModel, field: StateField): Findin
       checkId: 'unreachable-state',
       severity: 'error',
       aggregate: aggregate.name,
+      aggregateId: aggregate.id,
       method: undefined,
       field: field.name,
       subject: value.token,

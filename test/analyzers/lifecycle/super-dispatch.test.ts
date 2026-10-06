@@ -50,6 +50,7 @@ describe('super inside a method inherited by the analysed aggregate', () => {
         ],
       },
       files: project.getSourceFiles(),
+      root: '/',
     });
 
     expect(lifecycleAnalyzer.check(model).filter((finding) => finding.checkId === 'terminal-state-leak')).toEqual([]);

@@ -8,6 +8,7 @@ type Drift = { readonly severity: Severity; readonly subject: string; readonly m
 const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodModel, drift: Drift): Finding => ({
   checkId: 'transition-drift',
   aggregate: aggregate.name,
+  aggregateId: aggregate.id,
   method: method.name,
   field: field.name,
   file: method.file,

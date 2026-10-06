@@ -1,3 +1,5 @@
+import { posix } from 'node:path';
+import { AmbiguousReference, DiagramOutcome } from '../../analyzer';
 import { leakedTerminalTokens } from './checks/terminal-state-leak';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField } from './model';
 
@@ -65,12 +67,37 @@ export const fieldDiagram = (aggregate: AggregateModel, field: StateField): stri
   ].join('\n');
 };
 
-export const lifecycleDiagrams = (model: LifecycleModel, only: string | undefined): string =>
-  model.aggregates
-    .filter((aggregate) => aggregate.declared && (only === undefined || aggregate.name === only))
-    .flatMap((aggregate) =>
-      aggregate.fields
-        .filter((field) => aggregate.declarations.has(field.name))
-        .map((field) => `## ${aggregate.name}.${field.name}\n\n\`\`\`mermaid\n${fieldDiagram(aggregate, field)}\n\`\`\``),
-    )
-    .join('\n\n');
+type Selection =
+  | { readonly kind: 'selected'; readonly aggregates: readonly AggregateModel[] }
+  | AmbiguousReference;
+
+const normalisedReference = (reference: string): string => {
+  const separator = reference.lastIndexOf(':');
+  return separator < 0
+    ? reference
+    : `${posix.normalize(reference.slice(0, separator).replaceAll('\\', '/'))}${reference.slice(separator)}`;
+};
+
+const isNamed = (aggregate: AggregateModel, only: string): boolean =>
+  aggregate.qualifiedName === normalisedReference(only) || aggregate.name === only;
+
+const selectDeclared = (aggregates: readonly AggregateModel[], only: string | undefined): Selection => {
+  const declared = aggregates.filter((aggregate) => aggregate.declared);
+  if (only === undefined) return { kind: 'selected', aggregates: declared };
+  const matches = declared.filter((aggregate) => isNamed(aggregate, only));
+  return matches.length > 1
+    ? { kind: 'ambiguous', reference: only, candidates: matches.map((aggregate) => aggregate.qualifiedName) }
+    : { kind: 'selected', aggregates: matches };
+};
+
+const aggregateSections = (aggregate: AggregateModel): string[] =>
+  aggregate.fields
+    .filter((field) => aggregate.declarations.has(field.name))
+    .map((field) => `## ${aggregate.id}.${field.name}\n\n\`\`\`mermaid\n${fieldDiagram(aggregate, field)}\n\`\`\``);
+
+export const lifecycleDiagrams = (model: LifecycleModel, only: string | undefined): DiagramOutcome => {
+  const selection = selectDeclared(model.aggregates, only);
+  return selection.kind === 'ambiguous'
+    ? selection
+    : { kind: 'diagram', text: selection.aggregates.flatMap(aggregateSections).join('\n\n') };
+};
