@@ -73,6 +73,12 @@ const stringList = (expression: Expression | undefined, fallback: readonly strin
         return element.getLiteralText();
       });
 
+const subsetOf = (names: readonly string[], allowed: readonly string[], option: string, within: string): readonly string[] => {
+  const outside = names.find((name) => !allowed.includes(name));
+  if (outside !== undefined) throw new ConfigError(`"${option}" lists "${outside}", which is not in "${within}".`);
+  return names;
+};
+
 const valueToken = (expression: Expression): string => {
   if (Node.isStringLiteral(expression) && [SET, UNSET].includes(expression.getLiteralText())) {
     return expression.getLiteralText();
@@ -135,10 +141,17 @@ export const readDeclaration = (file: SourceFile): DomainDeclaration => {
   if (!call) throw new ConfigError('domain.config.ts must "export default defineDomain({...})".');
   const config = objectArgument(call, 0);
   const lifecycles = valueOf(config, 'lifecycles');
+  const eventMethods = stringList(valueOf(config, 'eventMethods'), DEFAULT_DECLARATION.eventMethods);
   return {
     aggregateBaseClasses: stringList(valueOf(config, 'aggregateBaseClasses'), DEFAULT_DECLARATION.aggregateBaseClasses),
     auditFields: stringList(valueOf(config, 'auditFields'), DEFAULT_DECLARATION.auditFields),
-    eventMethods: stringList(valueOf(config, 'eventMethods'), DEFAULT_DECLARATION.eventMethods),
+    eventMethods,
+    inertEventMethods: subsetOf(
+      stringList(valueOf(config, 'inertEventMethods'), DEFAULT_DECLARATION.inertEventMethods),
+      eventMethods,
+      'inertEventMethods',
+      'eventMethods',
+    ),
     inertMembers: stringList(valueOf(config, 'inertMembers'), DEFAULT_DECLARATION.inertMembers),
     lifecycles: lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle),
   };

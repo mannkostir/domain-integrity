@@ -26,6 +26,7 @@ export type DomainConfig = {
   readonly aggregateBaseClasses?: readonly string[];
   readonly auditFields?: readonly string[];
   readonly eventMethods?: readonly string[];
+  readonly inertEventMethods?: readonly string[];
   readonly inertMembers?: readonly string[];
   readonly lifecycles?: readonly LifecycleDeclaration[];
 };
