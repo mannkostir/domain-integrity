@@ -44,7 +44,7 @@ describe('super inside a method inherited by the analysed aggregate', () => {
         lifecycles: [
           {
             target: order,
-            fields: [{ name: 'status', terminal: ['cancelled'], transitions: undefined }],
+            fields: [{ name: 'status', terminal: ['cancelled'], transitions: undefined, allowAfterTerminal: [] }],
             allowAfterTerminal: [],
           },
         ],

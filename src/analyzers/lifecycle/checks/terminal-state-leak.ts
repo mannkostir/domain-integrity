@@ -21,21 +21,29 @@ const leakFinding = (
   fix: `Guard ${method.name}() so it cannot run when ${field.name} is ${quoted(field, leaked)}, or list it in allowAfterTerminal if that is intended.`,
 });
 
+const exemptAfterTerminal = (
+  aggregate: AggregateModel,
+  declaration: FieldDeclaration,
+  method: MethodModel,
+): boolean => aggregate.allowAfterTerminal.has(method.name) || declaration.allowAfterTerminal.has(method.name);
+
 export const leakedTerminalTokens = (
   aggregate: AggregateModel,
   method: MethodModel,
   field: StateField,
-  terminal: ReadonlySet<string>,
+  declaration: FieldDeclaration,
 ): string[] => {
   const sources = method.fields.get(field.name)?.sources;
-  const judged = method.visibility === 'public' && method.mutates && !aggregate.allowAfterTerminal.has(method.name);
+  const judged = method.visibility === 'public' && method.mutates && !exemptAfterTerminal(aggregate, declaration, method);
   if (!judged || sources?.kind !== 'known') return [];
-  return field.values.map((value) => value.token).filter((token) => terminal.has(token) && sources.values.has(token));
+  return field.values
+    .map((value) => value.token)
+    .filter((token) => declaration.terminal.has(token) && sources.values.has(token));
 };
 
 const leaksOf = (aggregate: AggregateModel, field: StateField, declaration: FieldDeclaration): Finding[] =>
   aggregate.methods.flatMap((method) => {
-    const leaked = leakedTerminalTokens(aggregate, method, field, declaration.terminal);
+    const leaked = leakedTerminalTokens(aggregate, method, field, declaration);
     return leaked.length === 0 ? [] : [leakFinding(aggregate, field, method, leaked)];
   });
 

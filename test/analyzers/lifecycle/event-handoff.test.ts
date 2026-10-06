@@ -88,6 +88,13 @@ export class LayeredTicket extends Intermediate {
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
   touch(n: string): void { this.note = n; this.apply(new Opened(this)); }
 }
+export class OverridingTicket extends AggregateRoot {
+  private status: Status = 'open';
+  private note = '';
+  override apply(event: object): void { super.apply(event); }
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  touch(n: string): void { this.note = n; super.apply(new Opened(this)); }
+}
 export class ProjectTicket extends ProjectRoot<object> {
   private status: Status = 'open';
   private note = '';
@@ -104,7 +111,7 @@ const leaks = (target: ClassDeclaration, eventMethods: readonly string[] = DEFAU
     declaration: {
       ...DEFAULT_DECLARATION,
       eventMethods,
-      lifecycles: [{ target, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined }], allowAfterTerminal: [] }],
+      lifecycles: [{ target, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
     },
     files: project.getSourceFiles(),
     root: '/',
@@ -127,6 +134,10 @@ describe('this handed to a transparent event constructor', () => {
 
   it('stays unknown when the event class extends a mixin', () => {
     expect(leaks(classNamed('GuardedTicket'))).toEqual([]);
+  });
+
+  it('stays unknown when the aggregate overrides the library event method it calls through super', () => {
+    expect(leaks(classNamed('OverridingTicket'))).toEqual([]);
   });
 
   it('stays unknown when the event method comes from a project mixin', () => {

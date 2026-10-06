@@ -57,6 +57,14 @@ describe('fieldDiagram edge cases', () => {
     expect(diagram).not.toContain('⚠ leak');
     expect(diagram).toContain('  class status_2 terminal');
   });
+
+  it('does not mark a leak for methods allowed after terminal on that field', () => {
+    const model = aggregate({
+      declarations: new Map([['status', declared(['CANCELLED'], undefined, ['touch'])]]),
+      methods: [method('touch', true, { status: { sources: known('CANCELLED'), sets: assigned('PENDING') } })],
+    });
+    expect(fieldDiagram(model, STATUS)).toContain('  status_2 --> status_0 : touch\n');
+  });
 });
 
 const TICKET_A = aggregate({ id: 'src/a/ticket.ts:Ticket', name: 'Ticket', qualifiedName: 'src/a/ticket.ts:Ticket' });

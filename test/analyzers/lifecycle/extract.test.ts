@@ -60,6 +60,7 @@ const STATUS: DeclaredField = {
   name: 'status',
   terminal: ['CANCELLED'],
   transitions: new Map([['cancel', ['PENDING']]]),
+  allowAfterTerminal: [],
 };
 
 describe('extractLifecycles', () => {
@@ -103,7 +104,7 @@ describe('extractLifecycles', () => {
     const model = extractLifecycles({
       declaration: {
         ...DEFAULT_DECLARATION,
-        lifecycles: [{ target: shipment, fields: [{ name: 'status', terminal: [], transitions: undefined }], allowAfterTerminal: [] }],
+        lifecycles: [{ target: shipment, fields: [{ name: 'status', terminal: [], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: project.getSourceFiles(),
       root: '/',
@@ -126,8 +127,8 @@ describe('extractLifecycles', () => {
 
   it('reports unknown values, missing methods and missing fields as problems', () => {
     const { problems } = extractWith([
-      { name: 'status', terminal: ['ARCHIVED'], transitions: new Map([['reopen', ['PENDING']]]) },
-      { name: 'missing', terminal: [], transitions: undefined },
+      { name: 'status', terminal: ['ARCHIVED'], transitions: new Map([['reopen', ['PENDING']]]), allowAfterTerminal: [] },
+      { name: 'missing', terminal: [], transitions: undefined, allowAfterTerminal: [] },
     ]);
 
     expect(problems).toEqual([

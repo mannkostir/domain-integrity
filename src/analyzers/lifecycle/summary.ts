@@ -32,6 +32,9 @@ const transitionLines = (aggregate: AggregateModel, field: StateField, declarati
 const fieldLines = (aggregate: AggregateModel, field: StateField, declaration: FieldDeclaration): string[] => [
   `- ${field.name}: ${field.values.map((value) => value.label).join(', ')}`,
   `  - terminal: ${joined(field, declaration.terminal) || 'none'}`,
+  ...(declaration.allowAfterTerminal.size > 0
+    ? [`  - may run after a terminal state: ${[...declaration.allowAfterTerminal].join(', ')}`]
+    : []),
   ...transitionLines(aggregate, field, declaration),
 ];
 

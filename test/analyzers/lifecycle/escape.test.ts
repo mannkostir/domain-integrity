@@ -37,6 +37,7 @@ const modelWith = (declared: boolean) =>
                     ['pay', ['pending']],
                     ['cancel', ['pending', 'paid']],
                   ]),
+                  allowAfterTerminal: [],
                 },
               ],
               allowAfterTerminal: [],

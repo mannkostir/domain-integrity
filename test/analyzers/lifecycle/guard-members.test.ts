@@ -78,7 +78,7 @@ describe('guards that call members whose body cannot be traced', () => {
         lifecycles: [
           {
             target: order,
-            fields: [{ name: 'status', terminal: ['cancelled'], transitions: undefined }],
+            fields: [{ name: 'status', terminal: ['cancelled'], transitions: undefined, allowAfterTerminal: [] }],
             allowAfterTerminal: [],
           },
         ],
