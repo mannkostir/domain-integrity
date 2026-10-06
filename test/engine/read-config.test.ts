@@ -309,14 +309,14 @@ export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[Pa
     expect(() => read(`${header}
 const Alias = PaymentFailed;
 export default defineDomain({ events: { inProcess: [Alias] } });
-`)).toThrow(ConfigError);
+`)).toThrow(/each entry of "events.inProcess" must be a class reference/);
   });
 
   it('rejects an outcome that is not an array literal', () => {
     expect(() => read(`${header}
 const pair = [PaymentCaptured, PaymentFailed] as const;
 export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [pair] })] } });
-`)).toThrow(/\[success, failure\]/);
+`)).toThrow(/each outcome must be a \[success, failure\] array literal/);
   });
 
   it('rejects a saga entry that is not a saga() call', () => {
@@ -338,5 +338,59 @@ export default defineDomain({ events: { inProcess: [ExternalEvent] } });
     });
 
     expect(() => readDeclaration(project.getSourceFileOrThrow('/domain.config.ts'))).toThrow(/declared in the project/);
+  });
+
+  it('rejects events that is not an object literal', () => {
+    expect(() => read(`${header}
+const declared = {};
+export default defineDomain({ events: declared });
+`)).toThrow(/"events" must be an object literal/);
+  });
+
+  it('rejects a saga spec that is not an object literal', () => {
+    expect(() => read(`${header}
+const spec = { outcomes: [] };
+export default defineDomain({ events: { sagas: [saga(OrderSaga, spec)] } });
+`)).toThrow(/argument 2 of saga\(\) must be an object literal/);
+  });
+
+  it('rejects outcomes that is not an array literal', () => {
+    expect(() => read(`${header}
+const list: [] = [];
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: list })] } });
+`)).toThrow(/expected an array literal/);
+  });
+
+  it('rejects an outcome with one element', () => {
+    expect(() => read(`${header}
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured]] })] } });
+`)).toThrow(/Type errors in domain.config.ts/);
+  });
+
+  it('rejects an outcome with three elements', () => {
+    expect(() => read(`${header}
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured, PaymentFailed, PaymentFailed]] })] } });
+`)).toThrow(/Type errors in domain.config.ts/);
+  });
+
+  it('rejects a handler decorator that is not a string literal', () => {
+    expect(() => read(`${header}
+const decorator = 'HandleEvent';
+export default defineDomain({ events: { handlerDecorators: [decorator] } });
+`)).toThrow(/expected a string literal/);
+  });
+
+  it('rejects a saga target that is not a project class', () => {
+    expect(() => read(`${header}
+const Alias = OrderSaga;
+export default defineDomain({ events: { sagas: [saga(Alias, { outcomes: [] })] } });
+`)).toThrow(/the first argument of saga\(\) must be a class reference/);
+  });
+
+  it('rejects an outcome element that is not a project class', () => {
+    expect(() => read(`${header}
+const Alias = PaymentFailed;
+export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured, Alias]] })] } });
+`)).toThrow(/an outcome element must be a class reference/);
   });
 });
