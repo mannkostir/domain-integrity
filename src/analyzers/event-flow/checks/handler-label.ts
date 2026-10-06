@@ -1,4 +1,4 @@
-import { EventFlowModel, Registration } from '../model';
+import { ClassRef, EventFlowModel, Registration } from '../model';
 
 export const handlerLabel = (registration: Registration): string | undefined => {
   if (registration.handlerClass === undefined) return registration.handlerMethod;
@@ -9,3 +9,9 @@ export const nameOf = (model: EventFlowModel, id: string): string => model.class
 
 export const acceptedIds = (model: EventFlowModel, eventId: string): ReadonlySet<string> =>
   new Set([eventId, ...(model.events.get(eventId)?.ancestors ?? [])]);
+
+export const refOf = (model: EventFlowModel, id: string): ClassRef => {
+  const ref = model.classes.get(id);
+  if (ref === undefined) throw new Error(`event-flow model has no class "${id}"`);
+  return ref;
+};
