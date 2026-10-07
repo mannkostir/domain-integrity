@@ -2,7 +2,7 @@ import { ClassDeclaration, MethodDeclaration, Node, PropertyDeclaration, SourceF
 import { isPushOnlyMethod, plainEventArrays } from '../../shared/array-store';
 import { hierarchyOf } from '../hierarchy';
 import { ProjectClasses } from '../keys';
-import { BufferCandidate } from './drains';
+import { BufferCandidate } from './buffer-candidate';
 import { hasHeirOutside, projectClassesIn } from './outside-heirs';
 
 type Push = { readonly buffer: PropertyDeclaration; readonly pusher: MethodDeclaration };
@@ -11,7 +11,7 @@ type Family = { readonly members: readonly ClassDeclaration[]; readonly arrays: 
 
 type FamilyLookup = (owner: ClassDeclaration) => Family;
 
-export const ownerOf = (buffer: PropertyDeclaration): ClassDeclaration | undefined => {
+export const declaringClassOf = (buffer: PropertyDeclaration): ClassDeclaration | undefined => {
   const owner = buffer.getParent();
   return Node.isClassDeclaration(owner) ? owner : undefined;
 };
@@ -47,7 +47,7 @@ const isEventMethod = (method: MethodDeclaration, eventMethods: readonly string[
 
 const pushesOf = (method: MethodDeclaration, isProject: ProjectClasses, families: FamilyLookup): readonly Push[] =>
   [...new Set(pushedBuffers(method))].flatMap((buffer) => {
-    const owner = ownerOf(buffer);
+    const owner = declaringClassOf(buffer);
     return owner !== undefined && isProject(owner) && isPushOnlyMethod(method, families(owner).arrays)
       ? [{ buffer, pusher: method }]
       : [];
@@ -70,7 +70,7 @@ const hasOnlyPushingNamesakes = (candidate: BufferCandidate): boolean => {
 };
 
 const toCandidate = (buffer: PropertyDeclaration, pushes: readonly Push[], families: FamilyLookup): BufferCandidate | undefined => {
-  const owner = ownerOf(buffer);
+  const owner = declaringClassOf(buffer);
   if (owner === undefined) return undefined;
   const family = families(owner);
   return {

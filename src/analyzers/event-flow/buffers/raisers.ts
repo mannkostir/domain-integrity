@@ -1,6 +1,6 @@
 import { CallExpression, ClassDeclaration, MethodDeclaration, Node, SourceFile } from 'ts-morph';
 import { ProjectClasses } from '../keys';
-import { BufferCandidate } from './drains';
+import { BufferCandidate } from './buffer-candidate';
 
 const invokingCall = (reference: Node): CallExpression | undefined => {
   const access = reference.getParent();

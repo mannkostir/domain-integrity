@@ -1,23 +1,8 @@
-import {
-  ClassDeclaration,
-  GetAccessorDeclaration,
-  MethodDeclaration,
-  Node,
-  PropertyAccessExpression,
-  PropertyDeclaration,
-  SourceFile,
-  SyntaxKind,
-} from 'ts-morph';
+import { ClassDeclaration, GetAccessorDeclaration, Node, PropertyAccessExpression, SourceFile, SyntaxKind } from 'ts-morph';
 import { isPlainArrayPush, isResetToEmpty } from '../../shared/array-store';
 import { outermostWrapper } from '../../shared/wrappers';
+import { BufferCandidate } from './buffer-candidate';
 import { occurrencesOf } from './occurrences';
-
-export type BufferCandidate = {
-  readonly buffer: PropertyDeclaration;
-  readonly pushers: readonly MethodDeclaration[];
-  readonly family: readonly ClassDeclaration[];
-  readonly arrays: ReadonlySet<Node>;
-};
 
 const thisAccessNamedBy = (occurrence: Node): PropertyAccessExpression | undefined => {
   const parent = occurrence.getParent();

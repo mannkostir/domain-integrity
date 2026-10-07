@@ -1,6 +1,7 @@
 import { ClassDeclaration, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
 import { destructuringRoot } from '../../shared/writes';
 import { unwrap } from '../../shared/wrappers';
+import { isPrivateMember } from './private-member';
 
 const OCCURRENCE_KINDS = [
   SyntaxKind.Identifier,
@@ -101,14 +102,10 @@ const isNonFamilyClassOrUnion = (type: Type, family: readonly ClassDeclaration[]
 const isProvablyOtherReceiver = (type: Type, family: readonly ClassDeclaration[]): boolean =>
   isPrimitive(type) || isNonFamilyClassOrUnion(type, family);
 
-const isPrivateTarget = (target: Node): boolean =>
-  (Node.isModifierable(target) && target.hasModifier(SyntaxKind.PrivateKeyword)) ||
-  (Node.hasName(target) && Node.isPrivateIdentifier(target.getNameNode()));
-
 const isOtherClassAccess = (node: Node, target: Node, family: readonly ClassDeclaration[]): boolean => {
   const parent = node.getParent();
   return (
-    isPrivateTarget(target) &&
+    isPrivateMember(target) &&
     Node.isPropertyAccessExpression(parent) &&
     parent.getNameNode() === node &&
     isProvablyOtherReceiver(unwrap(parent.getExpression()).getType(), family)

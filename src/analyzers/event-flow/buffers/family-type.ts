@@ -1,7 +1,7 @@
 import { ClassDeclaration, Node, Symbol as MorphSymbol, Type, ts } from 'ts-morph';
 import { familyHeritage } from './family-heritage';
 
-type Holds = (type: Type) => boolean;
+export type Holds = (type: Type) => boolean;
 
 export type FamilyHolding = {
   readonly holdsInstance: Holds;

@@ -1,9 +1,8 @@
 import { Expression, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
 import { unwrap } from '../../shared/wrappers';
 import { CalleeReach, calleeReach } from './escaping-callee';
-import { FamilyHolding } from './family-type';
-
-type Holds = (type: Type) => boolean;
+import { FamilyHolding, Holds } from './family-type';
+import { isPrivateMember } from './private-member';
 
 const anyHolds = (nodes: readonly Node[], holds: Holds): boolean => nodes.some((node) => holds(node.getType()));
 
@@ -23,8 +22,7 @@ const templateArguments = (template: Node): readonly Node[] =>
 const isLiteralKey = (key: Node | undefined): boolean =>
   Node.isStringLiteral(key) || Node.isNumericLiteral(key) || Node.isNoSubstitutionTemplateLiteral(key);
 
-const isPrivateProperty = (declaration: Node): boolean =>
-  Node.isPropertyDeclaration(declaration) && declaration.hasModifier(SyntaxKind.PrivateKeyword);
+const isPrivateProperty = (declaration: Node): boolean => Node.isPropertyDeclaration(declaration) && isPrivateMember(declaration);
 
 const isOwnPrivateField = (expression: Expression, holds: Holds): boolean => {
   const target = unwrap(expression);

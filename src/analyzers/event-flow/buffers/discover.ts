@@ -6,8 +6,9 @@ import { hierarchyOf } from '../hierarchy';
 import { ProjectClasses } from '../keys';
 import { UndispatchedBuffer } from '../model';
 import { isTestFile } from '../test-files';
-import { candidatesIn, ownerOf } from './candidates';
-import { BufferCandidate, isUndrained } from './drains';
+import { BufferCandidate } from './buffer-candidate';
+import { candidatesIn, declaringClassOf } from './candidates';
+import { isUndrained } from './drains';
 import { hasEscapeRoute } from './escapes';
 import { familyHolding } from './family-type';
 import { raisingClasses } from './raisers';
@@ -57,7 +58,7 @@ const raiserIds = (candidate: BufferCandidate, context: BufferContext, scope: Sc
   [...new Set(raisingClasses(candidate, scope.production, context.isProject).map((cls) => context.identity(cls).id))].sort();
 
 const undispatched = (candidate: BufferCandidate, context: BufferContext, scope: Scope): UndispatchedBuffer | undefined => {
-  const owner = ownerOf(candidate.buffer);
+  const owner = declaringClassOf(candidate.buffer);
   if (owner === undefined || !context.isProject(owner) || !isCandidateOpen(candidate, owner, context, scope)) return undefined;
   if (!isUndrained(candidate, scope.production)) return undefined;
   const raisers = raiserIds(candidate, context, scope);

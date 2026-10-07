@@ -69,6 +69,15 @@ describe('hasEscapeRoute', () => {
     expect(escapes('export {};', { root: COPYING_ROOT })).toBe(false);
   });
 
+  it.each([
+    ['private peers', 'this.peers'],
+    ['#peers', 'this.#peers'],
+  ])('finds no escape when the aggregate spreads its own %s iterable of itself', (declaration, access) => {
+    const root = `export class Root { private events: object[] = []; ${declaration}: Iterable<Root> = []; copy(): Root[] { return [...${access}]; } }`;
+
+    expect(escapes('export {};', { root })).toBe(false);
+  });
+
   it('finds no escape when another class spreads a private array into an array', () => {
     expect(escapes('export class Other { private items: object[] = []; copy() { return [...this.items]; } }')).toBe(false);
   });
