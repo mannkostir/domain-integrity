@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { UsageError } from '../../src/engine/errors';
 import { partitionByBaseline, readBaseline, serializeBaseline } from '../../src/report/baseline';
-import { finding, flowFinding } from '../helpers/model';
+import { bufferFinding, finding, flowFinding } from '../helpers/model';
 
 const tempFile = (content: string): string => {
   const path = join(mkdtempSync(join(tmpdir(), 'baseline-')), 'baseline.json');
@@ -58,5 +58,9 @@ describe('baseline', () => {
     expect(JSON.parse(serializeBaseline([flowFinding({ checkId: 'unhandled-event', handler: undefined })])).findings).toEqual([
       'unhandled-event|RefundIssued||',
     ]);
+  });
+
+  it('keys an undispatched buffer by owner and buffer', () => {
+    expect(JSON.parse(serializeBaseline([bufferFinding()])).findings).toEqual(['undispatched-events|AggregateRoot|_domainEvents|']);
   });
 });

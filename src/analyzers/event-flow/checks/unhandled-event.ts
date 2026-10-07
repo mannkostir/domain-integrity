@@ -1,4 +1,4 @@
-import { EventFlowFinding } from '../../../analyzer';
+import { HandlerFinding } from '../../../analyzer';
 import { EventClassModel, EventFlowModel, Location } from '../model';
 import { acceptedIds, nameOf } from './handler-label';
 
@@ -17,9 +17,9 @@ const isHandled = (model: EventFlowModel, event: EventClassModel): boolean => {
   return model.registrations.some((registration) => accepted.has(registration.event));
 };
 
-export const unhandledEvent = (model: EventFlowModel): EventFlowFinding[] => {
+export const unhandledEvent = (model: EventFlowModel): HandlerFinding[] => {
   if (model.unresolved.length > 0) return [];
-  return model.inProcess.flatMap((id): EventFlowFinding[] => {
+  return model.inProcess.flatMap((id): HandlerFinding[] => {
     const event = model.events.get(id);
     const [first] = [...(event?.constructions ?? [])].sort(byPosition);
     if (event === undefined || first === undefined || mightBeHandledUnseen(model, event) || isHandled(model, event)) return [];

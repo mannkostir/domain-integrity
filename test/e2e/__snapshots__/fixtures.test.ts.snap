@@ -138,6 +138,12 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
               "shortDescription": {
                 "text": "A saga handles the success event of a declared outcome but not its failure event."
               }
+            },
+            {
+              "id": "undispatched-events",
+              "shortDescription": {
+                "text": "An event method stores events in a buffer that production code never reads or drains."
+              }
             }
           ]
         }

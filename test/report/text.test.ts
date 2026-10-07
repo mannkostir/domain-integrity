@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatText } from '../../src/report/text';
-import { finding, flowFinding } from '../helpers/model';
+import { bufferFinding, finding, flowFinding } from '../helpers/model';
 
 describe('formatText', () => {
   it('lists fresh findings, then known ones, then a summary', () => {
@@ -54,5 +54,11 @@ describe('formatText', () => {
     const text = formatText({ fresh: [flowFinding({ checkId: 'unhandled-event', handler: undefined })], known: [], problems: [], rules: [], root: '/app' });
 
     expect(text.split('\n')[0]).toBe('error unhandled-event  RefundIssued  src/handlers.ts:4');
+  });
+
+  it('locates an undispatched buffer by owner and buffer', () => {
+    const text = formatText({ fresh: [bufferFinding()], known: [], problems: [], rules: [], root: '/app' });
+
+    expect(text.split('\n')[0]).toBe('error undispatched-events  AggregateRoot._domainEvents  src/aggregate-root.ts:3');
   });
 });

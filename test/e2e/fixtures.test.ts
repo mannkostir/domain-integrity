@@ -1,15 +1,20 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { Finding } from '../../src/analyzer';
+import { EventFlowFinding, Finding } from '../../src/analyzer';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
 
 const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
+const describeEventFlowFinding = (finding: EventFlowFinding): string =>
+  finding.checkId === 'undispatched-events'
+    ? `${finding.severity} ${finding.checkId} ${finding.owner}.${finding.buffer} ${finding.raisers.join(',')}`
+    : `${finding.severity} ${finding.checkId} ${finding.event} ${finding.handler ?? '-'} ${finding.subject}`;
+
 const describeFinding = (finding: Finding): string =>
   finding.analyzer === 'lifecycle'
     ? `${finding.severity} ${finding.checkId} ${finding.aggregate}.${finding.method ?? '-'} ${finding.field} ${finding.subject}`
-    : `${finding.severity} ${finding.checkId} ${finding.event} ${finding.handler ?? '-'} ${finding.subject}`;
+    : describeEventFlowFinding(finding);
 
 const checkJson = async (name: string) => {
   const { io, stdout } = captureIo(fixture(name));

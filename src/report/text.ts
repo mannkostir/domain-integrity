@@ -1,5 +1,5 @@
 import { toPosixRelative } from '../engine/path';
-import { Finding, RuleDescription } from '../analyzer';
+import { EventFlowFinding, Finding, RuleDescription } from '../analyzer';
 
 export type Report = {
   readonly fresh: readonly Finding[];
@@ -11,10 +11,13 @@ export type Report = {
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-const location = (finding: Finding): string =>
-  finding.analyzer === 'lifecycle'
-    ? `${finding.aggregateId}${finding.method ? `.${finding.method}()` : ''}`
+const eventFlowLocation = (finding: EventFlowFinding): string =>
+  finding.checkId === 'undispatched-events'
+    ? `${finding.ownerId}.${finding.buffer}`
     : `${finding.eventId}${finding.handler ? ` → ${finding.handler}` : ''}`;
+
+const location = (finding: Finding): string =>
+  finding.analyzer === 'lifecycle' ? `${finding.aggregateId}${finding.method ? `.${finding.method}()` : ''}` : eventFlowLocation(finding);
 
 const entry = (finding: Finding, root: string, suffix: string): string =>
   [

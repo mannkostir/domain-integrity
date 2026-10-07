@@ -27,19 +27,39 @@ export type LifecycleFinding = FindingCore & {
   readonly field: string;
 };
 
-export type EventFlowFinding = FindingCore & {
+export type HandlerCheckId = 'dead-handler' | 'handler-payload-mismatch' | 'unhandled-event' | 'saga-missing-failure-path';
+
+export type HandlerFinding = FindingCore & {
   readonly analyzer: 'event-flow';
+  readonly checkId: HandlerCheckId;
   readonly event: string;
   readonly eventId: string;
   readonly handler: string | undefined;
 };
 
+export type EventBufferFinding = FindingCore & {
+  readonly analyzer: 'event-flow';
+  readonly checkId: 'undispatched-events';
+  readonly owner: string;
+  readonly ownerId: string;
+  readonly buffer: string;
+  readonly method: string;
+  readonly raisers: readonly string[];
+};
+
+export type EventFlowFinding = HandlerFinding | EventBufferFinding;
+
 export type Finding = LifecycleFinding | EventFlowFinding;
+
+const eventFlowKey = (finding: EventFlowFinding): string =>
+  finding.checkId === 'undispatched-events'
+    ? [finding.checkId, finding.ownerId, finding.buffer, finding.subject].join('|')
+    : [finding.checkId, finding.eventId, finding.handler ?? '', finding.subject].join('|');
 
 export const findingKey = (finding: Finding): string =>
   finding.analyzer === 'lifecycle'
     ? [finding.checkId, finding.aggregateId, finding.method ?? '', finding.field, finding.subject].join('|')
-    : [finding.checkId, finding.eventId, finding.handler ?? '', finding.subject].join('|');
+    : eventFlowKey(finding);
 
 export type AmbiguousReference = { readonly kind: 'ambiguous'; readonly reference: string; readonly candidates: readonly string[] };
 

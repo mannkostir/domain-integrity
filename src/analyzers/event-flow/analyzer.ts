@@ -15,5 +15,5 @@ export const eventFlowAnalyzer: Analyzer<EventFlowModel, never, EventFlowFinding
   check: runEventFlowChecks,
   diagram: eventFlowDiagram,
   summarize: eventFlowSummary,
-  isEmpty: (model) => model.registrations.length === 0 && model.inProcess.length === 0 && model.sagas.length === 0,
+  isEmpty: (model) => model.registrations.length === 0 && model.inProcess.length === 0 && model.sagas.length === 0 && model.buffers.length === 0,
 };
