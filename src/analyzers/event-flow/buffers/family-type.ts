@@ -35,7 +35,8 @@ const isHeritageInstance = (type: Type, heritage: ReadonlySet<Node>): boolean =>
 
 const isThisType = (type: Type): boolean =>
   (type.getSymbol()?.getDeclarations() ?? []).some(
-    (declaration) => Node.isClassDeclaration(declaration) || Node.isInterfaceDeclaration(declaration),
+    (declaration) =>
+      Node.isClassDeclaration(declaration) || Node.isClassExpression(declaration) || Node.isInterfaceDeclaration(declaration),
   );
 
 const typeParameterHolds = (type: Type, heritage: ReadonlySet<Node>, holds: Holds): boolean =>

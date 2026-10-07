@@ -1,7 +1,7 @@
-import { Node } from 'ts-morph';
+import { Node, ts } from 'ts-morph';
 import { isDefaultLibraryNode, isLibraryNode } from '../../shared/library';
 import { unwrap } from '../../shared/wrappers';
-import { symbolDeclarations } from './callee-declarations';
+import { signatureDeclarations, symbolDeclarations } from './callee-declarations';
 import { isReflectiveCallee } from './reflective-callee';
 
 const FUNCTION_FORWARDERS: ReadonlySet<string> = new Set(['call', 'apply', 'bind']);
@@ -28,13 +28,25 @@ const judgedCallee = (callee: Node): Node => {
   return forwarded === undefined ? callee : judgedCallee(forwarded);
 };
 
+const isInGlobalAugmentation = (declaration: Node): boolean =>
+  declaration
+    .getAncestors()
+    .some((ancestor) => Node.isModuleDeclaration(ancestor) && (ancestor.compilerNode.flags & ts.NodeFlags.GlobalAugmentation) !== 0);
+
+const isInGlobalScript = (declaration: Node): boolean => !ts.isExternalModule(declaration.getSourceFile().compilerNode);
+
+const isAmbientGlobal = (declaration: Node): boolean =>
+  isDefaultLibraryNode(declaration) || isInGlobalAugmentation(declaration) || isInGlobalScript(declaration);
+
+const isGlobalConsoleDeclaration = (declaration: Node): boolean =>
+  Node.isVariableDeclaration(declaration) &&
+  declaration.getName() === 'console' &&
+  isLibraryNode(declaration) &&
+  isAmbientGlobal(declaration);
+
 const isConsoleReference = (node: Node): boolean => {
-  const target = unwrap(node);
-  const named =
-    (Node.isIdentifier(target) && target.getText() === 'console') ||
-    (Node.isPropertyAccessExpression(target) && target.getName() === 'console');
-  const declarations = symbolDeclarations(target);
-  return named && declarations.length > 0 && declarations.every(isLibraryNode);
+  const declarations = symbolDeclarations(unwrap(node));
+  return declarations.length > 0 && declarations.every(isGlobalConsoleDeclaration);
 };
 
 const isConsoleCallee = (callee: Node): boolean => {
@@ -42,9 +54,17 @@ const isConsoleCallee = (callee: Node): boolean => {
   return Node.isPropertyAccessExpression(target) && isConsoleReference(target.getExpression());
 };
 
+const isAllForeign = (declarations: readonly Node[]): boolean =>
+  declarations.length > 0 && declarations.every(isForeignLibraryNode);
+
 const isForeignCallee = (callee: Node): boolean => {
   const declarations = symbolDeclarations(callee);
-  return callee.getType().isAny() || declarations.length === 0 || declarations.every(isForeignLibraryNode);
+  return (
+    callee.getType().isAny() ||
+    declarations.length === 0 ||
+    isAllForeign(declarations) ||
+    isAllForeign(signatureDeclarations(callee))
+  );
 };
 
 export const isEscapingCallee = (callee: Node): boolean => {

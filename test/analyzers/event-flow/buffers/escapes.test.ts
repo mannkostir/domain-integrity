@@ -21,8 +21,13 @@ const BUS = [
   'export declare function run(job: () => unknown): void;',
   'export declare function tag(strings: TemplateStringsArray, ...values: unknown[]): string;',
   'export declare class Repo { save(value: object): void; }',
+  'export declare class Remote { console: { log(value: unknown): void }; }',
+  'export declare const transports: { console: { log(value: unknown): void } };',
   'export declare class Repo2 { save(value: { readonly kind?: string }): void; }',
 ].join('\n');
+
+const NODE_GLOBAL_CONSOLE =
+  'export {};\ndeclare global {\n  var console: Console;\n  interface Console { log(...data: unknown[]): void; }\n}';
 
 const NODE_CONSOLE = 'declare var console: Console;\ninterface Console { log(...data: unknown[]): void; }';
 
@@ -37,7 +42,7 @@ const escapes = (usage: string, setup: Setup = {}): boolean => {
     {
       '/lib/bus.d.ts': BUS,
       '/app/src/root.ts': setup.root ?? ROOT,
-      '/app/src/use.ts': `import { Root } from './root';\nimport { publish, sendDto, opts, run, tag, Repo, Repo2 } from '../../lib/bus';\n${usage}`,
+      '/app/src/use.ts': `import { Root } from './root';\nimport { publish, sendDto, opts, run, tag, Repo, Repo2, Remote, transports } from '../../lib/bus';\n${usage}`,
       ...setup.extraFiles,
     },
     setup.compilerOptions,
@@ -86,6 +91,14 @@ describe('hasEscapeRoute', () => {
     expect(escapes('export {};', { root: 'import { publish } from "../../lib/bus";\nexport class Root { private events: object[] = []; save(): void { publish(this); } }' })).toBe(true);
   });
 
+  it('finds no escape when a class expression passes itself to a library function', () => {
+    expect(escapes('export const K = class { go(): void { publish(this); } };')).toBe(false);
+  });
+
+  it('finds no escape when a project helper pushes the aggregate', () => {
+    expect(escapes('export const push = (xs: Root[], r: Root) => xs.push(r);')).toBe(false);
+  });
+
   it('finds no escape when a weak option bag reaches a library function', () => {
     expect(escapes('export const f = (o: { timeout?: number }) => opts(o);')).toBe(false);
   });
@@ -102,6 +115,15 @@ describe('hasEscapeRoute', () => {
     expect(
       escapes('export const f = (r: Root) => console.log(r);', {
         extraFiles: { '/node_modules/@types/node/index.d.ts': NODE_CONSOLE },
+        compilerOptions: { lib: ['lib.es2022.d.ts'] },
+      }),
+    ).toBe(false);
+  });
+
+  it('finds no escape when a console declared in a global augmentation logs the aggregate', () => {
+    expect(
+      escapes('export const f = (r: Root) => console.log(r);', {
+        extraFiles: { '/node_modules/@types/node/index.d.ts': NODE_GLOBAL_CONSOLE },
         compilerOptions: { lib: ['lib.es2022.d.ts'] },
       }),
     ).toBe(false);
@@ -167,6 +189,10 @@ describe('hasEscapeRoute', () => {
     ['library function call', 'export const f = (r: Root) => publish.call(null, r);'],
     ['library function apply', 'export const f = (r: Root) => publish.apply(null, [r]);'],
     ['library function bind', 'export const f = (r: Root) => publish.bind(null, r);'],
+    ['library console property', 'export const f = (r: Root) => transports.console.log(r);'],
+    ['library class console member', 'export const f = (r: Root, x: Remote) => x.console.log(r);'],
+    ['local alias of a library function', 'const p = publish;\nexport const f = (r: Root) => p(r);'],
+    ['object member aliasing a library function', 'const api = { send: publish };\nexport const f = (r: Root) => api.send(r);'],
     ['unresolved callee', 'declare const anyFn: any;\nexport const f = (r: Root) => anyFn(r);'],
     ['any-typed value', 'declare const r: any;\nexport const f = () => Object.keys(r);'],
   ])('finds an escape through %s', (_, usage) => {
