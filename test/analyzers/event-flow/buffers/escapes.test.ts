@@ -24,6 +24,7 @@ const BUS = [
   'export declare class Remote { console: { log(value: unknown): void }; }',
   'export declare const transports: { console: { log(value: unknown): void } };',
   'export declare class Repo2 { save(value: { readonly kind?: string }): void; }',
+  'export declare class Base { constructor(value: unknown); }',
 ].join('\n');
 
 const NODE_GLOBAL_CONSOLE =
@@ -42,7 +43,7 @@ const escapes = (usage: string, setup: Setup = {}): boolean => {
     {
       '/lib/bus.d.ts': BUS,
       '/app/src/root.ts': setup.root ?? ROOT,
-      '/app/src/use.ts': `import { Root } from './root';\nimport { publish, sendDto, opts, run, tag, Repo, Repo2, Remote, transports } from '../../lib/bus';\n${usage}`,
+      '/app/src/use.ts': `import { Root } from './root';\nimport { publish, sendDto, opts, run, tag, Repo, Repo2, Remote, transports, Base } from '../../lib/bus';\n${usage}`,
       ...setup.extraFiles,
     },
     setup.compilerOptions,
@@ -273,6 +274,8 @@ describe('hasEscapeRoute', () => {
     ['object spread of a readonly aggregate', 'export const f = (r: Readonly<Root>) => ({ ...r });'],
     ['library argument of an aggregate with an omitted key', "export const f = (r: Omit<Root, 'id'>) => publish(r);"],
     ['Object.keys of a picked aggregate', "export const f = (r: Pick<Root, 'id'>) => Object.keys(r);"],
+    ['Reflect.apply handing the aggregate to a library function', 'export const f = (r: Root) => Reflect.apply(publish, undefined, [r]);'],
+    ['Reflect.construct handing the aggregate to a library class', 'export const f = (r: Root) => Reflect.construct(Base, [r]);'],
     ['library argument typed by a type parameter constrained to the aggregate', 'export const f = <T extends Root>(x: T) => publish(x);'],
     ['Object.keys of the aggregate', 'export const f = (r: Root) => Object.keys(r);'],
     ['Object.keys of a type parameter constrained to the aggregate', 'export const f = <T extends Root>(t: T) => Object.keys(t);'],

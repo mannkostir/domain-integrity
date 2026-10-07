@@ -19,17 +19,26 @@ const interfaceMember = (declaration: Node, owner: string): string | undefined =
     : undefined;
 };
 
+const FORWARDING_REFLECT_FUNCTIONS: ReadonlySet<string> = new Set(['apply', 'construct']);
+
 const isInReflectNamespace = (declaration: Node): boolean =>
   declaration.getAncestors().some((ancestor) => Node.isModuleDeclaration(ancestor) && ancestor.getName() === 'Reflect');
 
+const isReflectFunction = (declaration: Node): boolean =>
+  Node.isFunctionDeclaration(declaration) && isInReflectNamespace(declaration);
+
+const isForwardingReflectFunction = (declaration: Node): boolean =>
+  Node.isFunctionDeclaration(declaration) && FORWARDING_REFLECT_FUNCTIONS.has(declaration.getName() ?? '');
+
 const isShallowReflectiveShape = (declaration: Node): boolean => {
   const member = interfaceMember(declaration, 'ObjectConstructor');
-  return (member !== undefined && REFLECTIVE_OBJECT_METHODS.has(member)) || (Node.isFunctionDeclaration(declaration) && isInReflectNamespace(declaration));
+  return (member !== undefined && REFLECTIVE_OBJECT_METHODS.has(member)) || (isReflectFunction(declaration) && !isForwardingReflectFunction(declaration));
 };
 
 const isDeepReflectiveShape = (declaration: Node): boolean =>
   interfaceMember(declaration, 'JSON') === 'stringify' ||
-  (Node.isFunctionDeclaration(declaration) && declaration.getName() === 'structuredClone');
+  (Node.isFunctionDeclaration(declaration) && declaration.getName() === 'structuredClone') ||
+  (isReflectFunction(declaration) && isForwardingReflectFunction(declaration));
 
 const calleeDeclarations = (callee: Node): readonly Node[] => [...symbolDeclarations(callee), ...signatureDeclarations(callee)];
 
