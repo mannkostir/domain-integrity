@@ -56,11 +56,9 @@ const raiserIds = (candidate: BufferCandidate, context: BufferContext, scope: Sc
 const undispatched = (candidate: BufferCandidate, context: BufferContext, scope: Scope): UndispatchedBuffer | undefined => {
   const owner = ownerOf(candidate.buffer);
   if (owner === undefined || !context.isProject(owner) || !isCandidateOpen(candidate, owner, context, scope)) return undefined;
+  if (!isUndrained(candidate, scope.production)) return undefined;
   const raisers = raiserIds(candidate, context, scope);
-  const reported =
-    raisers.length > 0 &&
-    isUndrained(candidate, scope.production) &&
-    !hasEscapeRoute(scope.production, mayHoldFamily(candidate.family));
+  const reported = raisers.length > 0 && !hasEscapeRoute(scope.production, mayHoldFamily(candidate.family));
   return reported ? bufferOf(candidate, owner, raisers, context) : undefined;
 };
 

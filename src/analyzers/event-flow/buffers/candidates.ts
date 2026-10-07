@@ -52,6 +52,12 @@ const pushesOf = (method: MethodDeclaration, isProject: ProjectClasses, families
       : [];
   });
 
+const pushesOnlyOnto = (pusher: MethodDeclaration, buffer: PropertyDeclaration): boolean =>
+  pushedBuffers(pusher).every((pushed) => pushed === buffer);
+
+const hasSingleTarget = (candidate: BufferCandidate): boolean =>
+  candidate.pushers.every((pusher) => pushesOnlyOnto(pusher, candidate.buffer));
+
 const toCandidate = (buffer: PropertyDeclaration, pushes: readonly Push[], families: FamilyLookup): BufferCandidate | undefined => {
   const owner = ownerOf(buffer);
   if (owner === undefined) return undefined;
@@ -76,5 +82,7 @@ export const candidatesIn = (
     .flatMap((cls) => cls.getMethods())
     .filter((method) => isEventMethod(method, eventMethods))
     .flatMap((method) => pushesOf(method, isProject, families));
-  return [...new Set(pushes.map((push) => push.buffer))].flatMap((buffer) => toCandidate(buffer, pushes, families) ?? []);
+  return [...new Set(pushes.map((push) => push.buffer))]
+    .flatMap((buffer) => toCandidate(buffer, pushes, families) ?? [])
+    .filter(hasSingleTarget);
 };

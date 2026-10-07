@@ -186,4 +186,17 @@ describe('undispatchedBuffers', () => {
 
     expect(buffersOf(domainBooking({ '/app/src/infra/booking-entity.ts': entity }), DEFAULT_CONFIG, DOMAIN)).toEqual([]);
   });
+
+  it('stays silent when the event method also pushes onto a buffer that production reads', () => {
+    const root = [
+      'export abstract class Root {',
+      '  private a: object[] = [];',
+      '  private b: object[] = [];',
+      '  protected addEvent(e: object): void { this.a.push(e); this.b.push(e); }',
+      '  flush(bus: { publishAll(events: object[]): void }): void { bus.publishAll(this.b); }',
+      '}',
+    ].join('\n');
+
+    expect(buffersOf({ '/app/src/root.ts': root, '/app/src/a.ts': raiserSource('A', 'Root', 'root') })).toEqual([]);
+  });
 });
