@@ -99,6 +99,7 @@ describe('fixture projects', () => {
         'error dead-handler RefundIssued RefundHandler.handle ',
         'error handler-payload-mismatch OrderPlaced OrderPlacedHandler.handle PaymentCaptured',
         'error saga-missing-failure-path PaymentFailed OrderSaga PaymentCaptured',
+        'error undispatched-events Undispatched.events Undispatched',
         'error unhandled-event Shipped - ',
       ],
     });
