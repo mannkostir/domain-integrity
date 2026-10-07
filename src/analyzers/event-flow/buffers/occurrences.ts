@@ -123,6 +123,31 @@ const readableNameNode = (target: Node): Node | undefined => {
   return nameNode !== undefined && isOccurrenceKind(nameNode) ? nameNode : undefined;
 };
 
+type NameIndex = ReadonlyMap<string, readonly Node[]>;
+
+const buildNameIndex = (files: readonly SourceFile[]): NameIndex => {
+  const index = new Map<string, Node[]>();
+  files
+    .flatMap((file) => OCCURRENCE_KINDS.flatMap((kind) => file.getDescendantsOfKind(kind)))
+    .forEach((node) => {
+      const name = textOf(node);
+      const named = index.get(name);
+      if (named === undefined) index.set(name, [node]);
+      else named.push(node);
+    });
+  return index;
+};
+
+const nameIndexes = new WeakMap<readonly SourceFile[], NameIndex>();
+
+const nameIndexOf = (files: readonly SourceFile[]): NameIndex => {
+  const known = nameIndexes.get(files);
+  if (known !== undefined) return known;
+  const index = buildNameIndex(files);
+  nameIndexes.set(files, index);
+  return index;
+};
+
 export const occurrencesOf = (
   target: Node,
   files: readonly SourceFile[],
@@ -130,9 +155,7 @@ export const occurrencesOf = (
 ): readonly Node[] | undefined => {
   const nameNode = readableNameNode(target);
   if (nameNode === undefined) return undefined;
-  const name = textOf(nameNode);
-  return files
-    .flatMap((file) => OCCURRENCE_KINDS.flatMap((kind) => file.getDescendantsOfKind(kind)))
-    .filter((node) => node !== nameNode && textOf(node) === name)
+  return (nameIndexOf(files).get(textOf(nameNode)) ?? [])
+    .filter((node) => node !== nameNode)
     .filter((node) => !isProvablyOther(node, target, family));
 };

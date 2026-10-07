@@ -13,7 +13,7 @@ const holdsForReach = (reach: CalleeReach, holding: FamilyHolding): Holds =>
   ({ none: NEVER, surface: holding.holdsAtSurface, deep: holding.holdsInstance })[reach];
 
 const escapesThroughInvocation = (callee: Node, args: readonly Node[], holding: FamilyHolding): boolean =>
-  anyHolds(args, holdsForReach(calleeReach(callee), holding));
+  anyHolds(args, holding.holdsInstance) && anyHolds(args, holdsForReach(calleeReach(callee), holding));
 
 const isArrayLike = (type: Type): boolean => type.isArray() || type.isReadonlyArray() || type.isTuple();
 
