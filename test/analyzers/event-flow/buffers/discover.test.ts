@@ -21,12 +21,18 @@ export class Payment extends AggregateRoot { pay(): void { this.addDomainEvent(n
 
 const DEFAULT_CONFIG = 'defineDomain({})';
 
-const buffersOf = (sources: Readonly<Record<string, string>>, config: string = DEFAULT_CONFIG): readonly UndispatchedBuffer[] => {
+const ANALYSED = '/app/src/';
+
+const buffersOf = (
+  sources: Readonly<Record<string, string>>,
+  config: string = DEFAULT_CONFIG,
+  analysed: string = ANALYSED,
+): readonly UndispatchedBuffer[] => {
   const project = inMemoryProject({
     ...sources,
     '/app/domain.config.ts': `import { defineDomain } from 'domain-integrity';\nexport default ${config};`,
   });
-  const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
+  const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith(analysed));
   const declaration = readDeclaration(project.getSourceFileOrThrow('/app/domain.config.ts'));
   return extractEventFlows({ declaration, files, root: '/app' }).buffers;
 };
@@ -53,6 +59,14 @@ const rootSource = (name: string): string =>
 
 const raiserSource = (name: string, root: string, file: string): string =>
   `import { ${root} } from './${file}';\nexport class ${name} extends ${root} { act(): void { this.addEvent({}); } }`;
+
+const DOMAIN = '/app/src/domain/';
+
+const domainBooking = (extra: Readonly<Record<string, string>>): Readonly<Record<string, string>> => ({
+  '/app/src/domain/aggregate-root.ts': BASE,
+  '/app/src/domain/booking.ts': BOOKING,
+  ...extra,
+});
 
 describe('undispatchedBuffers', () => {
   it('reports one buffer with every raiser for the booking shape', () => {
@@ -140,5 +154,36 @@ describe('undispatchedBuffers', () => {
     const inspect = "import { Booking } from './booking';\nexport const inspect = (booking: Booking) => Object.values(booking);";
 
     expect(buffersOf(booking({ '/app/src/inspect.ts': inspect }))).toEqual([]);
+  });
+
+  it('stays silent when a subclass outside the analysed files is decorated', () => {
+    const entity = [
+      "import { Booking } from '../domain/booking';",
+      'const Entity = () => (target: unknown) => target;',
+      '@Entity() export class BookingEntity extends Booking {}',
+    ].join('\n');
+
+    expect(buffersOf(domainBooking({ '/app/src/infra/booking-entity.ts': entity }), DEFAULT_CONFIG, DOMAIN)).toEqual([]);
+  });
+
+  it('stays silent when a subclass outside the analysed files reaches a library function', () => {
+    const entity = [
+      "import { Booking } from '../domain/booking';",
+      "import { save } from '../../../lib/orm';",
+      'export class BookingEntity extends Booking {}',
+      'export const persist = (entity: BookingEntity) => save(entity);',
+    ].join('\n');
+    const orm = 'export declare function save(value: { id?: string }): void;';
+
+    expect(buffersOf(domainBooking({ '/lib/orm.d.ts': orm, '/app/src/infra/booking-entity.ts': entity }), DEFAULT_CONFIG, DOMAIN)).toEqual([]);
+  });
+
+  it('stays silent when a subclass outside the analysed files reads itself reflectively', () => {
+    const entity = [
+      "import { Booking } from '../domain/booking';",
+      'export class BookingEntity extends Booking { dump(): unknown[] { return Object.values(this); } }',
+    ].join('\n');
+
+    expect(buffersOf(domainBooking({ '/app/src/infra/booking-entity.ts': entity }), DEFAULT_CONFIG, DOMAIN)).toEqual([]);
   });
 });

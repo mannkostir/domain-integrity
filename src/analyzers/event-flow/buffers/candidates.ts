@@ -15,18 +15,19 @@ export const ownerOf = (buffer: PropertyDeclaration): ClassDeclaration | undefin
   return Node.isClassDeclaration(owner) ? owner : undefined;
 };
 
-const familyOf = (cls: ClassDeclaration, isProject: ProjectClasses): readonly ClassDeclaration[] => [
+const familyOf = (cls: ClassDeclaration, isProject: ProjectClasses, projectFiles: ReadonlySet<SourceFile>): readonly ClassDeclaration[] => [
   ...hierarchyOf(cls, isProject).ancestors,
   cls,
-  ...cls.getDerivedClasses().filter(isProject),
+  ...cls.getDerivedClasses().filter((derived) => projectFiles.has(derived.getSourceFile())),
 ];
 
 const familyLookup = (isProject: ProjectClasses, projectFiles: readonly SourceFile[]): FamilyLookup => {
   const known = new Map<ClassDeclaration, Family>();
+  const projectFileSet: ReadonlySet<SourceFile> = new Set(projectFiles);
   return (owner) => {
     const cached = known.get(owner);
     if (cached !== undefined) return cached;
-    const members = familyOf(owner, isProject);
+    const members = familyOf(owner, isProject, projectFileSet);
     const family = { members, arrays: plainEventArrays(members, projectFiles) };
     known.set(owner, family);
     return family;
