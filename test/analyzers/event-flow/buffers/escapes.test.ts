@@ -5,11 +5,14 @@ import { inMemoryProject } from '../../../helpers/in-memory';
 
 const ROOT = 'export class Root { private events: object[] = []; }';
 
-const escapes = (usage: string): boolean => {
+const IMPLEMENTING_ROOT =
+  'export interface Aggregate { pull(): object[] }\nexport class Root implements Aggregate { private events: object[] = []; pull(): object[] { return []; } }';
+
+const escapes = (usage: string, root: string = ROOT): boolean => {
   const project = inMemoryProject({
-    '/lib/bus.d.ts': 'export declare function publish(value: unknown): void;\nexport declare class Repo { save(value: object): void; }',
-    '/app/src/root.ts': ROOT,
-    '/app/src/use.ts': `import { Root } from './root';\nimport { publish, Repo } from '../../lib/bus';\n${usage}`,
+    '/lib/bus.d.ts': 'export declare function publish(value: unknown): void;\nexport declare class Repo { save(value: object): void; }\nexport declare class Repo2 { save(value: { readonly kind?: string }): void; }',
+    '/app/src/root.ts': root,
+    '/app/src/use.ts': `import { Root } from './root';\nimport { publish, Repo, Repo2 } from '../../lib/bus';\n${usage}`,
   });
   const cls = project.getSourceFileOrThrow('/app/src/root.ts').getClassOrThrow('Root');
   const production = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
@@ -27,6 +30,28 @@ describe('hasEscapeRoute', () => {
 
   it('finds no escape when a class spreads its own private array', () => {
     expect(escapes('export class Other { private items: object[] = []; copy() { return [...this.items]; } }')).toBe(false);
+  });
+
+  it('finds no escape when results.push and Promise.resolve receive the aggregate', () => {
+    expect(escapes('export const f = (r: Root, results: Root[]) => { results.push(r); return Promise.resolve(r); };')).toBe(false);
+  });
+
+  it('finds an escape when the aggregate reaches a library method with a weak object parameter', () => {
+    expect(
+      escapes('interface Saveable { id?: string }\nexport const f = (r: Root, repo: { save(x: Saveable): void }) => { repo.save(r); new Repo2().save(r); };'),
+    ).toBe(true);
+  });
+
+  it('finds an escape when a value cast to a weak interface reaches a library method', () => {
+    expect(
+      escapes('interface Saveable { id?: string }\nexport const f = (r: Root) => { const s = r as Saveable; new Repo2().save(s); };'),
+    ).toBe(true);
+  });
+
+  it('finds an escape when a value typed as an implemented interface reaches a library function', () => {
+    expect(
+      escapes("import type { Aggregate } from './root';\nexport const f = (r: Root) => { const held: Aggregate = r; publish(held); };", IMPLEMENTING_ROOT),
+    ).toBe(true);
   });
 
   it.each([

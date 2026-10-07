@@ -12,6 +12,22 @@ const isFamilyInstance = (type: Type, family: readonly ClassDeclaration[]): bool
     (declaration) => Node.isClassDeclaration(declaration) && family.includes(declaration),
   );
 
+const acceptsFamilyInstance = (type: Type, instances: readonly Type[]): boolean =>
+  instances.some((instance) => instance.isAssignableTo(type));
+
+const isWeakObject = (type: Type): boolean => {
+  const properties = type.getProperties();
+  return (
+    type.isObject() &&
+    properties.length > 0 &&
+    properties.every((property) => property.isOptional()) &&
+    type.getCallSignatures().length === 0 &&
+    type.getConstructSignatures().length === 0 &&
+    type.getStringIndexType() === undefined &&
+    type.getNumberIndexType() === undefined
+  );
+};
+
 const isAnonymousObject = (type: Type): boolean => type.isAnonymous() || (type.isObject() && type.getSymbol() === undefined);
 
 const propertyMayHold = (property: MorphSymbol, holds: Holds): boolean => {
@@ -38,23 +54,26 @@ const innerTypes = (type: Type): readonly Type[] => [
 const isNonPrimitive = (type: Type): boolean => (type.getFlags() & ts.TypeFlags.NonPrimitive) !== 0;
 
 const holdsWithin =
-  (family: readonly ClassDeclaration[], seen: ReadonlySet<ts.Type>): Holds =>
+  (family: readonly ClassDeclaration[], instances: readonly Type[], seen: ReadonlySet<ts.Type>): Holds =>
   (type) => {
     if (seen.has(type.compilerType)) return false;
-    const next = holdsWithin(family, new Set([...seen, type.compilerType]));
+    const next = holdsWithin(family, instances, new Set([...seen, type.compilerType]));
     return (
       type.isAny() ||
       type.isUnknown() ||
       isNonPrimitive(type) ||
       (type.isTypeParameter() && isUnconstrainedOrHolding(type, next)) ||
       isFamilyInstance(type, family) ||
+      acceptsFamilyInstance(type, instances) ||
+      isWeakObject(type) ||
       innerTypes(type).some(next) ||
       anonymousPropertyMayHold(type, next)
     );
   };
 
 export const mayHoldFamily = (family: readonly ClassDeclaration[]): Holds => {
-  const holds = holdsWithin(family, new Set());
+  const instances = family.map((declaration) => declaration.getType());
+  const holds = holdsWithin(family, instances, new Set());
   const known = new Map<ts.Type, boolean>();
   return (type) => {
     const cached = known.get(type.compilerType);
