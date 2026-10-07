@@ -9,7 +9,7 @@ import { isTestFile } from '../test-files';
 import { candidatesIn, ownerOf } from './candidates';
 import { BufferCandidate, isUndrained } from './drains';
 import { hasEscapeRoute } from './escapes';
-import { mayHoldFamily } from './family-type';
+import { familyHolding } from './family-type';
 import { raisingClasses } from './raisers';
 
 export type BufferContext = {
@@ -61,7 +61,7 @@ const undispatched = (candidate: BufferCandidate, context: BufferContext, scope:
   if (owner === undefined || !context.isProject(owner) || !isCandidateOpen(candidate, owner, context, scope)) return undefined;
   if (!isUndrained(candidate, scope.production)) return undefined;
   const raisers = raiserIds(candidate, context, scope);
-  const reported = raisers.length > 0 && !hasEscapeRoute(scope.production, mayHoldFamily(candidate.family));
+  const reported = raisers.length > 0 && !hasEscapeRoute(scope.production, familyHolding(candidate.family));
   return reported ? bufferOf(candidate, owner, raisers, context) : undefined;
 };
 

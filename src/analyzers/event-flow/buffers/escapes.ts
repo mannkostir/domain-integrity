@@ -3,14 +3,14 @@ import { unwrap } from '../../shared/wrappers';
 import { CalleeReach, calleeReach } from './escaping-callee';
 import { FamilyHolding } from './family-type';
 
-type MayHold = (type: Type) => boolean;
+type Holds = (type: Type) => boolean;
 
-const anyHolds = (nodes: readonly Node[], mayHold: MayHold): boolean => nodes.some((node) => mayHold(node.getType()));
+const anyHolds = (nodes: readonly Node[], holds: Holds): boolean => nodes.some((node) => holds(node.getType()));
 
-const NEVER: MayHold = () => false;
+const NEVER: Holds = () => false;
 
-const holdsForReach = (reach: CalleeReach, holding: FamilyHolding): MayHold =>
-  ({ none: NEVER, surface: holding.mayHoldAtSurface, deep: holding.mayHold })[reach];
+const holdsForReach = (reach: CalleeReach, holding: FamilyHolding): Holds =>
+  ({ none: NEVER, surface: holding.holdsAtSurface, deep: holding.holdsInstance })[reach];
 
 const escapesThroughInvocation = (callee: Node, args: readonly Node[], holding: FamilyHolding): boolean =>
   anyHolds(args, holdsForReach(calleeReach(callee), holding));
@@ -26,22 +26,22 @@ const isLiteralKey = (key: Node | undefined): boolean =>
 const isPrivateProperty = (declaration: Node): boolean =>
   Node.isPropertyDeclaration(declaration) && declaration.hasModifier(SyntaxKind.PrivateKeyword);
 
-const isOwnPrivateField = (expression: Expression, mayHold: MayHold): boolean => {
+const isOwnPrivateField = (expression: Expression, holds: Holds): boolean => {
   const target = unwrap(expression);
   if (!Node.isPropertyAccessExpression(target)) return false;
   const receiver = unwrap(target.getExpression());
   return (
     Node.isThisExpression(receiver) &&
-    mayHold(receiver.getType()) &&
+    holds(receiver.getType()) &&
     (target.getSymbol()?.getDeclarations() ?? []).some(isPrivateProperty)
   );
 };
 
-const escapesThroughArraySpread = (expression: Expression, mayHold: MayHold): boolean =>
-  !isArrayLike(expression.getType()) && !isOwnPrivateField(expression, mayHold) && mayHold(expression.getType());
+const escapesThroughArraySpread = (expression: Expression, holds: Holds): boolean =>
+  !isArrayLike(expression.getType()) && !isOwnPrivateField(expression, holds) && holds(expression.getType());
 
 const escapesThroughCast = (cast: Expression, holding: FamilyHolding): boolean =>
-  holding.holdsInstance(unwrap(cast).getType()) && !holding.holdsInstance(cast.getType()) && !holding.mayHoldAtSurface(cast.getType());
+  holding.holdsInstance(unwrap(cast).getType()) && !holding.holdsInstance(cast.getType());
 
 const escapesThroughInvocations = (file: SourceFile, holding: FamilyHolding): boolean =>
   file
@@ -54,7 +54,7 @@ const escapesThroughInvocations = (file: SourceFile, holding: FamilyHolding): bo
     .getDescendantsOfKind(SyntaxKind.TaggedTemplateExpression)
     .some((tagged) => escapesThroughInvocation(tagged.getTag(), templateArguments(tagged.getTemplate()), holding));
 
-const escapesThroughSurfaceReads = (file: SourceFile, atSurface: MayHold): boolean =>
+const escapesThroughSurfaceReads = (file: SourceFile, atSurface: Holds): boolean =>
   file
     .getDescendantsOfKind(SyntaxKind.ElementAccessExpression)
     .some((access) => !isLiteralKey(access.getArgumentExpression()) && atSurface(access.getExpression().getType())) ||
@@ -63,10 +63,10 @@ const escapesThroughSurfaceReads = (file: SourceFile, atSurface: MayHold): boole
 
 const escapesThroughValues = (file: SourceFile, holding: FamilyHolding): boolean =>
   escapesThroughInvocations(file, holding) ||
-  escapesThroughSurfaceReads(file, holding.mayHoldAtSurface) ||
+  escapesThroughSurfaceReads(file, holding.holdsAtSurface) ||
   file
     .getDescendantsOfKind(SyntaxKind.SpreadElement)
-    .some((spread) => escapesThroughArraySpread(spread.getExpression(), holding.mayHold));
+    .some((spread) => escapesThroughArraySpread(spread.getExpression(), holding.holdsInstance));
 
 const escapesThroughCasts = (file: SourceFile, holding: FamilyHolding): boolean =>
   file.getDescendantsOfKind(SyntaxKind.AsExpression).some((cast) => escapesThroughCast(cast, holding)) ||

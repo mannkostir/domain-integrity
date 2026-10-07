@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CompilerOptions } from 'ts-morph';
-import { mayHoldFamily } from '../../../../src/analyzers/event-flow/buffers/family-type';
+import { familyHolding } from '../../../../src/analyzers/event-flow/buffers/family-type';
 import { hasEscapeRoute } from '../../../../src/analyzers/event-flow/buffers/escapes';
 import { inMemoryProject } from '../../../helpers/in-memory';
 
@@ -49,7 +49,7 @@ const escapes = (usage: string, setup: Setup = {}): boolean => {
   );
   const cls = project.getSourceFileOrThrow('/app/src/root.ts').getClassOrThrow('Root');
   const production = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
-  return hasEscapeRoute(production, mayHoldFamily([cls]));
+  return hasEscapeRoute(production, familyHolding([cls]));
 };
 
 describe('hasEscapeRoute', () => {
@@ -183,8 +183,8 @@ describe('hasEscapeRoute', () => {
     expect(escapes('export const f = (r: Root) => r as Record<string, unknown>;')).toBe(true);
   });
 
-  it('finds no escape when the aggregate is cast to object', () => {
-    expect(escapes('export const f = (r: Root) => r as object;')).toBe(false);
+  it('finds an escape when the aggregate is cast to object', () => {
+    expect(escapes('export const f = (r: Root) => r as object;')).toBe(true);
   });
 
   it('finds no escape when aggregates are cast to a readonly aggregate array', () => {
@@ -219,6 +219,24 @@ describe('hasEscapeRoute', () => {
     ).toBe(true);
   });
 
+  it('finds no escape when Object.keys reads an any-typed value', () => {
+    expect(escapes('declare const r: any;\nexport const f = () => Object.keys(r);')).toBe(false);
+  });
+
+  it('finds no escape when JSON.stringify reads an any-typed value', () => {
+    expect(escapes('export const f = (data: any) => JSON.stringify(data);')).toBe(false);
+  });
+
+  it('finds no escape when a library function receives an unknown value', () => {
+    expect(escapes('export const f = (x: unknown) => publish(x);')).toBe(false);
+  });
+
+  it('finds no escape when a generic value object stringifies its unconstrained props', () => {
+    expect(
+      escapes('export abstract class ValueObjectBase<T> { protected readonly props: T; constructor(props: T) { this.props = props; } toJSON(): string { return JSON.stringify(this.props); } }'),
+    ).toBe(false);
+  });
+
   it.each([
     ['Object.values', 'export const f = (r: Root) => Object.values(r);'],
     ['Object.assign', 'export const f = (r: Root) => Object.assign({}, r);'],
@@ -246,7 +264,7 @@ describe('hasEscapeRoute', () => {
     ['local alias of a library function', 'const p = publish;\nexport const f = (r: Root) => p(r);'],
     ['object member aliasing a library function', 'const api = { send: publish };\nexport const f = (r: Root) => api.send(r);'],
     ['unresolved callee', 'declare const anyFn: any;\nexport const f = (r: Root) => anyFn(r);'],
-    ['any-typed value', 'declare const r: any;\nexport const f = () => Object.keys(r);'],
+    ['library argument typed by a type parameter constrained to the aggregate', 'export const f = <T extends Root>(x: T) => publish(x);'],
     ['Object.keys of the aggregate', 'export const f = (r: Root) => Object.keys(r);'],
     ['Object.keys of a type parameter constrained to the aggregate', 'export const f = <T extends Root>(t: T) => Object.keys(t);'],
   ])('finds an escape through %s', (_, usage) => {
