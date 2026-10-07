@@ -1,4 +1,4 @@
-import { EventFlowFinding } from '../../../analyzer';
+import { HandlerFinding } from '../../../analyzer';
 import { EventClassModel, EventFlowModel, SagaModel } from '../model';
 import { acceptedIds, nameOf, refOf } from './handler-label';
 
@@ -32,10 +32,10 @@ const judged = (model: EventFlowModel): readonly { readonly saga: SagaModel; rea
     .flatMap((saga) => saga.outcomes.map((outcome) => ({ saga, outcome })))
     .filter(({ saga, outcome }) => !isOutcomeSilenced(model, saga, outcome));
 
-export const sagaMissingFailurePath = (model: EventFlowModel): EventFlowFinding[] =>
+export const sagaMissingFailurePath = (model: EventFlowModel): HandlerFinding[] =>
   judged(model)
     .filter(({ saga, outcome: [success, failure] }) => handles(model, saga, success) && !handles(model, saga, failure))
-    .map(({ saga, outcome: [success, failure] }): EventFlowFinding => {
+    .map(({ saga, outcome: [success, failure] }): HandlerFinding => {
       const sagaRef = refOf(model, saga.id);
       const sagaName = sagaRef.name;
       const failureName = nameOf(model, failure);

@@ -1,5 +1,5 @@
 import { ClassDeclaration, MethodDeclaration } from 'ts-morph';
-import { isLibraryNode } from './library';
+import { isLibraryNode } from '../shared/library';
 
 const inheritedClasses = (cls: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): readonly ClassDeclaration[] => {
   const base = cls.getBaseClass();

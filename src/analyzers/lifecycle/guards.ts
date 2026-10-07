@@ -12,7 +12,7 @@ import { SET, literalToken } from '../../engine/value-token';
 import { AggregateScope, fieldNameOf, referencesField, referencesFieldDirectly, thisGetterExpression } from './field-ref';
 import { collapseGuardTokens, comparedUnsetTokens, guardUniverse, unsetGuardTokens } from './guard-tokens';
 import { Sources, StateField, UnsetForm } from './model';
-import { isLibraryNode } from './library';
+import { isLibraryNode } from '../shared/library';
 import { isAccessor } from './state-field';
 import { allTokens, difference, intersect, union } from './values';
 

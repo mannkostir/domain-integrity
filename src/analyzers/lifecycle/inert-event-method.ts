@@ -9,8 +9,8 @@ import {
   ts,
   Type,
 } from 'ts-morph';
-import { outermostWrapper } from './wrappers';
-import { bracketWritesOf, isDecorated, isWritten, writesUnknownMembers } from './writes';
+import { outermostWrapper } from '../shared/wrappers';
+import { bracketWritesOf, isDecorated, isWritten, writesUnknownMembers } from '../shared/writes';
 
 const classLikes = (file: SourceFile): readonly (ClassDeclaration | ClassExpression)[] => [
   ...file.getDescendantsOfKind(SyntaxKind.ClassDeclaration),

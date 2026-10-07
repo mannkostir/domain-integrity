@@ -1,9 +1,9 @@
-import { EventFlowFinding } from '../../../analyzer';
+import { HandlerFinding } from '../../../analyzer';
 import { EventFlowModel, Registration } from '../model';
 import { acceptedIds, handlerLabel, nameOf } from './handler-label';
 
-export const handlerPayloadMismatch = (model: EventFlowModel): EventFlowFinding[] =>
-  model.registrations.flatMap((registration: Registration): EventFlowFinding[] => {
+export const handlerPayloadMismatch = (model: EventFlowModel): HandlerFinding[] =>
+  model.registrations.flatMap((registration: Registration): HandlerFinding[] => {
     const payload = registration.payload;
     if (registration.inTest || payload.kind !== 'classes' || model.events.get(registration.event)?.opaque === true) return [];
     const accepted = acceptedIds(model, registration.event);

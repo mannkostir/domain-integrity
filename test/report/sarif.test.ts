@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { formatSarif } from '../../src/report/sarif';
-import { finding } from '../helpers/model';
+import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks';
+import { bufferFinding, finding } from '../helpers/model';
+
+const UNDISPATCHED_RULE = EVENT_FLOW_RULES.filter((rule) => rule.id === 'undispatched-events');
+
+type SarifRun = { readonly tool: { readonly driver: { readonly rules: unknown } }; readonly results: unknown };
+
+const undispatchedRun = (): SarifRun =>
+  JSON.parse(formatSarif({ fresh: [bufferFinding()], known: [], problems: [], rules: UNDISPATCHED_RULE, root: '/app' })).runs[0];
 
 describe('formatSarif', () => {
   it('produces a SARIF 2.1.0 run with rules and located results', () => {
@@ -31,5 +39,22 @@ describe('formatSarif', () => {
         },
       ],
     });
+  });
+
+  it('declares the undispatched-events rule with its description', () => {
+    expect(undispatchedRun().tool.driver.rules).toEqual([
+      { id: 'undispatched-events', shortDescription: { text: 'An event method stores events in a buffer that production code never reads or drains.' } },
+    ]);
+  });
+
+  it('reports an undispatched-events finding under its rule at the buffer location', () => {
+    expect(undispatchedRun().results).toEqual([
+      {
+        ruleId: 'undispatched-events',
+        level: 'error',
+        message: { text: 'M4 Fix: F4' },
+        locations: [{ physicalLocation: { artifactLocation: { uri: 'src/aggregate-root.ts' }, region: { startLine: 3 } } }],
+      },
+    ]);
   });
 });

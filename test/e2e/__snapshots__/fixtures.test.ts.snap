@@ -64,7 +64,11 @@ error terminal-state-leak  Order.annotate()  src/order.ts:36
   annotate() can run after status is 'cancelled'.
   Fix: Guard annotate() so it cannot run when status is 'cancelled', or list it in allowAfterTerminal if that is intended.
 
-4 errors, 1 warning
+error undispatched-events  AggregateRoot.events  src/aggregate-root.ts:3
+  AggregateRoot.events collects events from addEvent() raised by Order, but no production code reads or drains it, so those events never reach a handler.
+  Fix: Dispatch the events in events after saving the aggregate and clear it, or stop raising them.
+
+5 errors, 1 warning
 "
 `;
 
@@ -138,11 +142,36 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
               "shortDescription": {
                 "text": "A saga handles the success event of a declared outcome but not its failure event."
               }
+            },
+            {
+              "id": "undispatched-events",
+              "shortDescription": {
+                "text": "An event method stores events in a buffer that production code never reads or drains."
+              }
             }
           ]
         }
       },
       "results": [
+        {
+          "ruleId": "undispatched-events",
+          "level": "error",
+          "message": {
+            "text": "Undispatched.events collects events from addEvent() raised by Undispatched, but no production code reads or drains it, so those events never reach a handler. Fix: Dispatch the events in events after saving the aggregate and clear it, or stop raising them."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/aggregates.ts"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ]
+        },
         {
           "ruleId": "dead-handler",
           "level": "error",
@@ -227,7 +256,11 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
 `;
 
 exports[`fixture projects > event-flows: text report 1`] = `
-"error dead-handler  RefundIssued → RefundHandler.handle  src/handlers.ts:4
+"error undispatched-events  Undispatched.events  src/aggregates.ts:4
+  Undispatched.events collects events from addEvent() raised by Undispatched, but no production code reads or drains it, so those events never reach a handler.
+  Fix: Dispatch the events in events after saving the aggregate and clear it, or stop raising them.
+
+error dead-handler  RefundIssued → RefundHandler.handle  src/handlers.ts:4
   RefundHandler.handle handles RefundIssued, but no production code constructs RefundIssued.
   Fix: Publish RefundIssued where it happens, or delete the handler.
 
@@ -243,6 +276,6 @@ error saga-missing-failure-path  PaymentFailed → OrderSaga  src/saga.ts:4
   OrderSaga handles PaymentCaptured but not its declared failure PaymentFailed.
   Fix: Handle PaymentFailed in OrderSaga, for example with a compensating command.
 
-4 errors, 0 warnings
+5 errors, 0 warnings
 "
 `;

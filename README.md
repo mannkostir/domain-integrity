@@ -138,7 +138,7 @@ npx domain-integrity check
 | `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. |
 | `transition-drift` | A method that can run from states you did not declare (error), or no longer from states you did (warning) |
 
-Four more checks cover in-process event flows. All of them are errors:
+Five more checks cover in-process event flows. All of them are errors:
 
 | Check | Catches |
 |---|---|
@@ -146,8 +146,9 @@ Four more checks cover in-process event flows. All of them are errors:
 | `handler-payload-mismatch` | A handler is registered for one event class but declares its event as an unrelated class |
 | `unhandled-event` | A declared in-process event is constructed but has no handler |
 | `saga-missing-failure-path` | A saga handles the success event of a declared outcome but not its failure event |
+| `undispatched-events` | An event method stores events in a buffer that production code never reads or drains |
 
-`dead-handler` and `handler-payload-mismatch` always run. `unhandled-event` runs only for the classes listed in `events.inProcess`, and `saga-missing-failure-path` only for sagas declared with `saga()`. See "The declaration".
+`dead-handler` and `handler-payload-mismatch` always run, and so does `undispatched-events` while `eventMethods` is non-empty. `unhandled-event` runs only for the classes listed in `events.inProcess`, and `saga-missing-failure-path` only for sagas declared with `saga()`. See "The declaration".
 
 These shapes are recognised as handlers:
 - a configured decorator on a class, where the `handle` method is the handler and its first parameter is the event, or on a method. The decorator is matched by its name, written plainly or as `ns.Name`, called or not; any other decorator expression, such as `@(list[0])` or `@factory()()`, is never a handler. An object-literal argument is read as options and skipped, so `@OnEvent(X.name, { async: true })` registers `X`;
@@ -206,7 +207,7 @@ Baseline entries for lifecycle findings are keyed by check, aggregate, method an
 
 Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
 
-Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields.
+Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|` and carry `owner`, `ownerId`, `buffer`, `method` and `raisers` instead.
 
 ## CI
 
@@ -327,15 +328,22 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 
+Every analysis sees only the files your tsconfig includes and the files they import. A file outside both is invisible to every rule: it produces no findings and cannot keep one silent. A decorated ORM subclass loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
+
 The analysis also trusts that nothing tampers with a plain event array from outside the aggregate's family. It does not see:
 
 - a replaced `Array.prototype.push`, or a replaced `push` on a single array;
 - writes that bypass type checking or reach the field through reflection or untyped access, such as `(agg as any)._events = …`, `Reflect.set`, `Object.defineProperty` with a string key, `Object.assign(agg, …)` on another reference, or a computed-key write through an alias such as `const self = this; self[key] = …`;
 - `Object.assign(this, …)` reached under another name or indirectly, such as `const put = Object.assign; put(this, …)`, `const { assign: put } = Object; put(this, …)`, `Object.assign.call(Object, this, …)` or `Reflect.apply(Object.assign, Object, [this, …])`;
 - for an `inertEventMethods` entry, writes that bypass type checking or visible syntax, such as `(agg as any)[k] = …` with a computed non-literal key outside the aggregate's family, `Reflect.set`, `Object.defineProperty(X.prototype, 'addDomainEvent', …)`, `Object.assign(X.prototype, { addDomainEvent })`, `Object.assign` onto `this` reached under another name, `Object.setPrototypeOf` on a class or prototype in the aggregate's chain, or patched built-ins;
-- a project subclass of the aggregate that overrides the event method, or an instance reassignment of it such as `this.addDomainEvent = …` in a constructor, because `this.` calls are resolved on the declared aggregate class, as for every other member.
+- in the lifecycle checks, a project subclass of the aggregate that overrides the event method, or an instance reassignment of it such as `this.addDomainEvent = …` in a constructor, because `this.` calls are resolved on the declared aggregate class, as for every other member. `undispatched-events` does see such an override and such a reassignment in production code and stays silent, see below.
 
 A few rare self-wiring shapes can still produce a false finding: a factory or service outside the class (`agg.policy = new Policy(agg)`), the instance held inside another object (`box.o.policy.owner = box.o`), and a module-level factory function. So can a non-callable library property, such as a `boolean`, that a `.d.ts` declares as plain data while its JavaScript implements it as a getter reading the state field, for example through one of your overrides. The property is trusted as written, so a guard through it reads as no guard and the method can be reported as a `terminal-state-leak` or `transition-drift`. Current TypeScript emits accessors as accessors in `.d.ts` files, so this needs an older or hand-written declaration. An `inertMembers` entry for a library member that does read the state field can too. So can an `inertEventMethods` entry for an event method that reads the state field or calls code that does. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
+
+`undispatched-events` can report a buffer that is read after all in these shapes:
+- an aggregate that reaches reflection or library code typed as `any`, `unknown`, `object` or an unconstrained generic, because those types do not specifically hold it. Laundering it through an intermediate `unknown` variable before a cast is the same;
+- library code that reads the buffer or a public getter by naming convention through a named wrapper type, such as an event or DTO class holding the aggregate in a property. The same read on an aggregate that reaches library code other than as a call argument is not seen either;
+- an event method replaced at runtime through a call it does not recognise as an install, such as `Object.defineProperty` called under another name (`const def = Object.defineProperty; def(agg, 'addDomainEvent', …)`) or with a key that is not a literal, or by swapping the prototype of a class in the tree with `Object.setPrototypeOf`. A helper that copies prototype members by name, such as the TypeScript handbook's `applyMixins(Booking, [Publisher])` where `Publisher.addDomainEvent` publishes, is one such shape, because its `Object.defineProperty(derived.prototype, name, …)` key is a plain `string`.
 
 The event-flow analyzer reports nothing for these:
 
@@ -344,7 +352,28 @@ The event-flow analyzer reports nothing for these:
 - **Transports that cross the process.** Brokers, outboxes and event stores cannot be followed.
 - **Events constructed only outside the analysed files, or only in test files.** Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`.
 - **Getter-declared handlers**, such as `get event()`.
-- **Events raised into an aggregate buffer that is never dispatched.**
+- **Events raised into a buffer that `undispatched-events` cannot prove is never read.** It reports one finding per buffer declaration, listing every class that raises into it, and only when all of these hold. If any of them cannot be established, it reports nothing for that buffer:
+  - the buffer is a `private` or `#name` instance array that is never decorated and starts as `[]` or empty, in a class tree where no class is decorated or calls `Object.assign(this, …)`, and no code writes it through brackets or anything but a reset to `[]`;
+  - an `eventMethods` method of that class tree only pushes its parameters onto the buffer and does nothing else, so a method that also logs or reads state is not one;
+  - no class in the tree, including its project subclasses, declares any other instance member with that method's name, whether a method, a field, a parameter property or an accessor, and whether named directly or through a computed key that resolves to that name, such as `[KEY]` with `const KEY = 'addDomainEvent'`. A member under a computed key whose type is not a single string literal, a single number literal or a unique symbol, such as `[KEY]` with `const KEY: string`, a `let`, a function call or a union of literals, counts as that name too, while `[Symbol.iterator]` does not. So an override such as `addDomainEvent(e) { super.addDomainEvent(e); publish(e); }` or one that publishes instead of pushing keeps it silent;
+  - no production code replaces that method by name on any object: an assignment such as `this.addDomainEvent = …` or `agg.addDomainEvent = …`, a bracket write whose key includes the name, `Object.defineProperty` or `Reflect.defineProperty` with that key, or `Object.assign` or `Object.defineProperties` with an object literal that declares it under that name, a string key or a computed key whose type includes the name, such as `{ ['addDomainEvent']: … }`. The same writes in test files do not count;
+  - that method is actually called in production code, through `this.`, `super.` or any other receiver, so a buffer nothing raises into is not reported;
+  - no production code reads the buffer other than the push, a reset to `[]` and a trivial getter, which is a `get` accessor whose only statement is `return this.buffer;` and which nothing reads in production either. A mention of the buffer's name or the getter's name anywhere else in production code keeps it silent, whether as an identifier, a property name, a string key such as `agg['events']`, a string literal or a destructuring pattern. Mentions that provably refer to something else, such as a local variable of the same name or a private member of an unrelated class, are skipped;
+  - every class in the tree has a heritage that resolves to project classes only, with no library base class, unresolved `extends` or mixin call;
+  - no other project class, in any scanned file including test files, has the buffer's class or one of its project subclasses among its base types, so a mixin-derived subclass such as `class Order extends Timestamped(AggregateRoot)` or `class StampedBooking extends Timestamped(Booking)` anywhere keeps it silent. A class that extends only a base class above the buffer's class, such as `class OrderLine extends Entity` next to `class AggregateRoot extends Entity`, does not hold the buffer and does not count.
+
+  Test files do not count as reads, so a buffer read only by a test is still reported. `domain.config.ts` is excluded from the scan.
+
+  Production code that could read the buffer without naming it keeps it silent, but only when the value's static type specifically holds the aggregate. That means an instance of a class in the tree, of an interface or base class the tree declares in its heritage, or a union, array, tuple, type argument, object property or call-signature return of one. `any`, `unknown`, `object`, `{}` and unconstrained generics never count on their own. The escape routes are:
+  - passing such a value to `Object.keys`, `Object.values`, `Object.entries`, `Object.assign`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, any `Reflect` method, `JSON.stringify` or `structuredClone`, however the function is reached, including `const { assign } = Object`, `const R = Reflect` and `globalThis.Object.keys`;
+  - spreading it into an object, `{ ...x }`, or iterating it with `for…in`. An array spread is an escape too, except for `[...this.events]` on the tree's own private field and for values that are already arrays;
+  - reading `x[k]` with a computed key that is not a string, number or plain template literal;
+  - passing it as an argument, a `new` argument or a tagged-template substitution to library code other than the TypeScript default library, or to a callee whose declaration cannot be resolved or that is typed `any`. `f.call(…)`, `f.apply(…)` and `f.bind(…)` are judged by `f`. Default-library calls such as `array.push(agg)` and `Promise.resolve(agg)` only store the value, so a later read is still caught by its name. A callback returning the value, `Reflect.apply` and `Reflect.construct` forwarding it count as library calls;
+  - a type assertion that hides it, such as `agg as unknown` or `<object>agg`, where the operand's type holds the aggregate and the target type does not. `e as Error` in a `catch` and `JSON.parse(raw) as Dto` are not escapes.
+
+  Calls to `console` methods are never escapes.
+
+  A project function typed with a library function type counts as library code. That only silences, so it can hide a finding but never creates one.
 - **Handlers in test files.** `dead-handler` and `handler-payload-mismatch` skip registrations in test files. They still count as handling for `unhandled-event` and `saga-missing-failure-path`.
 - **Events with an opaque hierarchy.** When an event class, or a project class above it, extends a mixin call or any other expression that is not a plain class name, `handler-payload-mismatch`, `unhandled-event` and `saga-missing-failure-path` do not judge it.
 - **Sagas whose class extends a library class or a mixin call.** Every saga is also skipped when any handler registration in the project cannot be resolved.

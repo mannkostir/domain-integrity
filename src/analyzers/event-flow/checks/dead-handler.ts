@@ -1,11 +1,11 @@
-import { EventFlowFinding } from '../../../analyzer';
+import { HandlerFinding } from '../../../analyzer';
 import { EventClassModel, EventFlowModel, Registration } from '../model';
 import { handlerLabel, nameOf } from './handler-label';
 
 const isDead = (event: EventClassModel): boolean =>
   event.constructions.length === 0 && !event.abstract && !event.subclassed && !event.escaped;
 
-const toFinding = (model: EventFlowModel, registration: Registration): EventFlowFinding => {
+const toFinding = (model: EventFlowModel, registration: Registration): HandlerFinding => {
   const event = nameOf(model, registration.event);
   const handler = handlerLabel(registration);
   return {
@@ -28,7 +28,7 @@ const hasDeadEvent = (model: EventFlowModel, registration: Registration): boolea
   return event !== undefined && isDead(event);
 };
 
-export const deadHandler = (model: EventFlowModel): EventFlowFinding[] =>
+export const deadHandler = (model: EventFlowModel): HandlerFinding[] =>
   model.registrations
     .filter((registration) => !registration.inTest && hasDeadEvent(model, registration))
     .map((registration) => toFinding(model, registration));

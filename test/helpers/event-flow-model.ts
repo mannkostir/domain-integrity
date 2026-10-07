@@ -36,6 +36,7 @@ export const flowModel = (overrides: Partial<EventFlowModel> = {}): EventFlowMod
   libraryKeyed: [],
   inProcess: [],
   sagas: [],
+  buffers: [],
   problems: [],
   ...overrides,
 });

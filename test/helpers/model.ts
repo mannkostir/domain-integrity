@@ -1,4 +1,4 @@
-import { EventFlowFinding, Finding, LifecycleFinding } from '../../src/analyzer';
+import { EventBufferFinding, Finding, HandlerFinding, LifecycleFinding } from '../../src/analyzer';
 import {
   AggregateModel,
   AssignedValues,
@@ -100,7 +100,7 @@ export const finding = (overrides: Partial<LifecycleFinding>): LifecycleFinding 
   ...overrides,
 });
 
-export const flowFinding = (overrides: Partial<EventFlowFinding>): EventFlowFinding => ({
+export const flowFinding = (overrides: Partial<HandlerFinding>): HandlerFinding => ({
   analyzer: 'event-flow',
   checkId: 'dead-handler',
   severity: 'error',
@@ -112,6 +112,23 @@ export const flowFinding = (overrides: Partial<EventFlowFinding>): EventFlowFind
   line: 4,
   message: 'M3',
   fix: 'F3',
+  ...overrides,
+});
+
+export const bufferFinding = (overrides: Partial<EventBufferFinding> = {}): EventBufferFinding => ({
+  analyzer: 'event-flow',
+  checkId: 'undispatched-events',
+  severity: 'error',
+  owner: 'AggregateRoot',
+  ownerId: 'AggregateRoot',
+  buffer: '_domainEvents',
+  method: 'addDomainEvent',
+  raisers: ['Booking', 'Payment'],
+  subject: '',
+  file: '/app/src/aggregate-root.ts',
+  line: 3,
+  message: 'M4',
+  fix: 'F4',
   ...overrides,
 });
 

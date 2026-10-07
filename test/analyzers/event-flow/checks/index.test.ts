@@ -3,8 +3,8 @@ import { EVENT_FLOW_RULES, runEventFlowChecks } from '../../../../src/analyzers/
 import { eventClass, flowModel } from '../../../helpers/event-flow-model';
 
 describe('event-flow checks', () => {
-  it('lists the four rules', () => {
-    expect(EVENT_FLOW_RULES.map((rule) => rule.id)).toEqual(['dead-handler', 'handler-payload-mismatch', 'unhandled-event', 'saga-missing-failure-path']);
+  it('lists the five rules', () => {
+    expect(EVENT_FLOW_RULES.map((rule) => rule.id)).toEqual(['dead-handler', 'handler-payload-mismatch', 'unhandled-event', 'saga-missing-failure-path', 'undispatched-events']);
   });
 
   it('runs every check and sorts by location', () => {

@@ -28,6 +28,13 @@ export type SagaModel = {
   readonly extendsForeign: boolean;
   readonly outcomes: readonly (readonly [string, string])[];
 };
+export type UndispatchedBuffer = {
+  readonly ownerId: string;
+  readonly owner: string;
+  readonly buffer: string;
+  readonly method: string;
+  readonly raisers: readonly string[];
+} & Location;
 export type EventFlowModel = {
   readonly classes: ReadonlyMap<string, ClassRef>;
   readonly events: ReadonlyMap<string, EventClassModel>;
@@ -36,5 +43,6 @@ export type EventFlowModel = {
   readonly libraryKeyed: readonly (string | undefined)[];
   readonly inProcess: readonly string[];
   readonly sagas: readonly SagaModel[];
+  readonly buffers: readonly UndispatchedBuffer[];
   readonly problems: readonly string[];
 };
