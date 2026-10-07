@@ -328,6 +328,8 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 
+Every analysis sees only the files your tsconfig includes and the files they import. A file outside both is invisible to every rule: it produces no findings and cannot keep one silent. A decorated ORM subclass loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
+
 The analysis also trusts that nothing tampers with a plain event array from outside the aggregate's family. It does not see:
 
 - a replaced `Array.prototype.push`, or a replaced `push` on a single array;
@@ -352,9 +354,11 @@ The event-flow analyzer reports nothing for these:
 - **Events raised into a buffer that `undispatched-events` cannot prove is never read.** It reports one finding per buffer declaration, listing every class that raises into it, and only when all of these hold. If any of them cannot be established, it reports nothing for that buffer:
   - the buffer is a `private` or `#name` instance array that is never decorated and starts as `[]` or empty, in a class tree where no class is decorated or calls `Object.assign(this, …)`, and no code writes it through brackets or anything but a reset to `[]`;
   - an `eventMethods` method of that class tree only pushes its parameters onto the buffer and does nothing else, so a method that also logs or reads state is not one;
+  - no class in the tree, including its project subclasses, declares any other instance member with that method's name, whether a method, a field, a parameter property or an accessor, so an override such as `addDomainEvent(e) { super.addDomainEvent(e); publish(e); }` or one that publishes instead of pushing keeps it silent;
   - that method is actually called in production code, through `this.`, `super.` or any other receiver, so a buffer nothing raises into is not reported;
   - no production code reads the buffer other than the push, a reset to `[]` and a trivial getter, which is a `get` accessor whose only statement is `return this.buffer;` and which nothing reads in production either. A mention of the buffer's name or the getter's name anywhere else in production code keeps it silent, whether as an identifier, a property name, a string key such as `agg['events']`, a string literal or a destructuring pattern. Mentions that provably refer to something else, such as a local variable of the same name or a private member of an unrelated class, are skipped;
-  - every class in the tree has a heritage that resolves to project classes only, with no library base class, unresolved `extends` or mixin call.
+  - every class in the tree has a heritage that resolves to project classes only, with no library base class, unresolved `extends` or mixin call;
+  - no other project class, in any scanned file including test files, has the tree among its base types, so a mixin-derived subclass such as `class Order extends Timestamped(AggregateRoot)` anywhere keeps it silent.
 
   Test files do not count as reads, so a buffer read only by a test is still reported. `domain.config.ts` is excluded from the scan.
 
