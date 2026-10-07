@@ -1,6 +1,6 @@
 {
   "name": "domain-integrity",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Checks that a TypeScript domain's aggregate lifecycles and in-process event flows match their declared intent.",
   "type": "module",
   "license": "MIT",
