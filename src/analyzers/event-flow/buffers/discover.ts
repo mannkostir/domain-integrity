@@ -12,6 +12,7 @@ import { isUndrained } from './drains';
 import { hasEscapeRoute } from './escapes';
 import { familyHolding } from './family-type';
 import { raisingClasses } from './raisers';
+import { hasReassignedPusher } from './reassigned-pushers';
 
 export type BufferContext = {
   readonly files: readonly SourceFile[];
@@ -60,7 +61,7 @@ const raiserIds = (candidate: BufferCandidate, context: BufferContext, scope: Sc
 const undispatched = (candidate: BufferCandidate, context: BufferContext, scope: Scope): UndispatchedBuffer | undefined => {
   const owner = declaringClassOf(candidate.buffer);
   if (owner === undefined || !context.isProject(owner) || !isCandidateOpen(candidate, owner, context, scope)) return undefined;
-  if (!isUndrained(candidate, scope.production)) return undefined;
+  if (hasReassignedPusher(candidate, scope.production) || !isUndrained(candidate, scope.production)) return undefined;
   const raisers = raiserIds(candidate, context, scope);
   const reported = raisers.length > 0 && !hasEscapeRoute(scope.production, familyHolding(candidate.family));
   return reported ? bufferOf(candidate, owner, raisers, context) : undefined;

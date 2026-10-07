@@ -73,6 +73,8 @@ const domainBooking = (extra: Readonly<Record<string, string>>): Readonly<Record
 
 const RAISING_BASE = BASE.replace('clearEvents()', 'protected raise(event: object): void { this.addDomainEvent(event); }\n  clearEvents()');
 
+const publicEventMethod = (base: string): string => base.replace('protected addDomainEvent', 'addDomainEvent');
+
 const RAISED_BUFFER: UndispatchedBuffer = { ...BOOKING_BUFFER, raisers: ['AggregateRoot'] };
 
 const raisingBooking = (
@@ -352,6 +354,48 @@ describe('undispatchedBuffers', () => {
 
   it('still reports the buffer when a subclass declares a symbol-keyed member', () => {
     expect(buffersOf(raisingBooking('  *[Symbol.iterator](): Iterator<number> { yield 1; }'))).toEqual([RAISED_BUFFER]);
+  });
+
+  it('stays silent when a subclass constructor reassigns the event method', () => {
+    const body = '  constructor() { super(); this.addDomainEvent = (event: object): void => { publish(event); }; }';
+
+    expect(buffersOf(raisingBooking(body))).toEqual([]);
+  });
+
+  it('stays silent when production code reassigns the event method on an aggregate', () => {
+    const wire = "import { Booking } from './booking';\nimport { publish } from './bus';\nexport const wire = (booking: Booking): void => { booking.addDomainEvent = publish; };";
+
+    expect(buffersOf(raisingBooking('', '', publicEventMethod, { '/app/src/wire.ts': wire }))).toEqual([]);
+  });
+
+  it('stays silent when production code reassigns the event method through a bracket key', () => {
+    const wire = "import { Booking } from './booking';\nimport { publish } from './bus';\nexport const wire = (booking: Booking): void => { booking['addDomainEvent'] = publish; };";
+
+    expect(buffersOf(raisingBooking('', '', publicEventMethod, { '/app/src/wire.ts': wire }))).toEqual([]);
+  });
+
+  it('stays silent when production code installs the event method with Object.defineProperty', () => {
+    const wire = "import { Booking } from './booking';\nimport { publish } from './bus';\nexport const wire = (booking: Booking): void => { Object.defineProperty(booking, 'addDomainEvent', { value: publish }); };";
+
+    expect(buffersOf(raisingBooking('', '', publicEventMethod, { '/app/src/wire.ts': wire }))).toEqual([]);
+  });
+
+  it('stays silent when production code installs the event method with Object.assign', () => {
+    const wire = "import { Booking } from './booking';\nimport { publish } from './bus';\nexport const wire = (booking: Booking): void => { Object.assign(booking, { addDomainEvent: publish }); };";
+
+    expect(buffersOf(raisingBooking('', '', publicEventMethod, { '/app/src/wire.ts': wire }))).toEqual([]);
+  });
+
+  it('still reports the buffer when production code only reads the event method', () => {
+    const peek = "import { Booking } from './booking';\nexport const peek = (booking: Booking): unknown => booking.addDomainEvent;";
+
+    expect(buffersOf(raisingBooking('', '', publicEventMethod, { '/app/src/peek.ts': peek }))).toEqual([RAISED_BUFFER]);
+  });
+
+  it('still reports the buffer when only a test file reassigns the event method', () => {
+    const spec = "import { Booking } from './booking';\nexport const stub = (booking: Booking): void => { booking.addDomainEvent = (): void => {}; };";
+
+    expect(buffersOf(raisingBooking('', '', publicEventMethod, { '/app/src/booking.spec.ts': spec }))).toEqual([RAISED_BUFFER]);
   });
 
   it('stays silent when a grandchild subclass reaches a library function', () => {
