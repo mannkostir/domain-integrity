@@ -58,6 +58,16 @@ const pushesOnlyOnto = (pusher: MethodDeclaration, buffer: PropertyDeclaration):
 const hasSingleTarget = (candidate: BufferCandidate): boolean =>
   candidate.pushers.every((pusher) => pushesOnlyOnto(pusher, candidate.buffer));
 
+const isOtherNamesake = (member: Node, names: ReadonlySet<string>, candidate: BufferCandidate): boolean =>
+  names.has(member.getSymbol()?.getName() ?? '') && !candidate.pushers.some((pusher) => pusher === member);
+
+const hasOnlyPushingNamesakes = (candidate: BufferCandidate): boolean => {
+  const names: ReadonlySet<string> = new Set(candidate.pushers.map((pusher) => pusher.getName()));
+  return !candidate.family
+    .flatMap((member) => member.getInstanceMembers())
+    .some((member) => isOtherNamesake(member, names, candidate));
+};
+
 const toCandidate = (buffer: PropertyDeclaration, pushes: readonly Push[], families: FamilyLookup): BufferCandidate | undefined => {
   const owner = ownerOf(buffer);
   if (owner === undefined) return undefined;
@@ -84,5 +94,6 @@ export const candidatesIn = (
     .flatMap((method) => pushesOf(method, isProject, families));
   return [...new Set(pushes.map((push) => push.buffer))]
     .flatMap((buffer) => toCandidate(buffer, pushes, families) ?? [])
-    .filter(hasSingleTarget);
+    .filter(hasSingleTarget)
+    .filter(hasOnlyPushingNamesakes);
 };

@@ -19,6 +19,8 @@ const PAYMENT = `import { AggregateRoot } from './aggregate-root';
 export class Paid {}
 export class Payment extends AggregateRoot { pay(): void { this.addDomainEvent(new Paid()); } }`;
 
+const BUS = 'const handlers: ((event: object) => void)[] = [];\nexport const publish = (event: object): void => { handlers.forEach((handle) => handle(event)); };';
+
 const DEFAULT_CONFIG = 'defineDomain({})';
 
 const ANALYSED = '/app/src/';
@@ -198,6 +200,35 @@ describe('undispatchedBuffers', () => {
     ].join('\n');
 
     expect(buffersOf({ '/app/src/root.ts': root, '/app/src/a.ts': raiserSource('A', 'Root', 'root') })).toEqual([]);
+  });
+
+  it('stays silent when a subclass overrides the event method to push and publish', () => {
+    const overriding = [
+      "import { AggregateRoot } from './aggregate-root';",
+      "import { publish } from './bus';",
+      'export class Booked {}',
+      'export class Booking extends AggregateRoot {',
+      '  static create(): Booking { const booking = new Booking(); booking.addDomainEvent(new Booked()); return booking; }',
+      '  protected override addDomainEvent(event: object): void { super.addDomainEvent(event); publish(event); }',
+      '}',
+    ].join('\n');
+
+    expect(buffersOf(booking({ '/app/src/bus.ts': BUS, '/app/src/booking.ts': overriding }))).toEqual([]);
+  });
+
+  it('stays silent when a subclass overrides the event method to publish instead of push', () => {
+    const base = BASE.replace('clearEvents()', 'protected raise(event: object): void { this.addDomainEvent(event); }\n  clearEvents()');
+    const overriding = [
+      "import { AggregateRoot } from './aggregate-root';",
+      "import { publish } from './bus';",
+      'export class Booked {}',
+      'export class Booking extends AggregateRoot {',
+      '  ship(): void { this.raise(new Booked()); }',
+      '  protected override addDomainEvent(event: object): void { publish(event); }',
+      '}',
+    ].join('\n');
+
+    expect(buffersOf({ '/app/src/aggregate-root.ts': base, '/app/src/bus.ts': BUS, '/app/src/booking.ts': overriding })).toEqual([]);
   });
 
   it('still reports the buffer when the config hands a family class to a library-declared defineDomain', () => {
