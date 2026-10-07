@@ -15,6 +15,7 @@ import { raisingClasses } from './raisers';
 export type BufferContext = {
   readonly files: readonly SourceFile[];
   readonly root: string;
+  readonly configFile?: SourceFile;
   readonly eventMethods: readonly string[];
   readonly isProject: ProjectClasses;
   readonly identity: (cls: ClassDeclaration) => ClassIdentity;
@@ -25,8 +26,10 @@ type Scope = {
   readonly production: readonly SourceFile[];
 };
 
+const isScannedFile = (file: SourceFile, context: BufferContext): boolean => file !== context.configFile && !isLibraryNode(file);
+
 const scopeOf = (context: BufferContext): Scope => {
-  const projectFiles = (context.files[0]?.getProject().getSourceFiles() ?? []).filter((file) => !isLibraryNode(file));
+  const projectFiles = (context.files[0]?.getProject().getSourceFiles() ?? []).filter((file) => isScannedFile(file, context));
   return { projectFiles, production: projectFiles.filter((file) => !isTestFile(file, context.root)) };
 };
 

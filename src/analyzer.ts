@@ -5,6 +5,7 @@ export type AnalysisInput = {
   readonly declaration: DomainDeclaration;
   readonly files: readonly SourceFile[];
   readonly root: string;
+  readonly configFile?: SourceFile;
 };
 
 export type Severity = 'error' | 'warning';

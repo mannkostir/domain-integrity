@@ -18,7 +18,7 @@ export const openSession = (paths: Paths): Session => {
   const project = loadProject(paths.tsconfig);
   const configFile = configSourceFile(project, paths.config);
   const declaration = readDeclaration(configFile);
-  const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, paths.root, configFile), root: paths.root });
+  const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, paths.root, configFile), root: paths.root, configFile });
   if (results.every((result) => result.isEmpty)) throw new ProjectError(nothingToAnalyseMessage(declaration));
   return { results };
 };

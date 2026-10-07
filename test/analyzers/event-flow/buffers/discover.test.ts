@@ -30,11 +30,11 @@ const buffersOf = (
 ): readonly UndispatchedBuffer[] => {
   const project = inMemoryProject({
     ...sources,
-    '/app/domain.config.ts': `import { defineDomain } from 'domain-integrity';\nexport default ${config};`,
+    '/app/domain.config.ts': config.startsWith('import') ? config : `import { defineDomain } from 'domain-integrity';\nexport default ${config};`,
   });
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith(analysed));
-  const declaration = readDeclaration(project.getSourceFileOrThrow('/app/domain.config.ts'));
-  return extractEventFlows({ declaration, files, root: '/app' }).buffers;
+  const configFile = project.getSourceFileOrThrow('/app/domain.config.ts');
+  return extractEventFlows({ declaration: readDeclaration(configFile), files, root: '/app', configFile }).buffers;
 };
 
 const booking = (extra: Readonly<Record<string, string>> = {}, base: string = BASE): Readonly<Record<string, string>> => ({
@@ -198,5 +198,20 @@ describe('undispatchedBuffers', () => {
     ].join('\n');
 
     expect(buffersOf({ '/app/src/root.ts': root, '/app/src/a.ts': raiserSource('A', 'Root', 'root') })).toEqual([]);
+  });
+
+  it('still reports the buffer when the config hands a family class to a library-declared defineDomain', () => {
+    const published = [
+      "export type LifecycleDeclaration = { readonly kind: 'lifecycle'; readonly target: object; readonly spec: object };",
+      'export declare const lifecycle: <T extends object>(target: { readonly prototype: T }, spec: { readonly states: Readonly<Record<string, { readonly terminal: readonly string[] }>> }) => LifecycleDeclaration;',
+      'export declare const defineDomain: (config: { readonly lifecycles?: readonly LifecycleDeclaration[] }) => object;',
+    ].join('\n');
+    const config = [
+      "import { defineDomain, lifecycle } from '../lib/published';",
+      "import { Booking } from './src/booking';",
+      'export default defineDomain({ lifecycles: [lifecycle(Booking, { states: { status: { terminal: [] } } })] });',
+    ].join('\n');
+
+    expect(buffersOf(booking({ '/lib/published.d.ts': published }), config)).toEqual([BOOKING_BUFFER]);
   });
 });
