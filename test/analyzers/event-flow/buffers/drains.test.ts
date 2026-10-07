@@ -58,15 +58,19 @@ describe('isUndrained', () => {
     expect(undrained(ROOT('flush(bus: { publishAll(e: object[]): void }): void { bus.publishAll(this.events); }'))).toBe(false);
   });
 
-  it('rejects truncation through length and slicing', () => {
-    expect([undrained(ROOT('clear(): void { this.events.length = 0; }')), undrained(ROOT('copy(): object[] { return this.events.slice(); }'))]).toEqual([false, false]);
+  it.each([
+    ['length truncation', 'clear(): void { this.events.length = 0; }'],
+    ['slicing', 'copy(): object[] { return this.events.slice(); }'],
+  ])('rejects %s of the buffer', (_shape, body) => {
+    expect(undrained(ROOT(body))).toBe(false);
   });
 
-  it('rejects the buffer or getter name mentioned as a string in production', () => {
-    expect([
-      undrained(ROOT(''), { '/app/src/reflect.ts': "export const key = 'events';" }),
-      undrained(ROOT('get domainEvents(): object[] { return this.events; }'), { '/app/src/reflect.ts': 'export const key = `domainEvents`;' }),
-    ]).toEqual([false, false]);
+  it('rejects the buffer name mentioned as a string in production', () => {
+    expect(undrained(ROOT(''), { '/app/src/reflect.ts': "export const key = 'events';" })).toBe(false);
+  });
+
+  it('rejects the getter name mentioned as a template string in production', () => {
+    expect(undrained(ROOT('get domainEvents(): object[] { return this.events; }'), { '/app/src/reflect.ts': 'export const key = `domainEvents`;' })).toBe(false);
   });
 
   it('rejects a bracket read of the getter in production', () => {
@@ -93,11 +97,11 @@ describe('isUndrained', () => {
     expect(undrained(ROOT('get domainEvents(): object[] { return this.events; }'), { '/app/src/dispatch.ts': "import { Root } from './root';\nexport const r = (roots: Root[], publish: (e: object[]) => void) => { let domainEvents: object[]; for ({ domainEvents } of roots) publish(domainEvents); };" })).toBe(false);
   });
 
-  it('rejects for-of destructuring reads of the buffer name', () => {
-    expect([
-      undrained(ROOT(''), { '/app/src/other.ts': 'export const r = (xs: { events: object[] }[], publish: (e: object[]) => void) => { let events: object[]; for ({ events } of xs) publish(events); };' }),
-      undrained(ROOT(''), { '/app/src/other.ts': 'export const r = (xs: { events: object[] }[], publish: (e: object[]) => void) => { let e: object[]; for ({ events: e } of xs) publish(e); };' }),
-    ]).toEqual([false, false]);
+  it.each([
+    ['shorthand', 'export const r = (xs: { events: object[] }[], publish: (e: object[]) => void) => { let events: object[]; for ({ events } of xs) publish(events); };'],
+    ['renamed', 'export const r = (xs: { events: object[] }[], publish: (e: object[]) => void) => { let e: object[]; for ({ events: e } of xs) publish(e); };'],
+  ])('rejects a %s for-of destructuring read of the buffer name', (_shape, other) => {
+    expect(undrained(ROOT(''), { '/app/src/other.ts': other })).toBe(false);
   });
 
   it('rejects a read of the public getter name through an unrelated class receiver', () => {
