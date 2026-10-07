@@ -12,9 +12,17 @@ const calleeName = (call: CallExpression): string | undefined => {
   return Node.isPropertyAccessExpression(callee) ? callee.getName() : undefined;
 };
 
+const isComputedKeyFor = (property: Node, name: string): boolean => {
+  const key = Node.isPropertyNamed(property) ? property.getNameNode() : undefined;
+  return Node.isComputedPropertyName(key) && isKeyFor(key.getExpression(), name);
+};
+
 const declaresProperty = (argument: Node, name: string): boolean => {
   const literal = unwrap(argument);
-  return Node.isObjectLiteralExpression(literal) && literal.getProperty(name) !== undefined;
+  return (
+    Node.isObjectLiteralExpression(literal) &&
+    (literal.getProperty(name) !== undefined || literal.getProperties().some((property) => isComputedKeyFor(property, name)))
+  );
 };
 
 const installs = (call: CallExpression, name: string): boolean => {

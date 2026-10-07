@@ -386,6 +386,12 @@ describe('undispatchedBuffers', () => {
     expect(buffersOf(raisingBooking('', '', publicEventMethod, { '/app/src/wire.ts': wire }))).toEqual([]);
   });
 
+  it('stays silent when production code installs the event method with Object.defineProperties under a computed literal key', () => {
+    const wire = "import { Booking } from './booking';\nimport { publish } from './bus';\nexport const wire = (booking: Booking): void => { Object.defineProperties(booking, { ['addDomainEvent']: { value: publish } }); };";
+
+    expect(buffersOf(raisingBooking('', '', publicEventMethod, { '/app/src/wire.ts': wire }))).toEqual([]);
+  });
+
   it('still reports the buffer when production code only reads the event method', () => {
     const peek = "import { Booking } from './booking';\nexport const peek = (booking: Booking): unknown => booking.addDomainEvent;";
 
