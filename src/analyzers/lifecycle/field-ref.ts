@@ -9,12 +9,12 @@ import {
   ts,
   Type,
 } from 'ts-morph';
-import { isPlainArrayPush, isPushOnlyMethod } from './array-store';
+import { isPlainArrayPush, isPushOnlyMethod } from '../shared/array-store';
 import { isDeclaredOnlyAsMethods } from './inert-event-method';
-import { isDefaultLibraryNode, isLibraryNode } from './library';
+import { isDefaultLibraryNode, isLibraryNode } from '../shared/library';
 import { namedClassChain } from './named-chain';
 import { isTransparentConstruction } from './transparent-constructor';
-import { outermostWrapper, unwrap } from './wrappers';
+import { outermostWrapper, unwrap } from '../shared/wrappers';
 
 const MAX_GETTER_DEPTH = 5;
 

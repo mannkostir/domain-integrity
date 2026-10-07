@@ -33,7 +33,7 @@ const isPlainDeclaration = (property: PropertyDeclaration): boolean => {
   );
 };
 
-const isResetToEmpty = (target: Node): boolean => {
+export const isResetToEmpty = (target: Node): boolean => {
   const parent = target.getParent();
   return (
     Node.isBinaryExpression(parent) &&

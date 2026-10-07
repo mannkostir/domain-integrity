@@ -1,6 +1,6 @@
 import { ClassDeclaration, CompilerOptions, Node } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
-import { isPlainArrayPush, isPlainEventArray, isPushOnlyMethod, plainEventArrays } from '../../../src/analyzers/lifecycle/array-store';
+import { isPlainArrayPush, isPlainEventArray, isPushOnlyMethod, plainEventArrays } from '../../../src/analyzers/shared/array-store';
 import { classFamily } from '../../../src/analyzers/lifecycle/this-leak';
 import { inMemoryProject } from '../../helpers/in-memory';
 

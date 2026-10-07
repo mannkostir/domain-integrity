@@ -8,7 +8,7 @@ import {
   Symbol as MorphSymbol,
   SyntaxKind,
 } from 'ts-morph';
-import { isDefaultLibraryNode, isLibraryNode } from './library';
+import { isDefaultLibraryNode, isLibraryNode } from '../shared/library';
 import { classNamedBy, declarationsOf, namedClassChain } from './named-chain';
 
 type Store = { readonly field: string; readonly value: Node };

@@ -3,7 +3,7 @@ import { SET, UNSET, isNullish, literalToken } from '../../engine/value-token';
 import { escapesStateHolder, fieldNameOf, isRootedAtThis } from './field-ref';
 import { AssignedValues, StateField } from './model';
 import { MAY_WRITE, UNRESOLVED, allTokens, assignedToken, mergeAssigned } from './values';
-import { unwrap } from './wrappers';
+import { unwrap } from '../shared/wrappers';
 
 export const isAssignmentOperator = (node: BinaryExpression): boolean => {
   const kind = node.getOperatorToken().getKind();

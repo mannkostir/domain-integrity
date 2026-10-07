@@ -1,7 +1,7 @@
 import { ClassDeclaration, SourceFile } from 'ts-morph';
 import { DomainDeclaration } from '../../engine/declaration';
 import { AggregateScope } from './field-ref';
-import { plainEventArrays } from './array-store';
+import { plainEventArrays } from '../shared/array-store';
 import { assertedInertEventMethods } from './inert-event-method';
 import { classFamily, leaksThis } from './this-leak';
 

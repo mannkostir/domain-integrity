@@ -1,5 +1,5 @@
 import { ClassDeclaration, Node } from 'ts-morph';
-import { isLibraryNode } from './library';
+import { isLibraryNode } from '../shared/library';
 
 export const declarationsOf = (node: Node): readonly Node[] => {
   const symbol = node.getSymbol();

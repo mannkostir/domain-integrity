@@ -14,8 +14,8 @@ import {
   inheritanceChain,
   isReceiverOfAccess,
 } from './field-ref';
-import { isLibraryNode } from './library';
-import { outermostWrapper, unwrap } from './wrappers';
+import { isLibraryNode } from '../shared/library';
+import { outermostWrapper, unwrap } from '../shared/wrappers';
 
 const NON_RETAINING_CALLBACKS = new Set([
   'filter',
