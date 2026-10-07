@@ -32,6 +32,9 @@ const NODE_GLOBAL_CONSOLE =
 
 const NODE_CONSOLE = 'declare var console: Console;\ninterface Console { log(...data: unknown[]): void; }';
 
+const PARAMETER_ROOT =
+  'export class Root { private events: object[] = []; constructor(public readonly id: string, public status: string) {} }';
+
 type Setup = {
   readonly root?: string;
   readonly extraFiles?: Readonly<Record<string, string>>;
@@ -281,5 +284,22 @@ describe('hasEscapeRoute', () => {
     ['Object.keys of a type parameter constrained to the aggregate', 'export const f = <T extends Root>(t: T) => Object.keys(t);'],
   ])('finds an escape through %s', (_, usage) => {
     expect(escapes(usage)).toBe(true);
+  });
+
+  it.each([
+    ['Object.keys of a readonly aggregate', 'export const f = (r: Readonly<Root>) => Object.keys(r);'],
+    ['Object.values of a partial aggregate', 'export const f = (r: Partial<Root>) => Object.values(r);'],
+    ['library argument of a picked aggregate', "export const f = (r: Pick<Root, 'id'>) => publish(r);"],
+    ['library argument of a hand-written mapped aggregate', 'type R2 = { readonly [K in keyof Root]: Root[K] };\nexport const f = (r: R2) => publish(r);'],
+  ])('finds an escape through %s with parameter properties', (_, usage) => {
+    expect(escapes(usage, { root: PARAMETER_ROOT })).toBe(true);
+  });
+
+  it('finds an escape when a literal-keyed mapped type holding the aggregate reaches a library function', () => {
+    expect(escapes("export const f = (r: { [K in 'a']: Root }) => publish(r);")).toBe(true);
+  });
+
+  it('finds no escape when a named interface with an aggregate property reaches a library function', () => {
+    expect(escapes('interface Dto { root: Root }\nexport const f = (dto: Dto) => publish(dto);')).toBe(false);
   });
 });

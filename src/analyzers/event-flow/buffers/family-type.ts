@@ -30,8 +30,13 @@ const typeParameterHolds = (type: Type, heritage: ReadonlySet<Node>, holds: Hold
 const isNamedClassOrInterfaceType = (type: Type): boolean =>
   !type.isTypeParameter() && isThisType(type);
 
+const memberOwner = (declaration: Node): Node | undefined => {
+  const parent = declaration.getParent();
+  return Node.isParameterDeclaration(declaration) && declaration.isParameterProperty() ? parent?.getParent() : parent;
+};
+
 const isDeclaredInHeritage = (declaration: Node, heritage: ReadonlySet<Node>): boolean => {
-  const owner = declaration.getParent();
+  const owner = memberOwner(declaration);
   return owner !== undefined && heritage.has(owner);
 };
 
@@ -42,15 +47,28 @@ const isHeritageProjection = (type: Type, heritage: ReadonlySet<Node>): boolean 
 
 const isConstructorType = (type: Type): boolean => type.getConstructSignatures().length > 0;
 
-const isAnonymousObject = (type: Type): boolean => type.isAnonymous() || (type.isObject() && type.getSymbol() === undefined);
+type PropertyType = (property: MorphSymbol) => Type | undefined;
 
-const propertyHolds = (property: MorphSymbol, holds: Holds): boolean => {
-  const declaration = property.getValueDeclaration();
-  return declaration !== undefined && holds(declaration.getType());
+const isMapped = (type: Type): boolean => (type.getObjectFlags() & ts.ObjectFlags.Mapped) !== 0;
+
+const isStructuralObject = (type: Type): boolean =>
+  type.isAnonymous() || isMapped(type) || (type.isObject() && type.getSymbol() === undefined);
+
+const propertyHolds = (property: MorphSymbol, typeOf: PropertyType, holds: Holds): boolean => {
+  const type = typeOf(property);
+  return type !== undefined && holds(type);
 };
 
-const anonymousPropertyHolds = (type: Type, holds: Holds): boolean =>
-  isAnonymousObject(type) && type.getProperties().some((property) => propertyHolds(property, holds));
+const structuralPropertyHolds = (type: Type, typeOf: PropertyType, holds: Holds): boolean =>
+  isStructuralObject(type) && type.getProperties().some((property) => propertyHolds(property, typeOf, holds));
+
+const propertyTypeIn = (family: readonly ClassDeclaration[]): PropertyType => {
+  const anchor = family[0];
+  return (property) =>
+    anchor === undefined
+      ? property.getValueDeclaration()?.getType()
+      : anchor.getProject().getTypeChecker().getTypeOfSymbolAtLocation(property, anchor);
+};
 
 const innerTypes = (type: Type): readonly Type[] => [
   ...type.getUnionTypes(),
@@ -65,16 +83,16 @@ const innerTypes = (type: Type): readonly Type[] => [
 ];
 
 const holdsWithin =
-  (heritage: ReadonlySet<Node>, seen: ReadonlySet<ts.Type>): Holds =>
+  (heritage: ReadonlySet<Node>, typeOf: PropertyType, seen: ReadonlySet<ts.Type>): Holds =>
   (type) => {
     if (seen.has(type.compilerType) || isConstructorType(type)) return false;
-    const next = holdsWithin(heritage, new Set([...seen, type.compilerType]));
+    const next = holdsWithin(heritage, typeOf, new Set([...seen, type.compilerType]));
     return (
       (type.isTypeParameter() && typeParameterHolds(type, heritage, next)) ||
       isHeritageInstance(type, heritage) ||
       isHeritageProjection(type, heritage) ||
       innerTypes(type).some(next) ||
-      anonymousPropertyHolds(type, next)
+      structuralPropertyHolds(type, typeOf, next)
     );
   };
 
@@ -105,7 +123,7 @@ const memoised = (holds: Holds): Holds => {
 export const familyHolding = (family: readonly ClassDeclaration[]): FamilyHolding => {
   const heritage = familyHeritage(family);
   return {
-    holdsInstance: memoised(holdsWithin(heritage, new Set())),
+    holdsInstance: memoised(holdsWithin(heritage, propertyTypeIn(family), new Set())),
     holdsAtSurface: memoised(surfaceHolds(heritage)),
   };
 };
