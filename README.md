@@ -338,6 +338,10 @@ The analysis also trusts that nothing tampers with a plain event array from outs
 
 A few rare self-wiring shapes can still produce a false finding: a factory or service outside the class (`agg.policy = new Policy(agg)`), the instance held inside another object (`box.o.policy.owner = box.o`), and a module-level factory function. So can a non-callable library property, such as a `boolean`, that a `.d.ts` declares as plain data while its JavaScript implements it as a getter reading the state field, for example through one of your overrides. The property is trusted as written, so a guard through it reads as no guard and the method can be reported as a `terminal-state-leak` or `transition-drift`. Current TypeScript emits accessors as accessors in `.d.ts` files, so this needs an older or hand-written declaration. An `inertMembers` entry for a library member that does read the state field can too. So can an `inertEventMethods` entry for an event method that reads the state field or calls code that does. If it flags something that is not a bug, please [open an issue](https://github.com/mannkostir/domain-integrity/issues).
 
+`undispatched-events` can report a buffer that is read after all in these shapes:
+- an aggregate that reaches reflection or library code typed as `any`, `unknown`, `object` or an unconstrained generic, because those types do not specifically hold it. Laundering it through an intermediate `unknown` variable before a cast is the same;
+- library code that reads the buffer or a public getter by naming convention through a named wrapper type, such as an event or DTO class holding the aggregate in a property. The same read on an aggregate that reaches library code other than as a call argument is not seen either.
+
 The event-flow analyzer reports nothing for these:
 
 - **String and wildcard topics**, and dispatch on `constructor.name`.
@@ -363,10 +367,7 @@ The event-flow analyzer reports nothing for these:
 
   Calls to `console` methods are never escapes.
 
-  These shapes can still produce a false finding, or hide a real one:
-  - an aggregate that reaches reflection or library code typed as `any`, `unknown`, `object` or an unconstrained generic, because those types do not specifically hold it. The same goes for laundering through an intermediate `unknown` variable before a cast;
-  - library code that reads the buffer or a public getter by naming convention through a named wrapper type, such as an event or DTO class that holds the aggregate in a property. A public getter read this way on an aggregate that reaches the library code other than as a call argument is not seen either;
-  - a project function typed with a library function type, which counts as library code. That only silences, so it can hide a finding but never creates one.
+  A project function typed with a library function type counts as library code. That only silences, so it can hide a finding but never creates one.
 - **Handlers in test files.** `dead-handler` and `handler-payload-mismatch` skip registrations in test files. They still count as handling for `unhandled-event` and `saga-missing-failure-path`.
 - **Events with an opaque hierarchy.** When an event class, or a project class above it, extends a mixin call or any other expression that is not a plain class name, `handler-payload-mismatch`, `unhandled-event` and `saga-missing-failure-path` do not judge it.
 - **Sagas whose class extends a library class or a mixin call.** Every saga is also skipped when any handler registration in the project cannot be resolved.
