@@ -16,15 +16,18 @@ const textOf = (node: Node): string =>
 
 const isBindingPattern = (node: Node): boolean => Node.isObjectBindingPattern(node) || Node.isArrayBindingPattern(node);
 
+const isAssignedTo = (root: Node, parent: Node | undefined): boolean =>
+  Node.isBinaryExpression(parent) &&
+  parent.getLeft() === root &&
+  parent.getOperatorToken().getKind() === SyntaxKind.EqualsToken;
+
+const isLoopHeadTarget = (root: Node, parent: Node | undefined): boolean =>
+  (Node.isForOfStatement(parent) || Node.isForInStatement(parent)) && parent.getInitializer() === root;
+
 const isDestructuringAssignmentTarget = (node: Node): boolean => {
   const root = destructuringRoot(node);
   const parent = root.getParent();
-  return (
-    root !== node &&
-    Node.isBinaryExpression(parent) &&
-    parent.getLeft() === root &&
-    parent.getOperatorToken().getKind() === SyntaxKind.EqualsToken
-  );
+  return root !== node && (isAssignedTo(root, parent) || isLoopHeadTarget(root, parent));
 };
 
 const isInDestructuring = (node: Node): boolean =>
@@ -98,9 +101,14 @@ const isNonFamilyClassOrUnion = (type: Type, family: readonly ClassDeclaration[]
 const isProvablyOtherReceiver = (type: Type, family: readonly ClassDeclaration[]): boolean =>
   isPrimitive(type) || isNonFamilyClassOrUnion(type, family);
 
-const isOtherClassAccess = (node: Node, family: readonly ClassDeclaration[]): boolean => {
+const isPrivateTarget = (target: Node): boolean =>
+  (Node.isModifierable(target) && target.hasModifier(SyntaxKind.PrivateKeyword)) ||
+  (Node.hasName(target) && Node.isPrivateIdentifier(target.getNameNode()));
+
+const isOtherClassAccess = (node: Node, target: Node, family: readonly ClassDeclaration[]): boolean => {
   const parent = node.getParent();
   return (
+    isPrivateTarget(target) &&
     Node.isPropertyAccessExpression(parent) &&
     parent.getNameNode() === node &&
     isProvablyOtherReceiver(unwrap(parent.getExpression()).getType(), family)
@@ -108,7 +116,7 @@ const isOtherClassAccess = (node: Node, family: readonly ClassDeclaration[]): bo
 };
 
 const isProvablyOther = (node: Node, target: Node, family: readonly ClassDeclaration[]): boolean =>
-  !isInDestructuring(node) && (isDeclarationName(node) || isOtherReference(node, target) || isOtherClassAccess(node, family));
+  !isInDestructuring(node) && (isDeclarationName(node) || isOtherReference(node, target) || isOtherClassAccess(node, target, family));
 
 const readableNameNode = (target: Node): Node | undefined => {
   const nameNode = Node.hasName(target) ? target.getNameNode() : undefined;

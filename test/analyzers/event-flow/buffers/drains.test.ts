@@ -1,3 +1,4 @@
+import { ClassDeclaration, Project, SourceFile } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { isUndrained } from '../../../../src/analyzers/event-flow/buffers/drains';
 import { plainEventArrays } from '../../../../src/analyzers/shared/array-store';
@@ -5,15 +6,27 @@ import { inMemoryProject } from '../../../helpers/in-memory';
 
 const ROOT = (body: string) => `export class Root { private events: object[] = []; protected addEvent(e: object): void { this.events.push(e); } ${body} }`;
 
-const undrained = (root: string, extra: Readonly<Record<string, string>> = {}): boolean => {
-  const project = inMemoryProject({ '/app/src/root.ts': root, ...extra });
-  const cls = project.getSourceFileOrThrow('/app/src/root.ts').getClassOrThrow('Root');
-  const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/') && !file.getFilePath().endsWith('.spec.ts'));
-  const family = [cls];
+const productionFiles = (project: Project): readonly SourceFile[] =>
+  project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/') && !file.getFilePath().endsWith('.spec.ts'));
+
+const undrainedIn = (project: Project, cls: ClassDeclaration, family: readonly ClassDeclaration[]): boolean => {
+  const files = productionFiles(project);
   return isUndrained(
     { buffer: cls.getPropertyOrThrow('events'), pushers: [cls.getMethodOrThrow('addEvent')], family, arrays: plainEventArrays(family, files) },
     files,
   );
+};
+
+const undrained = (root: string, extra: Readonly<Record<string, string>> = {}): boolean => {
+  const project = inMemoryProject({ '/app/src/root.ts': root, ...extra });
+  const cls = project.getSourceFileOrThrow('/app/src/root.ts').getClassOrThrow('Root');
+  return undrainedIn(project, cls, [cls]);
+};
+
+const undrainedWithSubclass = (root: string, sub: string, extra: Readonly<Record<string, string>> = {}): boolean => {
+  const project = inMemoryProject({ '/app/src/root.ts': root, '/app/src/sub.ts': sub, ...extra });
+  const cls = project.getSourceFileOrThrow('/app/src/root.ts').getClassOrThrow('Root');
+  return undrainedIn(project, cls, [cls, project.getSourceFileOrThrow('/app/src/sub.ts').getClassOrThrow('Sub')]);
 };
 
 describe('isUndrained', () => {
@@ -74,5 +87,42 @@ describe('isUndrained', () => {
 
   it('rejects a destructuring read', () => {
     expect(undrained(ROOT(''), { '/app/src/other.ts': "import { Root } from './root';\nexport const read = (r: Root) => { const { events } = r as unknown as { events: object[] }; return events; };" })).toBe(false);
+  });
+
+  it('rejects a for-of destructuring read of the getter in production', () => {
+    expect(undrained(ROOT('get domainEvents(): object[] { return this.events; }'), { '/app/src/dispatch.ts': "import { Root } from './root';\nexport const r = (roots: Root[], publish: (e: object[]) => void) => { let domainEvents: object[]; for ({ domainEvents } of roots) publish(domainEvents); };" })).toBe(false);
+  });
+
+  it('rejects for-of destructuring reads of the buffer name', () => {
+    expect([
+      undrained(ROOT(''), { '/app/src/other.ts': 'export const r = (xs: { events: object[] }[], publish: (e: object[]) => void) => { let events: object[]; for ({ events } of xs) publish(events); };' }),
+      undrained(ROOT(''), { '/app/src/other.ts': 'export const r = (xs: { events: object[] }[], publish: (e: object[]) => void) => { let e: object[]; for ({ events: e } of xs) publish(e); };' }),
+    ]).toEqual([false, false]);
+  });
+
+  it('rejects a read of the public getter name through an unrelated class receiver', () => {
+    expect(undrained(ROOT('get domainEvents(): object[] { return this.events; }'), {
+      '/app/src/snap.ts': 'export class Snap { domainEvents: object[] = []; }',
+      '/app/src/dispatch.ts': "import { Root } from './root';\nimport { Snap } from './snap';\nexport const read = (root: Root) => { const s: Snap = root; return s.domainEvents; };",
+    })).toBe(false);
+  });
+
+  it('rejects a read of an unrelated class getter with the same name as the trivial getter', () => {
+    expect(undrained(ROOT('get domainEvents(): object[] { return this.events; }'), {
+      '/app/src/other.ts': 'export class Other { get domainEvents(): object[] { return []; } }',
+      '/app/src/dispatch.ts': "import { Other } from './other';\nexport const read = (o: Other) => o.domainEvents;",
+    })).toBe(false);
+  });
+
+  it('rejects a getter in a family subclass that is read in production', () => {
+    expect(undrainedWithSubclass(ROOT(''), "import { Root } from './root';\nexport class Sub extends Root { get domainEvents(): object[] { return this.events; } }", { '/app/src/dispatch.ts': "import { Sub } from './sub';\nexport const read = (s: Sub) => s.domainEvents;" })).toBe(false);
+  });
+
+  it('rejects a super read of the buffer in a family subclass', () => {
+    expect(undrainedWithSubclass(ROOT(''), "import { Root } from './root';\nexport class Sub extends Root { read(): object[] { return super.events; } }")).toBe(false);
+  });
+
+  it('rejects an optional push onto the buffer', () => {
+    expect(undrained('export class Root { private events: object[] = []; protected addEvent(e: object): void { this.events?.push(e); } }')).toBe(false);
   });
 });
