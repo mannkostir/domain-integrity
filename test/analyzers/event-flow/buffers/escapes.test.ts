@@ -81,6 +81,10 @@ describe('hasEscapeRoute', () => {
     expect(escapes('export const f = (rec: Record<string, Root>) => Object.keys(rec);')).toBe(false);
   });
 
+  it('finds no escape when Object.keys reads the aggregate class itself', () => {
+    expect(escapes('export const f = () => Object.keys(Root);')).toBe(false);
+  });
+
   it('finds no escape when Object.values reads a record of aggregates', () => {
     expect(escapes('export const f = (rs: Record<string, Root>) => Object.values(rs);')).toBe(false);
   });
@@ -264,6 +268,11 @@ describe('hasEscapeRoute', () => {
     ['local alias of a library function', 'const p = publish;\nexport const f = (r: Root) => p(r);'],
     ['object member aliasing a library function', 'const api = { send: publish };\nexport const f = (r: Root) => api.send(r);'],
     ['unresolved callee', 'declare const anyFn: any;\nexport const f = (r: Root) => anyFn(r);'],
+    ['Object.keys of a readonly aggregate', 'export const f = (r: Readonly<Root>) => Object.keys(r);'],
+    ['Object.values of a partial aggregate', 'export const f = (r: Partial<Root>) => Object.values(r);'],
+    ['object spread of a readonly aggregate', 'export const f = (r: Readonly<Root>) => ({ ...r });'],
+    ['library argument of an aggregate with an omitted key', "export const f = (r: Omit<Root, 'id'>) => publish(r);"],
+    ['Object.keys of a picked aggregate', "export const f = (r: Pick<Root, 'id'>) => Object.keys(r);"],
     ['library argument typed by a type parameter constrained to the aggregate', 'export const f = <T extends Root>(x: T) => publish(x);'],
     ['Object.keys of the aggregate', 'export const f = (r: Root) => Object.keys(r);'],
     ['Object.keys of a type parameter constrained to the aggregate', 'export const f = <T extends Root>(t: T) => Object.keys(t);'],

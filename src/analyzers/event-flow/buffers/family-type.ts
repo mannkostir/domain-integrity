@@ -27,6 +27,19 @@ const isThisType = (type: Type): boolean =>
 const typeParameterHolds = (type: Type, heritage: ReadonlySet<Node>, holds: Holds): boolean =>
   isThisType(type) ? isHeritageInstance(type, heritage) : constraintHolds(type, holds);
 
+const isNamedClassOrInterfaceType = (type: Type): boolean =>
+  !type.isTypeParameter() && isThisType(type);
+
+const isDeclaredInHeritage = (declaration: Node, heritage: ReadonlySet<Node>): boolean => {
+  const owner = declaration.getParent();
+  return owner !== undefined && heritage.has(owner);
+};
+
+const isHeritageProjection = (type: Type, heritage: ReadonlySet<Node>): boolean =>
+  type.isObject() &&
+  !isNamedClassOrInterfaceType(type) &&
+  type.getProperties().some((property) => property.getDeclarations().some((declaration) => isDeclaredInHeritage(declaration, heritage)));
+
 const isConstructorType = (type: Type): boolean => type.getConstructSignatures().length > 0;
 
 const isAnonymousObject = (type: Type): boolean => type.isAnonymous() || (type.isObject() && type.getSymbol() === undefined);
@@ -59,6 +72,7 @@ const holdsWithin =
     return (
       (type.isTypeParameter() && typeParameterHolds(type, heritage, next)) ||
       isHeritageInstance(type, heritage) ||
+      isHeritageProjection(type, heritage) ||
       innerTypes(type).some(next) ||
       anonymousPropertyHolds(type, next)
     );
@@ -72,6 +86,7 @@ const surfaceHolds =
     return (
       (type.isTypeParameter() && typeParameterHolds(type, heritage, next)) ||
       isHeritageInstance(type, heritage) ||
+      isHeritageProjection(type, heritage) ||
       [...type.getUnionTypes(), ...type.getIntersectionTypes()].some(next)
     );
   };
