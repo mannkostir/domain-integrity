@@ -1,6 +1,7 @@
 import { ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { AnalysisInput } from '../../analyzer';
 import { ClassIdentity, classIdentities } from '../../engine/class-identity';
+import { undispatchedBuffers } from './buffers/discover';
 import { hierarchyOf } from './hierarchy';
 import { ProjectClasses } from './keys';
 import { ClassRef, EventClassModel, EventFlowModel, Location, Payload, Registration, SagaModel, UnresolvedSite } from './model';
@@ -108,7 +109,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
     libraryKeyed,
     inProcess: inProcess.map((cls) => identity(cls).id),
     sagas: sagaModels,
-    buffers: [],
+    buffers: undispatchedBuffers({ files: input.files, root: input.root, eventMethods: input.declaration.eventMethods, isProject, identity }),
     problems: unique(outside).map((cls) => `"${cls.getName() ?? 'anonymous class'}" is declared in events but is not in the analysed files.`),
   };
 };

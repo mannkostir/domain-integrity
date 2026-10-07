@@ -40,6 +40,7 @@ describe('fixture projects', () => {
         'error terminal-state-leak Order.annotate status CANCELLED',
         'error transition-drift Order.cancel status extra',
         'error transition-drift Order.place status extra',
+        'error undispatched-events AggregateRoot.events Order',
         'error unreachable-state Order.- status PAID',
         'warning transition-drift Order.place status missing',
       ],
@@ -52,6 +53,7 @@ describe('fixture projects', () => {
       findings: [
         'error terminal-state-leak Todo.complete deleted true',
         'error terminal-state-leak Todo.delete deleted true',
+        'error undispatched-events AggregateRoot.events Todo',
       ],
     });
   });

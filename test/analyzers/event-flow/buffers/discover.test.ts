@@ -1,0 +1,144 @@
+import { describe, expect, it } from 'vitest';
+import { extractEventFlows } from '../../../../src/analyzers/event-flow/extract';
+import { UndispatchedBuffer } from '../../../../src/analyzers/event-flow/model';
+import { readDeclaration } from '../../../../src/engine/read-config';
+import { inMemoryProject } from '../../../helpers/in-memory';
+
+const BASE = `export abstract class AggregateRoot {
+  private _domainEvents: object[] = [];
+  get domainEvents(): object[] { return this._domainEvents; }
+  protected addDomainEvent(event: object): void { this._domainEvents.push(event); }
+  clearEvents(): void { this._domainEvents = []; }
+}`;
+const BOOKING = `import { AggregateRoot } from './aggregate-root';
+export class Booked {}
+export class Booking extends AggregateRoot {
+  static create(): Booking { const booking = new Booking(); booking.addDomainEvent(new Booked()); return booking; }
+}`;
+const PAYMENT = `import { AggregateRoot } from './aggregate-root';
+export class Paid {}
+export class Payment extends AggregateRoot { pay(): void { this.addDomainEvent(new Paid()); } }`;
+
+const DEFAULT_CONFIG = 'defineDomain({})';
+
+const buffersOf = (sources: Readonly<Record<string, string>>, config: string = DEFAULT_CONFIG): readonly UndispatchedBuffer[] => {
+  const project = inMemoryProject({
+    ...sources,
+    '/app/domain.config.ts': `import { defineDomain } from 'domain-integrity';\nexport default ${config};`,
+  });
+  const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
+  const declaration = readDeclaration(project.getSourceFileOrThrow('/app/domain.config.ts'));
+  return extractEventFlows({ declaration, files, root: '/app' }).buffers;
+};
+
+const booking = (extra: Readonly<Record<string, string>> = {}, base: string = BASE): Readonly<Record<string, string>> => ({
+  '/app/src/aggregate-root.ts': base,
+  '/app/src/booking.ts': BOOKING,
+  '/app/src/payment.ts': PAYMENT,
+  ...extra,
+});
+
+const BOOKING_BUFFER: UndispatchedBuffer = {
+  ownerId: 'AggregateRoot',
+  owner: 'AggregateRoot',
+  buffer: '_domainEvents',
+  method: 'addDomainEvent',
+  raisers: ['Booking', 'Payment'],
+  file: '/app/src/aggregate-root.ts',
+  line: 2,
+};
+
+const rootSource = (name: string): string =>
+  `export abstract class ${name} { private events: object[] = []; protected addEvent(e: object): void { this.events.push(e); } }`;
+
+const raiserSource = (name: string, root: string, file: string): string =>
+  `import { ${root} } from './${file}';\nexport class ${name} extends ${root} { act(): void { this.addEvent({}); } }`;
+
+describe('undispatchedBuffers', () => {
+  it('reports one buffer with every raiser for the booking shape', () => {
+    expect(buffersOf(booking())).toEqual([BOOKING_BUFFER]);
+  });
+
+  it('stays silent when a project file outside the analysed files reads the getter', () => {
+    const dispatch = "import { Booking } from '../src/booking';\nexport const dispatch = (booking: Booking) => booking.domainEvents;";
+
+    expect(buffersOf(booking({ '/app/scripts/dispatch.ts': dispatch }))).toEqual([]);
+  });
+
+  it('still reports the buffer when only a test file reads the getter', () => {
+    const spec = "import { Booking } from './booking';\nexport const read = () => Booking.create().domainEvents;";
+
+    expect(buffersOf(booking({ '/app/src/booking.spec.ts': spec }))).toEqual([BOOKING_BUFFER]);
+  });
+
+  it('stays silent when the event method is called only from a test file', () => {
+    const payment = "import { AggregateRoot } from './aggregate-root';\nexport class Payment extends AggregateRoot {}";
+    const spec = "import { Payment } from './payment';\nexport class RaisingPayment extends Payment { raise(): void { this.addDomainEvent({}); } }";
+
+    expect(buffersOf({ '/app/src/aggregate-root.ts': BASE, '/app/src/payment.ts': payment, '/app/src/payment.spec.ts': spec })).toEqual([]);
+  });
+
+  it('stays silent when the event method does more than push', () => {
+    const base = BASE.replace('this._domainEvents.push(event); }', 'this._domainEvents.push(event); console.log(event); }');
+
+    expect(buffersOf(booking({}, base))).toEqual([]);
+  });
+
+  it('stays silent for a protected buffer', () => {
+    expect(buffersOf(booking({}, BASE.replace('private _domainEvents', 'protected _domainEvents')))).toEqual([]);
+  });
+
+  it('stays silent when the base class extends a library class', () => {
+    const base = `import { LibraryBase } from '../../lib/base';\n${BASE.replace('class AggregateRoot {', 'class AggregateRoot extends LibraryBase {')}`;
+
+    expect(buffersOf(booking({ '/lib/base.d.ts': 'export declare class LibraryBase {}' }, base))).toEqual([]);
+  });
+
+  it('stays silent when the base class extends a mixin call', () => {
+    const mixin = 'export const Mixin = (base: new () => object) => class extends base {};';
+    const base = `import { Mixin } from './mixin';\n${BASE.replace('class AggregateRoot {', 'class AggregateRoot extends Mixin(Object) {')}`;
+
+    expect(buffersOf(booking({ '/app/src/mixin.ts': mixin }, base))).toEqual([]);
+  });
+
+  it('stays silent when a subclass is decorated', () => {
+    const entity = 'export const Entity = () => (target: unknown) => target;';
+    const payment = `import { Entity } from './entity';\n${PAYMENT.replace('export class Payment', '@Entity() export class Payment')}`;
+
+    expect(buffersOf(booking({ '/app/src/entity.ts': entity, '/app/src/payment.ts': payment }))).toEqual([]);
+  });
+
+  it('stays silent when no event methods are configured', () => {
+    expect(buffersOf(booking(), 'defineDomain({ eventMethods: [] })')).toEqual([]);
+  });
+
+  it('reports independent roots separately with their own raisers', () => {
+    const sources = {
+      '/app/src/root-a.ts': rootSource('RootA'),
+      '/app/src/a.ts': raiserSource('A', 'RootA', 'root-a'),
+      '/app/src/root-b.ts': rootSource('RootB'),
+      '/app/src/b.ts': raiserSource('B', 'RootB', 'root-b'),
+    };
+
+    expect(buffersOf(sources)).toEqual([
+      { ownerId: 'RootA', owner: 'RootA', buffer: 'events', method: 'addEvent', raisers: ['A'], file: '/app/src/root-a.ts', line: 1 },
+      { ownerId: 'RootB', owner: 'RootB', buffer: 'events', method: 'addEvent', raisers: ['B'], file: '/app/src/root-b.ts', line: 1 },
+    ]);
+  });
+
+  it('stays silent when the event method is declared only in a library', () => {
+    const library = 'export declare abstract class AggregateRoot {\n  private _domainEvents;\n  protected addDomainEvent(event: object): void;\n}';
+    const sources = {
+      '/lib/base.d.ts': library,
+      '/app/src/booking.ts': BOOKING.replace("from './aggregate-root'", "from '../../lib/base'"),
+    };
+
+    expect(buffersOf(sources)).toEqual([]);
+  });
+
+  it('stays silent when production code reads the aggregate reflectively', () => {
+    const inspect = "import { Booking } from './booking';\nexport const inspect = (booking: Booking) => Object.values(booking);";
+
+    expect(buffersOf(booking({ '/app/src/inspect.ts': inspect }))).toEqual([]);
+  });
+});

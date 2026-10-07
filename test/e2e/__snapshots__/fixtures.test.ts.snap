@@ -64,7 +64,11 @@ error terminal-state-leak  Order.annotate()  src/order.ts:36
   annotate() can run after status is 'cancelled'.
   Fix: Guard annotate() so it cannot run when status is 'cancelled', or list it in allowAfterTerminal if that is intended.
 
-4 errors, 1 warning
+error undispatched-events  AggregateRoot.events  src/aggregate-root.ts:3
+  AggregateRoot.events collects events from addEvent() raised by Order, but no production code reads or drains it, so those events never reach a handler.
+  Fix: Dispatch the events in events after saving the aggregate and clear it, or stop raising them.
+
+5 errors, 1 warning
 "
 `;
 
