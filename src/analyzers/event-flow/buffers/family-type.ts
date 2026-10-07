@@ -5,6 +5,7 @@ type Holds = (type: Type) => boolean;
 
 export type FamilyHolding = {
   readonly mayHold: Holds;
+  readonly mayHoldAtSurface: Holds;
   readonly holdsInstance: Holds;
 };
 
@@ -89,6 +90,18 @@ const holdsWithin =
     );
   };
 
+const surfaceHolds =
+  (heritage: ReadonlySet<Node>): Holds =>
+  (type) => {
+    const next = surfaceHolds(heritage);
+    return (
+      isOpenType(type) ||
+      (type.isTypeParameter() && typeParameterHolds(type, heritage, next)) ||
+      isHeritageInstance(type, heritage) ||
+      [...type.getUnionTypes(), ...type.getIntersectionTypes()].some(next)
+    );
+  };
+
 const memoised = (holds: Holds): Holds => {
   const known = new Map<ts.Type, boolean>();
   return (type) => {
@@ -104,6 +117,7 @@ export const mayHoldFamily = (family: readonly ClassDeclaration[]): FamilyHoldin
   const heritage = familyHeritage(family);
   return {
     mayHold: memoised(holdsWithin(heritage, OPEN, new Set())),
+    mayHoldAtSurface: memoised(surfaceHolds(heritage)),
     holdsInstance: memoised(holdsWithin(heritage, CLOSED, new Set())),
   };
 };

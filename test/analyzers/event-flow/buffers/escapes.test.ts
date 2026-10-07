@@ -65,8 +65,48 @@ describe('hasEscapeRoute', () => {
     expect(escapes('export {};', { root: COPYING_ROOT })).toBe(false);
   });
 
-  it('finds an escape when another class spreads a private array that may hold the aggregate', () => {
-    expect(escapes('export class Other { private items: object[] = []; copy() { return [...this.items]; } }')).toBe(true);
+  it('finds no escape when another class spreads a private array into an array', () => {
+    expect(escapes('export class Other { private items: object[] = []; copy() { return [...this.items]; } }')).toBe(false);
+  });
+
+  it('finds no escape when aggregate arrays are spread into an array', () => {
+    expect(escapes('export const f = (rs: Root[], more: readonly Root[], pair: [Root, Root]) => [...rs, ...more, ...pair];')).toBe(false);
+  });
+
+  it('finds an escape when an iterable that is not an array is spread into an array', () => {
+    expect(escapes('export const f = (rs: Set<Root>) => [...rs];')).toBe(true);
+  });
+
+  it('finds no escape when Object.keys reads a record of aggregates', () => {
+    expect(escapes('export const f = (rec: Record<string, Root>) => Object.keys(rec);')).toBe(false);
+  });
+
+  it('finds no escape when Object.values reads a record of aggregates', () => {
+    expect(escapes('export const f = (rs: Record<string, Root>) => Object.values(rs);')).toBe(false);
+  });
+
+  it('finds no escape when a record of aggregates is spread into an object', () => {
+    expect(escapes('export const f = (rs: Record<string, Root>) => ({ ...rs });')).toBe(false);
+  });
+
+  it('finds no escape when a record of aggregates is read with a computed key', () => {
+    expect(escapes('export const f = (rs: Record<string, Root>, k: string) => rs[k];')).toBe(false);
+  });
+
+  it('finds no escape when a record of aggregates is iterated with for in', () => {
+    expect(escapes('export const f = (rs: Record<string, Root>) => { for (const k in rs) publish(k); };')).toBe(false);
+  });
+
+  it('finds an escape when JSON.stringify reads a record of aggregates', () => {
+    expect(escapes('export const f = (rs: Record<string, Root>) => JSON.stringify(rs);')).toBe(true);
+  });
+
+  it('finds an escape when structuredClone copies an array of aggregates', () => {
+    expect(escapes('export const f = (rs: Root[]) => structuredClone(rs);')).toBe(true);
+  });
+
+  it('finds an escape when Object.keys reads an aggregate or an empty object type union', () => {
+    expect(escapes('export const f = (r: Root | undefined) => Object.keys(r ?? {});')).toBe(true);
   });
 
   it('finds an escape when a private field holding the aggregate is spread into an object', () => {
@@ -139,6 +179,18 @@ describe('hasEscapeRoute', () => {
     expect(escapes('interface Saveable { id?: string }\nexport const f = (r: Root) => { const s = r as Saveable; new Repo2().save(s); };')).toBe(true);
   });
 
+  it('finds an escape when the aggregate is cast to an open record', () => {
+    expect(escapes('export const f = (r: Root) => r as Record<string, unknown>;')).toBe(true);
+  });
+
+  it('finds no escape when the aggregate is cast to object', () => {
+    expect(escapes('export const f = (r: Root) => r as object;')).toBe(false);
+  });
+
+  it('finds no escape when aggregates are cast to a readonly aggregate array', () => {
+    expect(escapes('export const f = (rs: Root[]) => rs as readonly Root[];')).toBe(false);
+  });
+
   it('finds no escape when a caught error is cast before reaching a library function', () => {
     expect(escapes('export const f = () => { try { return 1; } catch (e) { publish((e as Error).message); } };')).toBe(false);
   });
@@ -195,6 +247,8 @@ describe('hasEscapeRoute', () => {
     ['object member aliasing a library function', 'const api = { send: publish };\nexport const f = (r: Root) => api.send(r);'],
     ['unresolved callee', 'declare const anyFn: any;\nexport const f = (r: Root) => anyFn(r);'],
     ['any-typed value', 'declare const r: any;\nexport const f = () => Object.keys(r);'],
+    ['Object.keys of the aggregate', 'export const f = (r: Root) => Object.keys(r);'],
+    ['Object.keys of a type parameter constrained to the aggregate', 'export const f = <T extends Root>(t: T) => Object.keys(t);'],
   ])('finds an escape through %s', (_, usage) => {
     expect(escapes(usage)).toBe(true);
   });

@@ -12,22 +12,30 @@ const REFLECTIVE_OBJECT_METHODS: ReadonlySet<string> = new Set([
   'getOwnPropertyDescriptors',
 ]);
 
-const isReflectiveInterfaceMember = (owner: string, member: string): boolean =>
-  (owner === 'ObjectConstructor' && REFLECTIVE_OBJECT_METHODS.has(member)) || (owner === 'JSON' && member === 'stringify');
+const interfaceMember = (declaration: Node, owner: string): string | undefined => {
+  const parent = declaration.getParent();
+  return Node.isMethodSignature(declaration) && Node.isInterfaceDeclaration(parent) && parent.getName() === owner
+    ? declaration.getName()
+    : undefined;
+};
 
 const isInReflectNamespace = (declaration: Node): boolean =>
   declaration.getAncestors().some((ancestor) => Node.isModuleDeclaration(ancestor) && ancestor.getName() === 'Reflect');
 
-const isReflectiveShape = (declaration: Node): boolean => {
-  const parent = declaration.getParent();
-  if (Node.isMethodSignature(declaration) && Node.isInterfaceDeclaration(parent)) {
-    return isReflectiveInterfaceMember(parent.getName(), declaration.getName());
-  }
-  return Node.isFunctionDeclaration(declaration) && (declaration.getName() === 'structuredClone' || isInReflectNamespace(declaration));
+const isShallowReflectiveShape = (declaration: Node): boolean => {
+  const member = interfaceMember(declaration, 'ObjectConstructor');
+  return (member !== undefined && REFLECTIVE_OBJECT_METHODS.has(member)) || (Node.isFunctionDeclaration(declaration) && isInReflectNamespace(declaration));
 };
 
-const isReflectiveDeclaration = (declaration: Node): boolean =>
-  isReflectiveShape(declaration) && isDefaultLibraryNode(declaration);
+const isDeepReflectiveShape = (declaration: Node): boolean =>
+  interfaceMember(declaration, 'JSON') === 'stringify' ||
+  (Node.isFunctionDeclaration(declaration) && declaration.getName() === 'structuredClone');
 
-export const isReflectiveCallee = (callee: Node): boolean =>
-  [...symbolDeclarations(callee), ...signatureDeclarations(callee)].some(isReflectiveDeclaration);
+const calleeDeclarations = (callee: Node): readonly Node[] => [...symbolDeclarations(callee), ...signatureDeclarations(callee)];
+
+const isDeclaredAs = (callee: Node, shape: (declaration: Node) => boolean): boolean =>
+  calleeDeclarations(callee).some((declaration) => shape(declaration) && isDefaultLibraryNode(declaration));
+
+export const isShallowReflectiveCallee = (callee: Node): boolean => isDeclaredAs(callee, isShallowReflectiveShape);
+
+export const isDeepReflectiveCallee = (callee: Node): boolean => isDeclaredAs(callee, isDeepReflectiveShape);

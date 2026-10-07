@@ -2,7 +2,7 @@ import { Node, ts } from 'ts-morph';
 import { isDefaultLibraryNode, isLibraryNode } from '../../shared/library';
 import { unwrap } from '../../shared/wrappers';
 import { signatureDeclarations, symbolDeclarations } from './callee-declarations';
-import { isReflectiveCallee } from './reflective-callee';
+import { isDeepReflectiveCallee, isShallowReflectiveCallee } from './reflective-callee';
 
 const FUNCTION_FORWARDERS: ReadonlySet<string> = new Set(['call', 'apply', 'bind']);
 const FUNCTION_INTERFACES: ReadonlySet<string> = new Set(['Function', 'CallableFunction', 'NewableFunction']);
@@ -67,7 +67,11 @@ const isForeignCallee = (callee: Node): boolean => {
   );
 };
 
-export const isEscapingCallee = (callee: Node): boolean => {
+export type CalleeReach = 'none' | 'surface' | 'deep';
+
+export const calleeReach = (callee: Node): CalleeReach => {
   const judged = judgedCallee(callee);
-  return !isConsoleCallee(judged) && (isReflectiveCallee(judged) || isForeignCallee(judged));
+  if (isConsoleCallee(judged)) return 'none';
+  if (isDeepReflectiveCallee(judged) || isForeignCallee(judged)) return 'deep';
+  return isShallowReflectiveCallee(judged) ? 'surface' : 'none';
 };
