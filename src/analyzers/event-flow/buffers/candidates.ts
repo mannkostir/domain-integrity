@@ -3,11 +3,15 @@ import { isPushOnlyMethod, plainEventArrays } from '../../shared/array-store';
 import { hierarchyOf } from '../hierarchy';
 import { ProjectClasses } from '../keys';
 import { BufferCandidate } from './buffer-candidate';
-import { hasHeirOutside, projectClassesIn } from './outside-heirs';
+import { hasHeirOutside, ProjectClass, projectClassesIn } from './outside-heirs';
 
 type Push = { readonly buffer: PropertyDeclaration; readonly pusher: MethodDeclaration };
 
-type Family = { readonly members: readonly ClassDeclaration[]; readonly arrays: ReadonlySet<Node> };
+type Family = {
+  readonly members: readonly ClassDeclaration[];
+  readonly holders: readonly ClassDeclaration[];
+  readonly arrays: ReadonlySet<Node>;
+};
 
 type FamilyLookup = (owner: ClassDeclaration) => Family;
 
@@ -16,8 +20,7 @@ export const declaringClassOf = (buffer: PropertyDeclaration): ClassDeclaration 
   return Node.isClassDeclaration(owner) ? owner : undefined;
 };
 
-const familyOf = (cls: ClassDeclaration, isProject: ProjectClasses, projectFiles: ReadonlySet<SourceFile>): readonly ClassDeclaration[] => [
-  ...hierarchyOf(cls, isProject).ancestors,
+const holdersOf = (cls: ClassDeclaration, projectFiles: ReadonlySet<SourceFile>): readonly ClassDeclaration[] => [
   cls,
   ...cls.getDerivedClasses().filter((derived) => projectFiles.has(derived.getSourceFile())),
 ];
@@ -28,8 +31,9 @@ const familyLookup = (isProject: ProjectClasses, projectFiles: readonly SourceFi
   return (owner) => {
     const cached = known.get(owner);
     if (cached !== undefined) return cached;
-    const members = familyOf(owner, isProject, projectFileSet);
-    const family = { members, arrays: plainEventArrays(members, projectFiles) };
+    const holders = holdersOf(owner, projectFileSet);
+    const members = [...hierarchyOf(owner, isProject).ancestors, ...holders];
+    const family = { members, holders, arrays: plainEventArrays(members, projectFiles) };
     known.set(owner, family);
     return family;
   };
@@ -81,6 +85,11 @@ const toCandidate = (buffer: PropertyDeclaration, pushes: readonly Push[], famil
   };
 };
 
+const isHeldOutsideFamily = (buffer: PropertyDeclaration, families: FamilyLookup, classes: readonly ProjectClass[]): boolean => {
+  const owner = declaringClassOf(buffer);
+  return owner === undefined || hasHeirOutside(families(owner).holders, classes);
+};
+
 export const candidatesIn = (
   files: readonly SourceFile[],
   eventMethods: readonly string[],
@@ -95,8 +104,8 @@ export const candidatesIn = (
     .filter((method) => isEventMethod(method, eventMethods))
     .flatMap((method) => pushesOf(method, isProject, families));
   return [...new Set(pushes.map((push) => push.buffer))]
+    .filter((buffer) => !isHeldOutsideFamily(buffer, families, classes))
     .flatMap((buffer) => toCandidate(buffer, pushes, families) ?? [])
     .filter(hasSingleTarget)
-    .filter(hasOnlyPushingNamesakes)
-    .filter((candidate) => !hasHeirOutside(candidate.family, classes));
+    .filter(hasOnlyPushingNamesakes);
 };

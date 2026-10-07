@@ -8,29 +8,29 @@ export const projectClassesIn = (files: readonly SourceFile[]): readonly Project
     ...file.getDescendantsOfKind(SyntaxKind.ClassExpression),
   ]);
 
-const isFamilyType = (type: Type, family: ReadonlySet<Node>): boolean =>
-  (type.getSymbol()?.getDeclarations() ?? []).some((declaration) => family.has(declaration));
+const isHolderType = (type: Type, holders: ReadonlySet<Node>): boolean =>
+  (type.getSymbol()?.getDeclarations() ?? []).some((declaration) => holders.has(declaration));
 
 const baseTypesOf = (type: Type): readonly Type[] => {
   const target = type.getTargetType() ?? type;
   return target.isClassOrInterface() ? target.getBaseTypes() : [];
 };
 
-const reachesFamily = (type: Type, family: ReadonlySet<Node>, seen: ReadonlySet<ts.Type>): boolean => {
+const reachesHolder = (type: Type, holders: ReadonlySet<Node>, seen: ReadonlySet<ts.Type>): boolean => {
   if (seen.has(type.compilerType)) return false;
   const next: ReadonlySet<ts.Type> = new Set([...seen, type.compilerType]);
   return (
-    isFamilyType(type, family) ||
-    [...type.getIntersectionTypes(), ...type.getUnionTypes(), ...baseTypesOf(type)].some((inner) => reachesFamily(inner, family, next))
+    isHolderType(type, holders) ||
+    [...type.getIntersectionTypes(), ...type.getUnionTypes(), ...baseTypesOf(type)].some((inner) => reachesHolder(inner, holders, next))
   );
 };
 
-const isOutsideHeir = (cls: ProjectClass, family: ReadonlySet<Node>): boolean => {
+const isOutsideHeir = (cls: ProjectClass, holders: ReadonlySet<Node>): boolean => {
   const instance = cls.getSymbol()?.getDeclaredType();
-  return !family.has(cls) && instance !== undefined && baseTypesOf(instance).some((base) => reachesFamily(base, family, new Set()));
+  return !holders.has(cls) && instance !== undefined && baseTypesOf(instance).some((base) => reachesHolder(base, holders, new Set()));
 };
 
-export const hasHeirOutside = (family: readonly ClassDeclaration[], classes: readonly ProjectClass[]): boolean => {
-  const members: ReadonlySet<Node> = new Set(family);
-  return classes.some((cls) => isOutsideHeir(cls, members));
+export const hasHeirOutside = (holders: readonly ClassDeclaration[], classes: readonly ProjectClass[]): boolean => {
+  const known: ReadonlySet<Node> = new Set(holders);
+  return classes.some((cls) => isOutsideHeir(cls, known));
 };

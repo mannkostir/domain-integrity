@@ -253,6 +253,39 @@ describe('undispatchedBuffers', () => {
     ).toEqual([]);
   });
 
+  it('still reports the buffer when a sibling of an ancestor extends the shared base', () => {
+    const sources = {
+      '/app/src/entity.ts': 'export class Entity {}',
+      '/app/src/aggregate-root.ts': "import { Entity } from './entity';\nexport abstract class AggregateRoot extends Entity { private events: object[] = []; protected addEvent(e: object): void { this.events.push(e); } }",
+      '/app/src/booking.ts': raiserSource('Booking', 'AggregateRoot', 'aggregate-root'),
+      '/app/src/order-line.ts': "import { Entity } from './entity';\nexport class OrderLine extends Entity {}",
+    };
+
+    expect(buffersOf(sources)).toEqual([
+      { ownerId: 'AggregateRoot', owner: 'AggregateRoot', buffer: 'events', method: 'addEvent', raisers: ['Booking'], file: '/app/src/aggregate-root.ts', line: 2 },
+    ]);
+  });
+
+  it('stays silent when a mixin wraps a derived class and reaches a library function', () => {
+    const mixin = [
+      'export type Ctor<T = object> = abstract new (...args: any[]) => T;',
+      'export function Timestamped<B extends Ctor>(base: B) {',
+      '  abstract class Stamped extends base { createdAt = new Date(); }',
+      '  return Stamped;',
+      '}',
+    ].join('\n');
+    const stamped = [
+      "import { Booking } from './booking';",
+      "import { Timestamped } from './mixin';",
+      'export class StampedBooking extends Timestamped(Booking) {}',
+    ].join('\n');
+    const service = "import { dispatchEventsOf } from '../../lib/dispatch';\nimport { StampedBooking } from './stamped-booking';\nexport const place = (booking: StampedBooking): void => dispatchEventsOf(booking);";
+
+    expect(
+      buffersOf(booking({ '/lib/dispatch.d.ts': DISPATCH, '/app/src/mixin.ts': mixin, '/app/src/stamped-booking.ts': stamped, '/app/src/service.ts': service })),
+    ).toEqual([]);
+  });
+
   it('stays silent when a grandchild subclass reaches a library function', () => {
     const grandchild = "import { Booking } from './booking';\nexport class SpecialBooking extends Booking {}";
     const service = "import { dispatchEventsOf } from '../../lib/dispatch';\nimport { SpecialBooking } from './special-booking';\nexport const place = (booking: SpecialBooking): void => dispatchEventsOf(booking);";
