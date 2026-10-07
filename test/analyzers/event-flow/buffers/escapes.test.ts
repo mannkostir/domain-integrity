@@ -117,6 +117,14 @@ describe('hasEscapeRoute', () => {
     expect(escapes('interface Saveable { id?: string }\nexport const f = (r: Root) => { const s = r as Saveable; new Repo2().save(s); };')).toBe(true);
   });
 
+  it('finds no escape when a caught error is cast before reaching a library function', () => {
+    expect(escapes('export const f = () => { try { return 1; } catch (e) { publish((e as Error).message); } };')).toBe(false);
+  });
+
+  it('finds no escape when parsed JSON is cast to a DTO', () => {
+    expect(escapes('interface Dto { id: string }\nexport const f = (raw: string) => JSON.parse(raw) as Dto;')).toBe(false);
+  });
+
   it('finds an escape when the aggregate is laundered through unknown', () => {
     expect(escapes('interface Foo { name: string }\nexport const f = (r: Root) => { const x = r as unknown as Foo; return x; };')).toBe(true);
   });

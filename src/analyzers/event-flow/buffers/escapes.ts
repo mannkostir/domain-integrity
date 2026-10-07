@@ -1,6 +1,7 @@
 import { Expression, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
 import { unwrap } from '../../shared/wrappers';
 import { isEscapingCallee } from './escaping-callee';
+import { FamilyHolding } from './family-type';
 
 type MayHold = (type: Type) => boolean;
 
@@ -32,10 +33,10 @@ const isOwnPrivateField = (expression: Expression, mayHold: MayHold): boolean =>
 const escapesThroughArraySpread = (expression: Expression, mayHold: MayHold): boolean =>
   !isOwnPrivateField(expression, mayHold) && mayHold(expression.getType());
 
-const escapesThroughCast = (operand: Expression, cast: Expression, mayHold: MayHold): boolean =>
-  mayHold(operand.getType()) && !mayHold(cast.getType());
+const escapesThroughCast = (cast: Expression, holding: FamilyHolding): boolean =>
+  holding.holdsInstance(unwrap(cast).getType()) && !holding.mayHold(cast.getType());
 
-const escapesIn = (file: SourceFile, mayHold: MayHold): boolean =>
+const escapesThroughValues = (file: SourceFile, mayHold: MayHold): boolean =>
   file
     .getDescendantsOfKind(SyntaxKind.CallExpression)
     .some((call) => escapesThroughInvocation(call.getExpression(), call.getArguments(), mayHold)) ||
@@ -52,9 +53,11 @@ const escapesIn = (file: SourceFile, mayHold: MayHold): boolean =>
   file
     .getDescendantsOfKind(SyntaxKind.SpreadElement)
     .some((spread) => escapesThroughArraySpread(spread.getExpression(), mayHold)) ||
-  file.getDescendantsOfKind(SyntaxKind.ForInStatement).some((loop) => mayHold(loop.getExpression().getType())) ||
-  file.getDescendantsOfKind(SyntaxKind.AsExpression).some((cast) => escapesThroughCast(cast.getExpression(), cast, mayHold)) ||
-  file.getDescendantsOfKind(SyntaxKind.TypeAssertionExpression).some((cast) => escapesThroughCast(cast.getExpression(), cast, mayHold));
+  file.getDescendantsOfKind(SyntaxKind.ForInStatement).some((loop) => mayHold(loop.getExpression().getType()));
 
-export const hasEscapeRoute = (production: readonly SourceFile[], mayHold: MayHold): boolean =>
-  production.some((file) => escapesIn(file, mayHold));
+const escapesThroughCasts = (file: SourceFile, holding: FamilyHolding): boolean =>
+  file.getDescendantsOfKind(SyntaxKind.AsExpression).some((cast) => escapesThroughCast(cast, holding)) ||
+  file.getDescendantsOfKind(SyntaxKind.TypeAssertionExpression).some((cast) => escapesThroughCast(cast, holding));
+
+export const hasEscapeRoute = (production: readonly SourceFile[], holding: FamilyHolding): boolean =>
+  production.some((file) => escapesThroughValues(file, holding.mayHold) || escapesThroughCasts(file, holding));

@@ -3,11 +3,21 @@ import { familyHeritage } from './family-heritage';
 
 type Holds = (type: Type) => boolean;
 
+export type FamilyHolding = {
+  readonly mayHold: Holds;
+  readonly holdsInstance: Holds;
+};
+
+type Openness = {
+  readonly isOpen: Holds;
+  readonly undeclaredPropertyHolds: boolean;
+};
+
 const optional = (type: Type | undefined): readonly Type[] => (type === undefined ? [] : [type]);
 
-const isUnconstrainedOrHolding = (type: Type, holds: Holds): boolean => {
+const constraintHolds = (type: Type, holds: Holds): boolean => {
   const constraint = type.getConstraint();
-  return constraint === undefined || holds(constraint);
+  return constraint !== undefined && holds(constraint);
 };
 
 const hasNoSignatures = (type: Type): boolean =>
@@ -28,20 +38,29 @@ const isThisType = (type: Type): boolean =>
     (declaration) => Node.isClassDeclaration(declaration) || Node.isInterfaceDeclaration(declaration),
   );
 
-const typeParameterMayHold = (type: Type, heritage: ReadonlySet<Node>, holds: Holds): boolean =>
-  isThisType(type) ? isHeritageInstance(type, heritage) : isUnconstrainedOrHolding(type, holds);
+const typeParameterHolds = (type: Type, heritage: ReadonlySet<Node>, holds: Holds): boolean =>
+  isThisType(type) ? isHeritageInstance(type, heritage) : constraintHolds(type, holds);
+
+const isUnconstrainedTypeParameter = (type: Type): boolean =>
+  type.isTypeParameter() && !isThisType(type) && type.getConstraint() === undefined;
+
+const isOpenType = (type: Type): boolean =>
+  type.isAny() || type.isUnknown() || isNonPrimitive(type) || isEmptyObject(type) || isUnconstrainedTypeParameter(type);
+
+const OPEN: Openness = { isOpen: isOpenType, undeclaredPropertyHolds: true };
+const CLOSED: Openness = { isOpen: () => false, undeclaredPropertyHolds: false };
 
 const isConstructorType = (type: Type): boolean => type.getConstructSignatures().length > 0;
 
 const isAnonymousObject = (type: Type): boolean => type.isAnonymous() || (type.isObject() && type.getSymbol() === undefined);
 
-const propertyMayHold = (property: MorphSymbol, holds: Holds): boolean => {
+const propertyHolds = (property: MorphSymbol, holds: Holds, openness: Openness): boolean => {
   const declaration = property.getValueDeclaration();
-  return declaration === undefined || holds(declaration.getType());
+  return declaration === undefined ? openness.undeclaredPropertyHolds : holds(declaration.getType());
 };
 
-const anonymousPropertyMayHold = (type: Type, holds: Holds): boolean =>
-  isAnonymousObject(type) && type.getProperties().some((property) => propertyMayHold(property, holds));
+const anonymousPropertyHolds = (type: Type, holds: Holds, openness: Openness): boolean =>
+  isAnonymousObject(type) && type.getProperties().some((property) => propertyHolds(property, holds, openness));
 
 const innerTypes = (type: Type): readonly Type[] => [
   ...type.getUnionTypes(),
@@ -56,24 +75,20 @@ const innerTypes = (type: Type): readonly Type[] => [
 ];
 
 const holdsWithin =
-  (heritage: ReadonlySet<Node>, seen: ReadonlySet<ts.Type>): Holds =>
+  (heritage: ReadonlySet<Node>, openness: Openness, seen: ReadonlySet<ts.Type>): Holds =>
   (type) => {
     if (seen.has(type.compilerType) || isConstructorType(type)) return false;
-    const next = holdsWithin(heritage, new Set([...seen, type.compilerType]));
+    const next = holdsWithin(heritage, openness, new Set([...seen, type.compilerType]));
     return (
-      type.isAny() ||
-      type.isUnknown() ||
-      isNonPrimitive(type) ||
-      isEmptyObject(type) ||
-      (type.isTypeParameter() && typeParameterMayHold(type, heritage, next)) ||
+      openness.isOpen(type) ||
+      (type.isTypeParameter() && typeParameterHolds(type, heritage, next)) ||
       isHeritageInstance(type, heritage) ||
       innerTypes(type).some(next) ||
-      anonymousPropertyMayHold(type, next)
+      anonymousPropertyHolds(type, next, openness)
     );
   };
 
-export const mayHoldFamily = (family: readonly ClassDeclaration[]): Holds => {
-  const holds = holdsWithin(familyHeritage(family), new Set());
+const memoised = (holds: Holds): Holds => {
   const known = new Map<ts.Type, boolean>();
   return (type) => {
     const cached = known.get(type.compilerType);
@@ -81,5 +96,13 @@ export const mayHoldFamily = (family: readonly ClassDeclaration[]): Holds => {
     const result = holds(type);
     known.set(type.compilerType, result);
     return result;
+  };
+};
+
+export const mayHoldFamily = (family: readonly ClassDeclaration[]): FamilyHolding => {
+  const heritage = familyHeritage(family);
+  return {
+    mayHold: memoised(holdsWithin(heritage, OPEN, new Set())),
+    holdsInstance: memoised(holdsWithin(heritage, CLOSED, new Set())),
   };
 };
