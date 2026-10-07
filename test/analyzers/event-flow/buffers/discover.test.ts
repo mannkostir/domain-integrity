@@ -286,6 +286,37 @@ describe('undispatchedBuffers', () => {
     ).toEqual([]);
   });
 
+  it('stays silent when a subclass overrides the event method under a computed constant key', () => {
+    const base = BASE.replace('clearEvents()', 'protected raise(event: object): void { this.addDomainEvent(event); }\n  clearEvents()');
+    const overriding = [
+      "import { AggregateRoot } from './aggregate-root';",
+      "import { publish } from './bus';",
+      "const KEY = 'addDomainEvent';",
+      'export class Booked {}',
+      'export class Booking extends AggregateRoot {',
+      '  ship(): void { this.raise(new Booked()); }',
+      '  protected override [KEY](event: object): void { publish(event); }',
+      '}',
+    ].join('\n');
+
+    expect(buffersOf({ '/app/src/aggregate-root.ts': base, '/app/src/bus.ts': BUS, '/app/src/booking.ts': overriding })).toEqual([]);
+  });
+
+  it('still reports the buffer when a subclass declares an unrelated computed member', () => {
+    const base = BASE.replace('clearEvents()', 'protected raise(event: object): void { this.addDomainEvent(event); }\n  clearEvents()');
+    const computed = [
+      "import { AggregateRoot } from './aggregate-root';",
+      "const KEY = 'describe';",
+      'export class Booked {}',
+      'export class Booking extends AggregateRoot {',
+      '  ship(): void { this.raise(new Booked()); }',
+      "  [KEY](): string { return 'booking'; }",
+      '}',
+    ].join('\n');
+
+    expect(buffersOf({ '/app/src/aggregate-root.ts': base, '/app/src/booking.ts': computed })).toEqual([{ ...BOOKING_BUFFER, raisers: ['AggregateRoot'] }]);
+  });
+
   it('stays silent when a grandchild subclass reaches a library function', () => {
     const grandchild = "import { Booking } from './booking';\nexport class SpecialBooking extends Booking {}";
     const service = "import { dispatchEventsOf } from '../../lib/dispatch';\nimport { SpecialBooking } from './special-booking';\nexport const place = (booking: SpecialBooking): void => dispatchEventsOf(booking);";

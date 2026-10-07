@@ -63,14 +63,17 @@ const pushesOnlyOnto = (pusher: MethodDeclaration, buffer: PropertyDeclaration):
 const hasSingleTarget = (candidate: BufferCandidate): boolean =>
   candidate.pushers.every((pusher) => pushesOnlyOnto(pusher, candidate.buffer));
 
-const isOtherNamesake = (member: Node, names: ReadonlySet<string>, candidate: BufferCandidate): boolean =>
-  names.has(member.getSymbol()?.getName() ?? '') && !candidate.pushers.some((pusher) => pusher === member);
+const namesakesIn = (cls: ClassDeclaration, name: string): readonly Node[] | undefined => {
+  const instance = cls.getSymbol()?.getDeclaredType();
+  return instance === undefined ? undefined : (instance.getProperty(name)?.getDeclarations() ?? []);
+};
 
 const hasOnlyPushingNamesakes = (candidate: BufferCandidate): boolean => {
+  const pushing: ReadonlySet<Node> = new Set(candidate.pushers.flatMap((pusher) => [pusher, ...pusher.getOverloads()]));
   const names: ReadonlySet<string> = new Set(candidate.pushers.map((pusher) => pusher.getName()));
-  return !candidate.family
-    .flatMap((member) => member.getInstanceMembers())
-    .some((member) => isOtherNamesake(member, names, candidate));
+  return candidate.family.every((member) =>
+    [...names].every((name) => namesakesIn(member, name)?.every((declaration) => pushing.has(declaration)) ?? false),
+  );
 };
 
 const toCandidate = (buffer: PropertyDeclaration, pushes: readonly Push[], families: FamilyLookup): BufferCandidate | undefined => {
