@@ -71,6 +71,31 @@ const domainBooking = (extra: Readonly<Record<string, string>>): Readonly<Record
   ...extra,
 });
 
+const RAISING_BASE = BASE.replace('clearEvents()', 'protected raise(event: object): void { this.addDomainEvent(event); }\n  clearEvents()');
+
+const RAISED_BUFFER: UndispatchedBuffer = { ...BOOKING_BUFFER, raisers: ['AggregateRoot'] };
+
+const raisingBooking = (
+  body: string,
+  prelude: string = '',
+  adjustBase: (base: string) => string = (base) => base,
+  extra: Readonly<Record<string, string>> = {},
+): Readonly<Record<string, string>> => ({
+  '/app/src/aggregate-root.ts': adjustBase(RAISING_BASE),
+  '/app/src/bus.ts': BUS,
+  '/app/src/booking.ts': [
+    "import { AggregateRoot } from './aggregate-root';",
+    "import { publish } from './bus';",
+    prelude,
+    'export class Booked {}',
+    'export class Booking extends AggregateRoot {',
+    '  ship(): void { this.raise(new Booked()); }',
+    body,
+    '}',
+  ].join('\n'),
+  ...extra,
+});
+
 describe('undispatchedBuffers', () => {
   it('reports one buffer with every raiser for the booking shape', () => {
     expect(buffersOf(booking())).toEqual([BOOKING_BUFFER]);
@@ -315,6 +340,18 @@ describe('undispatchedBuffers', () => {
     ].join('\n');
 
     expect(buffersOf({ '/app/src/aggregate-root.ts': base, '/app/src/booking.ts': computed })).toEqual([{ ...BOOKING_BUFFER, raisers: ['AggregateRoot'] }]);
+  });
+
+  it('stays silent when a subclass overrides the event method under a string-typed computed key', () => {
+    expect(buffersOf(raisingBooking('  protected [KEY](event: object): void { publish(event); }', "const KEY: string = 'addDomainEvent';"))).toEqual([]);
+  });
+
+  it('stays silent when a subclass declares a member under a computed key typed as a union of literals', () => {
+    expect(buffersOf(raisingBooking('  [KEY](): void {}', "declare const KEY: 'a' | 'b';"))).toEqual([]);
+  });
+
+  it('still reports the buffer when a subclass declares a symbol-keyed member', () => {
+    expect(buffersOf(raisingBooking('  *[Symbol.iterator](): Iterator<number> { yield 1; }'))).toEqual([RAISED_BUFFER]);
   });
 
   it('stays silent when a grandchild subclass reaches a library function', () => {

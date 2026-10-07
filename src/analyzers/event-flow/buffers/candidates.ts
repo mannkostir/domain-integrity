@@ -1,4 +1,4 @@
-import { ClassDeclaration, MethodDeclaration, Node, PropertyDeclaration, SourceFile, SyntaxKind } from 'ts-morph';
+import { ClassDeclaration, MethodDeclaration, Node, PropertyDeclaration, SourceFile, SyntaxKind, Type, ts } from 'ts-morph';
 import { isPushOnlyMethod, plainEventArrays } from '../../shared/array-store';
 import { hierarchyOf } from '../hierarchy';
 import { ProjectClasses } from '../keys';
@@ -68,11 +68,23 @@ const namesakesIn = (cls: ClassDeclaration, name: string): readonly Node[] | und
   return instance === undefined ? undefined : (instance.getProperty(name)?.getDeclarations() ?? []);
 };
 
+const isExactKeyType = (type: Type): boolean =>
+  type.isStringLiteral() || type.isNumberLiteral() || (type.getFlags() & ts.TypeFlags.UniqueESSymbol) !== 0;
+
+const hasDynamicName = (member: Node): boolean => {
+  const name = Node.hasName(member) || Node.isPropertyNamed(member) ? member.getNameNode() : undefined;
+  return Node.isComputedPropertyName(name) && !isExactKeyType(name.getExpression().getType());
+};
+
+const hasDynamicMember = (cls: ClassDeclaration): boolean => cls.getInstanceMembers().some(hasDynamicName);
+
 const hasOnlyPushingNamesakes = (candidate: BufferCandidate): boolean => {
   const pushing: ReadonlySet<Node> = new Set(candidate.pushers.flatMap((pusher) => [pusher, ...pusher.getOverloads()]));
   const names: ReadonlySet<string> = new Set(candidate.pushers.map((pusher) => pusher.getName()));
-  return candidate.family.every((member) =>
-    [...names].every((name) => namesakesIn(member, name)?.every((declaration) => pushing.has(declaration)) ?? false),
+  return candidate.family.every(
+    (member) =>
+      !hasDynamicMember(member) &&
+      [...names].every((name) => namesakesIn(member, name)?.every((declaration) => pushing.has(declaration)) ?? false),
   );
 };
 
