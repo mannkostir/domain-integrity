@@ -1,32 +1,37 @@
 import { ClassDeclaration, Node, Symbol as MorphSymbol, Type, ts } from 'ts-morph';
+import { familyHeritage } from './family-heritage';
 
 type Holds = (type: Type) => boolean;
+
+const optional = (type: Type | undefined): readonly Type[] => (type === undefined ? [] : [type]);
 
 const isUnconstrainedOrHolding = (type: Type, holds: Holds): boolean => {
   const constraint = type.getConstraint();
   return constraint === undefined || holds(constraint);
 };
 
-const isFamilyInstance = (type: Type, family: readonly ClassDeclaration[]): boolean =>
+const hasNoSignatures = (type: Type): boolean =>
+  type.getCallSignatures().length === 0 &&
+  type.getConstructSignatures().length === 0 &&
+  type.getStringIndexType() === undefined &&
+  type.getNumberIndexType() === undefined;
+
+const isEmptyObject = (type: Type): boolean => type.isObject() && type.getProperties().length === 0 && hasNoSignatures(type);
+
+const isNonPrimitive = (type: Type): boolean => (type.getFlags() & ts.TypeFlags.NonPrimitive) !== 0;
+
+const isHeritageInstance = (type: Type, heritage: ReadonlySet<Node>): boolean =>
+  (type.getSymbol()?.getDeclarations() ?? []).some((declaration) => heritage.has(declaration));
+
+const isThisType = (type: Type): boolean =>
   (type.getSymbol()?.getDeclarations() ?? []).some(
-    (declaration) => Node.isClassDeclaration(declaration) && family.includes(declaration),
+    (declaration) => Node.isClassDeclaration(declaration) || Node.isInterfaceDeclaration(declaration),
   );
 
-const acceptsFamilyInstance = (type: Type, instances: readonly Type[]): boolean =>
-  instances.some((instance) => instance.isAssignableTo(type));
+const typeParameterMayHold = (type: Type, heritage: ReadonlySet<Node>, holds: Holds): boolean =>
+  isThisType(type) ? isHeritageInstance(type, heritage) : isUnconstrainedOrHolding(type, holds);
 
-const isWeakObject = (type: Type): boolean => {
-  const properties = type.getProperties();
-  return (
-    type.isObject() &&
-    properties.length > 0 &&
-    properties.every((property) => property.isOptional()) &&
-    type.getCallSignatures().length === 0 &&
-    type.getConstructSignatures().length === 0 &&
-    type.getStringIndexType() === undefined &&
-    type.getNumberIndexType() === undefined
-  );
-};
+const isConstructorType = (type: Type): boolean => type.getConstructSignatures().length > 0;
 
 const isAnonymousObject = (type: Type): boolean => type.isAnonymous() || (type.isObject() && type.getSymbol() === undefined);
 
@@ -38,8 +43,6 @@ const propertyMayHold = (property: MorphSymbol, holds: Holds): boolean => {
 const anonymousPropertyMayHold = (type: Type, holds: Holds): boolean =>
   isAnonymousObject(type) && type.getProperties().some((property) => propertyMayHold(property, holds));
 
-const optional = (type: Type | undefined): readonly Type[] => (type === undefined ? [] : [type]);
-
 const innerTypes = (type: Type): readonly Type[] => [
   ...type.getUnionTypes(),
   ...type.getIntersectionTypes(),
@@ -49,31 +52,28 @@ const innerTypes = (type: Type): readonly Type[] => [
   ...optional(type.getArrayElementType()),
   ...optional(type.getStringIndexType()),
   ...optional(type.getNumberIndexType()),
+  ...type.getCallSignatures().map((signature) => signature.getReturnType()),
 ];
 
-const isNonPrimitive = (type: Type): boolean => (type.getFlags() & ts.TypeFlags.NonPrimitive) !== 0;
-
 const holdsWithin =
-  (family: readonly ClassDeclaration[], instances: readonly Type[], seen: ReadonlySet<ts.Type>): Holds =>
+  (heritage: ReadonlySet<Node>, seen: ReadonlySet<ts.Type>): Holds =>
   (type) => {
-    if (seen.has(type.compilerType)) return false;
-    const next = holdsWithin(family, instances, new Set([...seen, type.compilerType]));
+    if (seen.has(type.compilerType) || isConstructorType(type)) return false;
+    const next = holdsWithin(heritage, new Set([...seen, type.compilerType]));
     return (
       type.isAny() ||
       type.isUnknown() ||
       isNonPrimitive(type) ||
-      (type.isTypeParameter() && isUnconstrainedOrHolding(type, next)) ||
-      isFamilyInstance(type, family) ||
-      acceptsFamilyInstance(type, instances) ||
-      isWeakObject(type) ||
+      isEmptyObject(type) ||
+      (type.isTypeParameter() && typeParameterMayHold(type, heritage, next)) ||
+      isHeritageInstance(type, heritage) ||
       innerTypes(type).some(next) ||
       anonymousPropertyMayHold(type, next)
     );
   };
 
 export const mayHoldFamily = (family: readonly ClassDeclaration[]): Holds => {
-  const instances = family.map((declaration) => declaration.getType());
-  const holds = holdsWithin(family, instances, new Set());
+  const holds = holdsWithin(familyHeritage(family), new Set());
   const known = new Map<ts.Type, boolean>();
   return (type) => {
     const cached = known.get(type.compilerType);
