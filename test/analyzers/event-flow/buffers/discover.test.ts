@@ -20,6 +20,7 @@ export class Paid {}
 export class Payment extends AggregateRoot { pay(): void { this.addDomainEvent(new Paid()); } }`;
 
 const BUS = 'const handlers: ((event: object) => void)[] = [];\nexport const publish = (event: object): void => { handlers.forEach((handle) => handle(event)); };';
+const DISPATCH = 'export declare function dispatchEventsOf(entity: object): void;';
 
 const DEFAULT_CONFIG = 'defineDomain({})';
 
@@ -229,6 +230,36 @@ describe('undispatchedBuffers', () => {
     ].join('\n');
 
     expect(buffersOf({ '/app/src/aggregate-root.ts': base, '/app/src/bus.ts': BUS, '/app/src/booking.ts': overriding })).toEqual([]);
+  });
+
+  it('stays silent when a mixin-derived subclass reaches a library function', () => {
+    const mixin = [
+      'export type Ctor<T = object> = abstract new (...args: any[]) => T;',
+      'export function Timestamped<B extends Ctor>(base: B) {',
+      '  abstract class Stamped extends base { createdAt = new Date(); }',
+      '  return Stamped;',
+      '}',
+    ].join('\n');
+    const mixed = [
+      "import { AggregateRoot } from './aggregate-root';",
+      "import { Timestamped } from './mixin';",
+      'export class Booked {}',
+      'export class Booking extends Timestamped(AggregateRoot) { book(): void { this.addDomainEvent(new Booked()); } }',
+    ].join('\n');
+    const service = "import { dispatchEventsOf } from '../../lib/dispatch';\nimport { Booking } from './booking';\nexport const place = (booking: Booking): void => { booking.book(); dispatchEventsOf(booking); };";
+
+    expect(
+      buffersOf(booking({ '/lib/dispatch.d.ts': DISPATCH, '/app/src/mixin.ts': mixin, '/app/src/booking.ts': mixed, '/app/src/service.ts': service })),
+    ).toEqual([]);
+  });
+
+  it('stays silent when a grandchild subclass reaches a library function', () => {
+    const grandchild = "import { Booking } from './booking';\nexport class SpecialBooking extends Booking {}";
+    const service = "import { dispatchEventsOf } from '../../lib/dispatch';\nimport { SpecialBooking } from './special-booking';\nexport const place = (booking: SpecialBooking): void => dispatchEventsOf(booking);";
+
+    expect(
+      buffersOf(booking({ '/lib/dispatch.d.ts': DISPATCH, '/app/src/special-booking.ts': grandchild, '/app/src/service.ts': service })),
+    ).toEqual([]);
   });
 
   it('still reports the buffer when the config hands a family class to a library-declared defineDomain', () => {

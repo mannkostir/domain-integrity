@@ -3,6 +3,7 @@ import { isPushOnlyMethod, plainEventArrays } from '../../shared/array-store';
 import { hierarchyOf } from '../hierarchy';
 import { ProjectClasses } from '../keys';
 import { BufferCandidate } from './drains';
+import { hasHeirOutside, projectClassesIn } from './outside-heirs';
 
 type Push = { readonly buffer: PropertyDeclaration; readonly pusher: MethodDeclaration };
 
@@ -87,6 +88,7 @@ export const candidatesIn = (
   projectFiles: readonly SourceFile[],
 ): readonly BufferCandidate[] => {
   const families = familyLookup(isProject, projectFiles);
+  const classes = projectClassesIn(projectFiles);
   const pushes = files
     .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassDeclaration))
     .flatMap((cls) => cls.getMethods())
@@ -95,5 +97,6 @@ export const candidatesIn = (
   return [...new Set(pushes.map((push) => push.buffer))]
     .flatMap((buffer) => toCandidate(buffer, pushes, families) ?? [])
     .filter(hasSingleTarget)
-    .filter(hasOnlyPushingNamesakes);
+    .filter(hasOnlyPushingNamesakes)
+    .filter((candidate) => !hasHeirOutside(candidate.family, classes));
 };
