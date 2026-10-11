@@ -4,17 +4,20 @@ import {
   ExpressionWithTypeArguments,
   Node,
   PropertyAccessExpression,
-  SourceFile,
   SyntaxKind,
   ts,
   Type,
 } from 'ts-morph';
 import { outermostWrapper } from '../shared/wrappers';
-import { bracketWritesOf, isDecorated, isWritten, writesUnknownMembers } from '../shared/writes';
+import { SourceIndex } from '../shared/source-index';
+import { isDecorated, isWritten, writesUnknownMembers } from '../shared/writes';
+import { ProjectIndex } from './project-index';
 
-const classLikes = (file: SourceFile): readonly (ClassDeclaration | ClassExpression)[] => [
-  ...file.getDescendantsOfKind(SyntaxKind.ClassDeclaration),
-  ...file.getDescendantsOfKind(SyntaxKind.ClassExpression),
+type InertSources = Pick<ProjectIndex, 'sources' | 'bracketWrites'>;
+
+const classLikes = (sources: SourceIndex): readonly (ClassDeclaration | ClassExpression)[] => [
+  ...sources.ofKind(SyntaxKind.ClassDeclaration),
+  ...sources.ofKind(SyntaxKind.ClassExpression),
 ];
 
 const NON_STRING_KEY_FLAGS = ts.TypeFlags.NumberLike | ts.TypeFlags.ESSymbolLike;
@@ -52,22 +55,17 @@ const isNonMethodMemberNamed =
   (member: Node): boolean =>
     !Node.isMethodDeclaration(member) && isNamed(member, name);
 
-const declaresNonMethodMember = (name: string, files: readonly SourceFile[]): boolean =>
-  files.some((file) => classLikes(file).some((classLike) => classLike.getInstanceMembers().some(isNonMethodMemberNamed(name))));
+const declaresNonMethodMember = (name: string, sources: SourceIndex): boolean =>
+  classLikes(sources).some((classLike) => classLike.getInstanceMembers().some(isNonMethodMemberNamed(name)));
 
-const isWrittenAccessNamed =
-  (name: string) =>
-  (access: PropertyAccessExpression): boolean =>
-    access.getName() === name && isWritten(outermostWrapper(access));
+const isWrittenAccess = (access: PropertyAccessExpression): boolean => isWritten(outermostWrapper(access));
 
-const isWrittenByName = (name: string, files: readonly SourceFile[]): boolean =>
-  files.some((file) => file.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression).some(isWrittenAccessNamed(name)));
+const isWrittenByName = (name: string, sources: SourceIndex): boolean => sources.propertyAccessesNamed(name).some(isWrittenAccess);
 
-const isAssertable = (name: string, files: readonly SourceFile[]): boolean =>
-  !declaresNonMethodMember(name, files) && !isWrittenByName(name, files) && bracketWritesOf(name, files).length === 0;
-
-const classExpressionsIn = (files: readonly SourceFile[]): readonly ClassExpression[] =>
-  files.flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassExpression));
+const isAssertable = (name: string, project: InertSources): boolean =>
+  !declaresNonMethodMember(name, project.sources) &&
+  !isWrittenByName(name, project.sources) &&
+  project.bracketWrites.of(name).length === 0;
 
 const installsUnknownMembers = (classes: readonly (ClassDeclaration | ClassExpression)[]): boolean =>
   classes.some(isDecorated) || classes.some(writesUnknownMembers);
@@ -104,11 +102,13 @@ export const assertedInertEventMethods = (
   names: readonly string[],
   cls: ClassDeclaration,
   family: readonly ClassDeclaration[],
-  files: readonly SourceFile[],
+  project: InertSources,
 ): ReadonlySet<string> =>
-  names.length === 0 || !hasResolvedBases(cls) || installsUnknownMembers([...family, ...classExpressionsIn(files)])
+  names.length === 0 ||
+  !hasResolvedBases(cls) ||
+  installsUnknownMembers([...family, ...project.sources.ofKind(SyntaxKind.ClassExpression)])
     ? new Set()
-    : new Set(names.filter((name) => isAssertable(name, files)));
+    : new Set(names.filter((name) => isAssertable(name, project)));
 
 export const isDeclaredOnlyAsMethods = (declarations: readonly Node[]): boolean =>
   declarations.length > 0 &&

@@ -1,12 +1,13 @@
 import { ClassDeclaration } from 'ts-morph';
 import { AggregateScope } from '../../src/analyzers/lifecycle/field-ref';
 import { AssignedValues, Sources, StateField } from '../../src/analyzers/lifecycle/model';
+import { projectIndex } from '../../src/analyzers/lifecycle/project-index';
 import { aggregateScope } from '../../src/analyzers/lifecycle/scope';
 import { resolveStateField } from '../../src/analyzers/lifecycle/state-field';
 import { DEFAULT_DECLARATION } from '../../src/engine/declaration';
 
 export const defaultScope = (cls: ClassDeclaration): AggregateScope =>
-  aggregateScope(cls, DEFAULT_DECLARATION, cls.getProject().getSourceFiles());
+  aggregateScope(cls, DEFAULT_DECLARATION, projectIndex(cls.getProject().getSourceFiles()));
 
 export const resolvedField = (cls: ClassDeclaration, name: string): StateField => {
   const resolution = resolveStateField(cls, name);

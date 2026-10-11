@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mentionedTokens } from '../../../src/analyzers/lifecycle/mentions';
+import { projectIndex } from '../../../src/analyzers/lifecycle/project-index';
 import { resolvedField } from '../../helpers/describe';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
 
@@ -20,7 +21,7 @@ export class Thing extends AggregateRoot<{ ${fieldName}: ${aggregateType} }> {}
     '/src/usage.ts': `import { Status } from './status';\n${extra}`,
   });
   const thing = project.getSourceFileOrThrow('/src/thing.ts').getClassOrThrow('Thing');
-  return [...mentionedTokens(project.getSourceFiles(), resolvedField(thing, fieldName))].sort();
+  return [...mentionedTokens(projectIndex(project.getSourceFiles()), resolvedField(thing, fieldName))].sort();
 };
 
 const enumMentions = (usage: string) => mentionsFor('status', 'Status', usage);

@@ -10,7 +10,8 @@ import {
 } from 'ts-morph';
 import { isLibraryNode } from './library';
 import { outermostWrapper, unwrap } from './wrappers';
-import { accessOf, bracketWritesOf, destructuringRoot, isDecorated, isWritten, writesUnknownMembers } from './writes';
+import { SourceIndex } from './source-index';
+import { accessOf, BracketWrites, destructuringRoot, isDecorated, isWritten, writesUnknownMembers } from './writes';
 
 const isEmptyArrayLiteral = (node: Node | undefined): boolean => {
   const target = node === undefined ? undefined : unwrap(node);
@@ -57,27 +58,38 @@ const bracketName = (property: PropertyDeclaration): string | undefined => {
   return Node.isStringLiteral(name) ? name.getLiteralText() : undefined;
 };
 
-const isBracketWrittenIn = (property: PropertyDeclaration, files: readonly SourceFile[]): boolean => {
+const isBracketWrittenIn = (property: PropertyDeclaration, writes: BracketWrites): boolean => {
   const name = bracketName(property);
-  return name !== undefined && bracketWritesOf(name, files).some((target) => !isResetToEmpty(target));
+  return name !== undefined && writes.of(name).some((target) => !isResetToEmpty(target));
 };
 
-export const isPlainEventArray = (
+const bracketWritesIn = (files: readonly SourceFile[]): BracketWrites => new BracketWrites(new SourceIndex(files));
+
+export const isPlainEventArrayAmong = (
   property: PropertyDeclaration,
   family: readonly ClassDeclaration[],
-  files: readonly SourceFile[],
+  writes: BracketWrites,
 ): boolean =>
   isPlainDeclaration(property) &&
   !family.some(isDecorated) &&
   !family.some(writesUnknownMembers) &&
-  !isBracketWrittenIn(property, files) &&
+  !isBracketWrittenIn(property, writes) &&
   property
     .findReferencesAsNodes()
     .filter((reference) => reference !== property.getNameNode())
     .every(isSafeReference);
 
+export const isPlainEventArray = (
+  property: PropertyDeclaration,
+  family: readonly ClassDeclaration[],
+  files: readonly SourceFile[],
+): boolean => isPlainEventArrayAmong(property, family, bracketWritesIn(files));
+
+export const plainEventArraysAmong = (family: readonly ClassDeclaration[], writes: BracketWrites): ReadonlySet<Node> =>
+  new Set(family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArrayAmong(property, family, writes)));
+
 export const plainEventArrays = (family: readonly ClassDeclaration[], files: readonly SourceFile[]): ReadonlySet<Node> =>
-  new Set(family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArray(property, family, files)));
+  plainEventArraysAmong(family, bracketWritesIn(files));
 
 const declarationsAreIn = (node: Node, arrays: ReadonlySet<Node>): boolean => {
   const declarations = node.getSymbol()?.getDeclarations() ?? [];

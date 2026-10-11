@@ -1,5 +1,8 @@
-import { EnumDeclaration, Identifier, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { EnumDeclaration, Identifier, Node, SyntaxKind } from 'ts-morph';
+import { SourceIndex } from '../shared/source-index';
+import { EnumReferences } from './enum-references';
 import { StateField } from './model';
+import { ProjectIndex } from './project-index';
 
 const COMPARISON_OPERATORS: readonly SyntaxKind[] = [
   SyntaxKind.EqualsEqualsEqualsToken,
@@ -32,28 +35,14 @@ const isInside = (node: Node, container: Node | undefined): boolean =>
 const isValuePosition = (node: Node, ownEnum: EnumDeclaration | undefined): boolean =>
   !isInsideTypeNode(node) && !isComparisonOperand(node) && !isCaseLabel(node) && !isInside(node, ownEnum);
 
-const isModuleBinding = (identifier: Identifier): boolean => {
-  const parent = identifier.getParent();
-  return (
-    Node.isImportSpecifier(parent) ||
-    Node.isExportSpecifier(parent) ||
-    Node.isImportClause(parent) ||
-    Node.isNamespaceImport(parent) ||
-    Node.isEnumDeclaration(parent)
-  );
-};
-
-const refersTo = (identifier: Identifier, enumDeclaration: EnumDeclaration): boolean => {
-  const symbol = identifier.getSymbol();
-  const target = symbol?.isAlias() ? symbol.getAliasedSymbol() : symbol;
-  return target?.getDeclarations().includes(enumDeclaration) ?? false;
-};
-
-const findEnum = (files: readonly SourceFile[], field: StateField): EnumDeclaration | undefined =>
-  files
-    .filter((file) => file.getFilePath() === field.enumReference?.file)
-    .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.EnumDeclaration))
-    .find((declaration) => declaration.getName() === field.enumReference?.name);
+const findEnum = (sources: SourceIndex, field: StateField): EnumDeclaration | undefined =>
+  sources
+    .ofKind(SyntaxKind.EnumDeclaration)
+    .find(
+      (declaration) =>
+        declaration.getSourceFile().getFilePath() === field.enumReference?.file &&
+        declaration.getName() === field.enumReference?.name,
+    );
 
 const allTokens = (field: StateField): string[] => field.values.map((value) => value.token);
 
@@ -73,41 +62,31 @@ const accessedMember = (identifier: Identifier): { readonly access: Node; readon
   return { access: identifier, name: undefined };
 };
 
-const referencedTokens = (
-  file: SourceFile,
-  field: StateField,
-  enumDeclaration: EnumDeclaration,
-): string[] =>
-  file
-    .getDescendantsOfKind(SyntaxKind.Identifier)
-    .filter((identifier) => !isModuleBinding(identifier))
-    .filter((identifier) => refersTo(identifier, enumDeclaration))
+const referencedTokens = (references: EnumReferences, field: StateField, enumDeclaration: EnumDeclaration): string[] =>
+  references
+    .to(enumDeclaration)
     .map(accessedMember)
     .filter(({ access }) => isValuePosition(access, enumDeclaration))
     .flatMap(({ name }) => (name === undefined ? allTokens(field) : memberToken(field, name)));
 
-const literalTokens = (file: SourceFile, field: StateField, ownEnum: EnumDeclaration | undefined): string[] => {
-  const known = new Set(allTokens(field));
-  return [
-    ...file.getDescendantsOfKind(SyntaxKind.StringLiteral),
-    ...file.getDescendantsOfKind(SyntaxKind.NumericLiteral),
-    ...file.getDescendantsOfKind(SyntaxKind.NoSubstitutionTemplateLiteral),
-  ]
-    .filter((literal) => isValuePosition(literal, ownEnum))
-    .map((literal) => String(literal.getLiteralValue()))
-    .filter((token) => known.has(token));
+const literalTokens = (sources: SourceIndex, field: StateField, ownEnum: EnumDeclaration | undefined): string[] =>
+  [...new Set(allTokens(field))].filter((token) =>
+    sources.literalsWithValue(token).some((literal) => isValuePosition(literal, ownEnum)),
+  );
+
+type MentionSources = Pick<ProjectIndex, 'sources' | 'enumReferences'>;
+
+const enumTokens = (project: MentionSources, field: StateField): string[] => {
+  const enumDeclaration = findEnum(project.sources, field);
+  const references = enumDeclaration ? referencedTokens(project.enumReferences, field, enumDeclaration) : [];
+  return [...references, ...literalTokens(project.sources, field, enumDeclaration)];
 };
 
-const tokensIn = (file: SourceFile, field: StateField, enumDeclaration: EnumDeclaration | undefined): string[] => {
-  if (field.kind === 'enum') {
-    const references = enumDeclaration ? referencedTokens(file, field, enumDeclaration) : [];
-    return [...references, ...literalTokens(file, field, enumDeclaration)];
-  }
-  if (field.kind === 'union') return literalTokens(file, field, undefined);
+const tokensOf = (project: MentionSources, field: StateField): string[] => {
+  if (field.kind === 'enum') return enumTokens(project, field);
+  if (field.kind === 'union') return literalTokens(project.sources, field, undefined);
   return [];
 };
 
-export const mentionedTokens = (files: readonly SourceFile[], field: StateField): ReadonlySet<string> => {
-  const enumDeclaration = findEnum(files, field);
-  return new Set(files.flatMap((file) => tokensIn(file, field, enumDeclaration)));
-};
+export const mentionedTokens = (project: MentionSources, field: StateField): ReadonlySet<string> =>
+  new Set(tokensOf(project, field));
