@@ -136,9 +136,16 @@ const lifecycleSource = (file: SourceFile, specifierOf: ModuleSpecifiers, sugges
   return `lifecycle(${target}, { states: { ${fields} } })`;
 };
 
-export const openConfig = (project: Project, configPath: string): SourceFile => {
-  project.manipulationSettings.set({ quoteKind: QuoteKind.Single, indentationText: IndentationText.TwoSpaces });
-  return project.addSourceFileAtPathIfExists(configPath) ?? project.createSourceFile(configPath, INITIAL_CONFIG);
+const createConfig = (project: Project, configPath: string): SourceFile => {
+  project.manipulationSettings.set({ indentationText: IndentationText.TwoSpaces });
+  return project.createSourceFile(configPath, INITIAL_CONFIG);
+};
+
+export const openConfig = (project: Project, configPath: string): SourceFile =>
+  project.addSourceFileAtPathIfExists(configPath) ?? createConfig(project, configPath);
+
+const useSingleQuotes = (file: SourceFile): void => {
+  file.getProject().manipulationSettings.set({ quoteKind: QuoteKind.Single });
 };
 
 export const addLifecycles = (
@@ -146,6 +153,7 @@ export const addLifecycles = (
   specifierOf: ModuleSpecifiers,
   suggestions: readonly LifecycleSuggestion[],
 ): void => {
+  useSingleQuotes(file);
   const lifecycles = lifecyclesArray(file);
   ensureNamedImport(file, 'lifecycle', 'domain-integrity');
   suggestions.forEach((suggestion) => lifecycles.addElement(lifecycleSource(file, specifierOf, suggestion)));

@@ -58,6 +58,13 @@ const MODEL_SOURCES = {
   'src/invoice.ts': invoiceExtending('Model', 'model'),
 };
 
+const FOUR_SPACE_CONFIG = `import { defineDomain } from 'domain-integrity';
+
+export default defineDomain({
+    lifecycles: [],
+});
+`;
+
 const declaredBaseClasses = (dir: string): readonly string[] =>
   readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json')), join(dir, 'domain.config.ts'))).aggregateBaseClasses;
 
@@ -111,6 +118,16 @@ describe('init --base-class', () => {
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
     expect(declaredBaseClasses(dir)).toEqual(['Legacy', 'Model']);
+  });
+
+  it('keeps the four-space indentation of an existing config when recording the base class', async () => {
+    const dir = writeProject({
+      ...MODEL_SOURCES,
+      'domain.config.ts': FOUR_SPACE_CONFIG,
+    });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("\n    aggregateBaseClasses: ['Model'],\n    lifecycles: [");
   });
 
   it('exits 2 and writes nothing for a base class that is not an identifier', async () => {
@@ -227,6 +244,13 @@ describe('init', () => {
       addedPayment: config.includes("lifecycle(Payment, { states: { state: { terminal: ['paid'] } } })"),
       ticketCount: config.split('lifecycle(Ticket').length - 1,
     }).toEqual({ keptTicket: true, addedPayment: true, ticketCount: 1 });
+  });
+
+  it('adds the import of a new aggregate to an existing config in single quotes', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'src/payment.ts': PAYMENT, 'domain.config.ts': TICKET_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Payment } from './src/payment';");
   });
 
   it('reports when every aggregate is already declared', async () => {
