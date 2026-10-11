@@ -4,11 +4,13 @@ import { AnalyzerRun, DEFAULT_ANALYZERS } from '../analysis';
 import { DomainIntegrityError } from '../engine/errors';
 import { CheckOptions, checkCommand } from './check';
 import { contextCommand } from './context';
-import { initCommand } from './init';
-import { Io, Paths } from './io';
+import { InitOptions, initCommand } from './init';
+import { DEFAULT_CONFIG, DEFAULT_TSCONFIG, Io, Paths } from './io';
 import { showCommand } from './show';
 
 type CommonOptions = { readonly project: string; readonly config: string };
+
+const collect = (value: string, previous: readonly string[] | undefined): readonly string[] => [...(previous ?? []), value];
 
 const pathsFrom = (options: CommonOptions, io: Io): Paths => {
   const tsconfig = resolve(io.cwd, options.project);
@@ -17,8 +19,8 @@ const pathsFrom = (options: CommonOptions, io: Io): Paths => {
 
 const withCommonOptions = (command: Command): Command =>
   command
-    .option('-p, --project <path>', 'path to tsconfig.json', 'tsconfig.json')
-    .option('-c, --config <path>', 'path to domain.config.ts', 'domain.config.ts');
+    .option('-p, --project <path>', 'path to tsconfig.json', DEFAULT_TSCONFIG)
+    .option('-c, --config <path>', 'path to domain.config.ts', DEFAULT_CONFIG);
 
 const buildProgram = (io: Io, outcome: { exitCode: number }, analyzers: readonly AnalyzerRun[]): Command => {
   const program = new Command('domain-integrity')
@@ -47,7 +49,8 @@ const buildProgram = (io: Io, outcome: { exitCode: number }, analyzers: readonly
 
   withCommonOptions(program.command('init').description('suggest and write lifecycle declarations'))
     .option('-y, --yes', 'accept every suggestion without prompting')
-    .action(async (options: CommonOptions & { readonly yes?: boolean }) => {
+    .option('--base-class <name>', 'discover aggregates extending or implementing this class or interface (repeatable); replaces AggregateRoot and Entity in a new config, adds to the base classes of an existing one', collect)
+    .action(async (options: CommonOptions & InitOptions) => {
       outcome.exitCode = await initCommand(pathsFrom(options, io), options, io);
     });
 

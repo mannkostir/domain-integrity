@@ -9,3 +9,7 @@ export type Io = {
 };
 
 export type Paths = { readonly tsconfig: string; readonly config: string; readonly root: string };
+
+export const DEFAULT_TSCONFIG = 'tsconfig.json';
+
+export const DEFAULT_CONFIG = 'domain.config.ts';
