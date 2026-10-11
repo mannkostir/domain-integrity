@@ -16,7 +16,10 @@ const signaturesOf = (handler: HandlerSignature): readonly HandlerSignature[] =>
 
 const hasRequiredMember = (type: Type): boolean => type.getApparentType().getProperties().some((property) => !property.isOptional());
 
-const isConstraining = (type: Type): boolean => !type.isAny() && !type.isUnknown() && !type.isTypeParameter() && hasRequiredMember(type);
+const hasStringIndex = (type: Type): boolean => type.getStringIndexType() !== undefined;
+
+const isConstrainingMember = (type: Type): boolean =>
+  !type.isAny() && !type.isUnknown() && !type.isTypeParameter() && !hasStringIndex(type) && hasRequiredMember(type);
 
 const membersOf = (type: Type): readonly Type[] => (type.isUnion() ? type.getUnionTypes() : [type]);
 
@@ -27,7 +30,7 @@ const soleParameter = (signature: HandlerSignature): ParameterDeclaration | unde
 };
 
 const isComparableBound = (annotation: TypeNode, type: Type): boolean =>
-  !mentionsTypeParameter(annotation) && !hasNominalMember(type, annotation) && !hasUnknownType(type, annotation) && membersOf(type).every(isConstraining);
+  !mentionsTypeParameter(annotation) && !hasNominalMember(type, annotation) && !hasUnknownType(type, annotation) && membersOf(type).every(isConstrainingMember);
 
 const boundOfParameter = (parameter: ParameterDeclaration): HandlerBound => {
   const annotation = parameter.getTypeNode();

@@ -1,4 +1,4 @@
-import { Node, Type } from 'ts-morph';
+import { Node, Signature, Type } from 'ts-morph';
 
 type ReachableTypes = { readonly kind: 'bounded'; readonly types: readonly Type[] } | { readonly kind: 'overflow' };
 
@@ -20,13 +20,27 @@ const isBuiltIn = (type: Type): boolean => {
 
 const hasOwnProperties = (type: Type): boolean => type.isObject() && !isBuiltIn(type);
 
-const propertyTypesOf = (type: Type, location: Node): readonly Type[] =>
-  hasOwnProperties(type) ? type.getProperties().map((property) => property.getTypeAtLocation(location)) : [];
+const isPresent = (type: Type | undefined): type is Type => type !== undefined;
+
+const isFixedSignature = (signature: Signature): boolean => signature.getTypeParameters().length === 0;
+
+const returnTypesOf = (type: Type): readonly Type[] =>
+  type
+    .getCallSignatures()
+    .filter(isFixedSignature)
+    .map((signature) => signature.getReturnType());
+
+const indexValueTypesOf = (type: Type): readonly Type[] => [type.getStringIndexType(), type.getNumberIndexType()].filter(isPresent);
+
+const memberTypesOf = (type: Type, location: Node): readonly Type[] =>
+  hasOwnProperties(type)
+    ? [...type.getProperties().map((property) => property.getTypeAtLocation(location)), ...returnTypesOf(type), ...indexValueTypesOf(type)]
+    : [];
 
 const childrenOf = (type: Type, location: Node): readonly Type[] =>
   type.isTypeParameter()
     ? []
-    : [...type.getUnionTypes(), ...type.getIntersectionTypes(), ...type.getTypeArguments(), ...type.getAliasTypeArguments(), ...propertyTypesOf(type, location)];
+    : [...type.getUnionTypes(), ...type.getIntersectionTypes(), ...type.getTypeArguments(), ...type.getAliasTypeArguments(), ...memberTypesOf(type, location)];
 
 const distinct = (types: readonly Type[]): readonly Type[] => [...new Map(types.map((type) => [type.compilerType, type])).values()];
 

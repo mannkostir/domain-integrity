@@ -480,7 +480,13 @@ describe('unhandledEvent with unresolved registrations', () => {
 
   it('reports an event incomparable with a data transfer interface that has a method', () => {
     expect(
-      findingsFor('listener.ts', "export interface ShippedDto { type: string; id: string; toJSON(): object }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }", LITERAL_EVENTS),
+      findingsFor('listener.ts', "export interface ShippedDto { type: string; id: string; toJSON(): string }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }", LITERAL_EVENTS),
+    ).toEqual(['Shipped']);
+  });
+
+  it('reports an event incomparable with a data transfer interface that has a generic method', () => {
+    expect(
+      findingsFor('listener.ts', "export interface ShippedDto { id: string; at: string; map<U>(f: (id: string) => U): U }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }"),
     ).toEqual(['Shipped']);
   });
 
@@ -496,5 +502,27 @@ describe('unhandledEvent with unresolved registrations', () => {
     expect(
       findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { type: `created.${string}`; orderId: string }) {} }", TEMPLATE_EVENTS),
     ).toEqual([]);
+  });
+
+  it('stays silent for a parameter type with a string index signature', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { [k: string]: unknown; customerId: string }) {} }")).toEqual([]);
+  });
+
+  it('stays silent for a parameter type with a string index signature beside an event field', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { [k: string]: unknown; orderId: string }) {} }")).toEqual([]);
+  });
+
+  it('stays silent for a parameter union with a member that has a string index signature', () => {
+    expect(
+      findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { customerId: string } | { [k: string]: number; total: number }) {} }"),
+    ).toEqual([]);
+  });
+
+  it('stays silent for an envelope interface whose method returns the event', () => {
+    expect(findingsFor('listener.ts', "interface Env { topic: string; payload(): Shipped }\nexport class Listener { @OnEvent('order.shipped') on(e: Env) {} }")).toEqual([]);
+  });
+
+  it('stays silent for an envelope whose index signature values include the event', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { topic: string; [k: string]: Shipped | string }) {} }")).toEqual([]);
   });
 });
