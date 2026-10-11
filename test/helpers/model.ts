@@ -9,6 +9,7 @@ import {
   StateField,
   StateFieldKind,
   Visibility,
+  WrittenAlongside,
 } from '../../src/analyzers/lifecycle/model';
 
 export const stateField = (name: string, kind: StateFieldKind, tokens: readonly string[]): StateField => ({
@@ -37,6 +38,7 @@ export const method = (
   mutates: boolean,
   fields: Record<string, FieldBehaviour>,
   visibility: Visibility = 'public',
+  writtenAlongside: WrittenAlongside = new Map(),
 ): MethodModel => ({
   name,
   file: '/app/src/order.ts',
@@ -44,7 +46,14 @@ export const method = (
   visibility,
   mutates,
   fields: new Map(Object.entries(fields)),
+  writtenAlongside,
 });
+
+export const alongside = (
+  field: string,
+  other: string,
+  ...tokens: string[]
+): WrittenAlongside => new Map([[field, new Map([[other, new Set(tokens)]])]]);
 
 export const declared = (
   terminal: string[],
@@ -71,6 +80,7 @@ export const aggregate = (overrides: Partial<AggregateModel>): AggregateModel =>
   initial: new Map([['status', assigned('PENDING')]]),
   outside: [],
   mentioned: new Map(),
+  uncertainlyWritten: new Set(),
   ...overrides,
 });
 

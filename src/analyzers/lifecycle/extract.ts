@@ -16,6 +16,8 @@ import { mentionedTokens } from './mentions';
 import { outsideAssignments } from './outside';
 import { aggregateScope } from './scope';
 import { resolveStateField } from './state-field';
+import { fieldsWrittenUncertainly } from './uncertain-writes';
+import { writtenAlongside } from './written-alongside';
 
 type DeclaredOutcome =
   | { readonly kind: 'ok'; readonly field: StateField; readonly declaration: FieldDeclaration }
@@ -98,6 +100,7 @@ const methodModels = (
   scope: AggregateScope,
   methods: readonly MethodDeclaration[],
   fields: readonly StateField[],
+  declared: boolean,
 ): MethodModel[] => {
   const mutating = mutatingMethods(methods, [...scope.eventMethods]);
   return methods.map((method) => ({
@@ -109,6 +112,7 @@ const methodModels = (
     fields: new Map(
       fields.map((field) => [field.name, { sources: methodSources(method, field, scope), sets: setsOf(method, field) }]),
     ),
+    writtenAlongside: declared ? new Map() : writtenAlongside(method, fields),
   }));
 };
 
@@ -140,10 +144,13 @@ const extractAggregate = (
       fields: resolved.fields,
       declarations: resolved.declarations,
       allowAfterTerminal: new Set(declared?.allowAfterTerminal ?? []),
-      methods: methodModels(scope, methods, resolved.fields),
+      methods: methodModels(scope, methods, resolved.fields, declared !== undefined),
       initial: new Map(resolved.fields.map((field) => [field.name, initialValues(cls, field)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(files, field)]) : []),
       outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(files, cls, field)) : [],
+      uncertainlyWritten: declared
+        ? new Set()
+        : fieldsWrittenUncertainly(cls, declaration.aggregateBaseClasses, files, resolved.fields),
     },
   };
 };

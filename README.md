@@ -127,6 +127,16 @@ npx domain-integrity check
 
 `init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. When your tsconfig resolves modules as `node16` or `nodenext`, the imports carry runtime extensions: `.js`, or `.mjs` and `.cjs` for `.mts` and `.cts` files. You review the suggestions once; after that, `check` runs on every commit.
 
+When a timestamp or other nullable field is only ever set by methods that also set an enum or literal-union status field, and only to the status's suggested terminal values, `init` leaves the nullable field's terminal list empty. The status already marks the end of that lifecycle, and a second terminal field would report methods that are guarded on the status. Both writes must be plain `this.field = value;` statements (or `this.props.field = value;`), and the status write must sit in the same or an enclosing block, either before the timestamp write or after it with no `return`, `throw`, `break`, `continue`, `await`, `for await`, `yield`, call, `new` or tagged template in between, because a call can throw before the status is written. Code that runs implicitly, such as a getter read or the `toString` behind a template literal, is not treated as a call. A status write behind its own `if`, or a timestamp written inside a `?:`, `&&` or `||` expression, keeps the suggestion. So does a timestamp also written anywhere `init` cannot follow: by a getter or setter, a property initializer or closure, a static member, a subclass, another instance, a computed key, a compound or destructuring assignment, a `for…of` or `for…in` target, `delete`, a plain assignment or `Object.assign` outside the class (a write through a generic helper or `Reflect.set` there is not seen), `Object.assign(this, …)` or `this` passed to a function in a method, or a write whose value cannot be resolved. Any escape of `this` outside the aggregate's instance methods, in the class, a subclass, including a class expression that extends it, or any project base class including one listed in `aggregateBaseClasses`, such as `this` passed to a function, aliased, returned or stored in the constructor, a method of a listed base class, a property initializer or a closure, keeps the suggestion for every field; comparing `this` with `===` or `!==` is not an escape. A write in a method of a base class listed in `aggregateBaseClasses` counts as one `init` cannot follow, and library base classes are not scanned. Plain constructor writes and `Object.assign(this, …)` in the constructor set the initial state and do not count. A timestamp set on its own, say `lockedAt` set by `lock()`, keeps its suggestion.
+
+`init` discovers aggregates as classes extending or implementing `AggregateRoot` or `Entity`. If yours use another base class or interface, pass it with `--base-class`, once for each name. In a new config the names you pass replace `AggregateRoot` and `Entity`; to keep one of them, pass it too:
+
+```bash
+npx domain-integrity init --base-class AggregateRoot --base-class MyAggregateBase
+```
+
+In an existing config the names are added: to `AggregateRoot` and `Entity` when it lists no base classes yet, to its list otherwise. `init` records the names in `aggregateBaseClasses`, so `check` finds the same aggregates. When it finds none, it prints the exact command to run.
+
 **Requirements:** Node 22 or 24 (`engines: >=22`), a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
 
 ## What it checks
@@ -177,7 +187,7 @@ npx domain-integrity check -p tsconfig.domain.json
 
 | Command | What it does |
 |---|---|
-| `init [--yes]` | Suggests and writes declarations. On an existing config it only adds new aggregates. |
+| `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. `--base-class` is repeatable and records each name in `aggregateBaseClasses`. In a new config the names replace `AggregateRoot` and `Entity`; to keep one, pass it too. In an existing config they are added to the defaults when it lists no base classes yet, to its list otherwise. |
 | `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error, or an internal error. |
 | `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents. |

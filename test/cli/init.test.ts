@@ -5,6 +5,7 @@ import { run } from '../../src/cli/run';
 import { configSourceFile, loadProject } from '../../src/engine/project';
 import { readDeclaration } from '../../src/engine/read-config';
 import { TICKET_CONFIG, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
+import { AGGREGATE_ROOT } from '../helpers/in-memory';
 
 const readConfig = (dir: string): string => readFileSync(join(dir, 'domain.config.ts'), 'utf8');
 
@@ -32,6 +33,348 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
   finish(): void { if (this.props.status === OrderStatus.${status}) return; this.props.status = OrderStatus.${status}; }
 }
 `;
+
+const baseClassSource = (name: string): string => AGGREGATE_ROOT.replace('class AggregateRoot<', `class ${name}<`);
+
+const invoiceExtending = (base: string, file: string) => `
+import { ${base} } from './${file}';
+export class Invoice extends ${base}<{ state: 'draft' | 'void'; note: string }> {
+  static draft(note: string): Invoice { return new Invoice({ state: 'draft', note }); }
+  annotate(note: string): void { this.props.note = note; }
+  cancel(): void { if (this.props.state === 'void') return; this.props.state = 'void'; }
+}
+`;
+
+const SHIPMENT_EXTENDING_RECORD = `
+import { Record } from './record';
+export class Shipment extends Record<{ state: 'pending' | 'delivered' }> {
+  static pending(): Shipment { return new Shipment({ state: 'pending' }); }
+  deliver(): void { if (this.props.state === 'delivered') return; this.props.state = 'delivered'; }
+}
+`;
+
+const MODEL_SOURCES = {
+  'src/model.ts': baseClassSource('Model'),
+  'src/invoice.ts': invoiceExtending('Model', 'model'),
+};
+
+const FOUR_SPACE_CONFIG = `import { defineDomain } from 'domain-integrity';
+
+export default defineDomain({
+    lifecycles: [],
+});
+`;
+
+const CONFIG_WITH_TYPE_ERROR_ON_LINE_6 = `import { defineDomain } from 'domain-integrity';
+
+export default defineDomain({
+  lifecycles: [],
+});
+export const broken: number = 'text';
+`;
+
+const TOUCHABLE_AGGREGATE_ROOT = AGGREGATE_ROOT.replace(
+  '  protected addEvent(',
+  '  private version = 0;\n\n  touch(): void {\n    this.version += 1;\n  }\n\n  protected addEvent(',
+);
+
+const ORDER_CONFIG = `import { defineDomain, lifecycle } from 'domain-integrity';
+import { Order } from './src/order';
+
+export default defineDomain({
+  lifecycles: [lifecycle(Order, { states: { state: { terminal: ['paid'] } } })],
+});
+`;
+
+const MIXED_BASE_PROJECT = {
+  ...MODEL_SOURCES,
+  'src/aggregate-root.ts': TOUCHABLE_AGGREGATE_ROOT,
+  'src/order.ts': orderIn('paid').replace("'../aggregate-root'", "'./aggregate-root'"),
+  'domain.config.ts': ORDER_CONFIG,
+};
+
+const declaredBaseClasses = (dir: string): readonly string[] =>
+  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json')), join(dir, 'domain.config.ts'))).aggregateBaseClasses;
+
+describe('init --base-class', () => {
+  it('declares an aggregate extending the named base class', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("lifecycle(Invoice, { states: { state: { terminal: ['void'] } } })");
+  });
+
+  it('records the named base class in the written config', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect({
+      text: readConfig(dir).includes("aggregateBaseClasses: ['Model']"),
+      declared: declaredBaseClasses(dir),
+    }).toEqual({ text: true, declared: ['Model'] });
+  });
+
+  it('lets check find the leak of an aggregate discovered through the named base class', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+
+  it('declares aggregates of every repeated base class and records each name', async () => {
+    const dir = writeProject({
+      ...MODEL_SOURCES,
+      'src/record.ts': baseClassSource('Record'),
+      'src/shipment.ts': SHIPMENT_EXTENDING_RECORD,
+    });
+    await run(['init', '--yes', '--base-class', 'Model', '--base-class', 'Record'], captureIo(dir).io);
+    const config = readConfig(dir);
+
+    expect({
+      invoice: config.includes('lifecycle(Invoice, '),
+      shipment: config.includes('lifecycle(Shipment, '),
+      declared: declaredBaseClasses(dir),
+    }).toEqual({ invoice: true, shipment: true, declared: ['Model', 'Record'] });
+  });
+
+  it('appends the named base class to the base classes an existing config lists', async () => {
+    const dir = writeProject({
+      ...MODEL_SOURCES,
+      'domain.config.ts':
+        "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ aggregateBaseClasses: ['Legacy'], lifecycles: [] });\n",
+    });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(declaredBaseClasses(dir)).toEqual(['Legacy', 'Model']);
+  });
+
+  it('adds the named base class to the default base classes of an existing config that lists none', async () => {
+    const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': FOUR_SPACE_CONFIG });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(declaredBaseClasses(dir)).toEqual(['AggregateRoot', 'Entity', 'Model']);
+  });
+
+  it('keeps a declared aggregate clean of its default base class methods in an existing config', async () => {
+    const dir = writeProject(MIXED_BASE_PROJECT);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+    const { io, stdout } = captureIo(dir);
+    await run(['check', '--format', 'json'], io);
+
+    expect(stdout()).not.toContain('"aggregate": "Order"');
+  });
+
+  it('still declares an undeclared aggregate extending a default base class in an existing config', async () => {
+    const dir = writeProject({ ...MIXED_BASE_PROJECT, 'src/payment.ts': PAYMENT });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain('lifecycle(Payment, ');
+  });
+
+  it('records the default base classes before the named one in an existing config that lists none', async () => {
+    const dir = writeProject(MIXED_BASE_PROJECT);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(declaredBaseClasses(dir)).toEqual(['AggregateRoot', 'Entity', 'Model']);
+  });
+
+  it('keeps the four-space indentation of an existing config when recording the base class', async () => {
+    const dir = writeProject({
+      ...MODEL_SOURCES,
+      'domain.config.ts': FOUR_SPACE_CONFIG,
+    });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("\n    aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'],\n    lifecycles: [");
+  });
+
+  it('keeps the two-space indentation of an existing config when recording the base class', async () => {
+    const dir = writeProject({
+      ...MODEL_SOURCES,
+      'domain.config.ts': FOUR_SPACE_CONFIG.replace('    lifecycles', '  lifecycles'),
+    });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("\n  aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'],\n  lifecycles: [");
+  });
+
+  it('reports a type error of an existing config at the line the user wrote', async () => {
+    const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': CONFIG_WITH_TYPE_ERROR_ON_LINE_6 });
+    const withoutFlag = captureIo(dir);
+    const withFlag = captureIo(dir);
+    await run(['init', '--yes'], withoutFlag.io);
+    await run(['init', '--yes', '--base-class', 'Model'], withFlag.io);
+
+    expect({
+      withoutFlag: withoutFlag.stderr().includes('domain.config.ts:6 '),
+      withFlag: withFlag.stderr().includes('domain.config.ts:6 '),
+    }).toEqual({ withoutFlag: true, withFlag: true });
+  });
+
+  it('exits 2 and writes nothing for a base class that is not an identifier', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    const exitCode = await run(['init', '--yes', '--base-class', 'Not valid'], captureIo(dir).io);
+
+    expect({ exitCode, written: existsSync(join(dir, 'domain.config.ts')) }).toEqual({ exitCode: 2, written: false });
+  });
+
+  it('declares an aggregate extending a base class with a non-ASCII name', async () => {
+    const dir = writeProject({
+      'src/modell.ts': baseClassSource('Модель'),
+      'src/invoice.ts': invoiceExtending('Модель', 'modell'),
+    });
+    await run(['init', '--yes', '--base-class', 'Модель'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain('lifecycle(Invoice, ');
+  });
+
+  it('names the rejected base class in the error', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    const { io, stderr } = captureIo(dir);
+    await run(['init', '--yes', '--base-class', 'Not valid'], io);
+
+    expect(stderr()).toContain('"Not valid"');
+  });
+
+  it('leaves the base classes out of the config when the option is not given', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).not.toContain('aggregateBaseClasses');
+  });
+});
+
+const INVOICE_CONFIG = `import { defineDomain, lifecycle } from 'domain-integrity';
+import { Invoice } from './src/invoice';
+
+export default defineDomain({
+  lifecycles: [lifecycle(Invoice, { states: { state: { terminal: ['void'] } } })],
+});
+`;
+
+const STATELESS_MODEL_SOURCES = {
+  'src/model.ts': baseClassSource('Model'),
+  'src/note.ts': "import { Model } from './model';\nexport class Note extends Model<{ text: string }> {}\n",
+};
+
+describe('init --base-class when nothing is declared', () => {
+  it('explains that the base classes were not saved when no aggregate has a state field', async () => {
+    const dir = writeProject(STATELESS_MODEL_SOURCES);
+    const { io, stdout } = captureIo(dir);
+    await run(['init', '--yes', '--base-class', 'Model'], io);
+
+    expect(stdout()).toBe(
+      "No state fields found in the discovered aggregates; nothing to declare.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregateBaseClasses: ['Model'] to defineDomain({...}) in domain.config.ts yourself.\n",
+    );
+  });
+
+  it('explains that the base classes were not saved when every aggregate is already declared', async () => {
+    const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': INVOICE_CONFIG });
+    const { io, stdout } = captureIo(dir);
+    await run(['init', '--yes', '--base-class', 'Model'], io);
+
+    expect(stdout()).toBe(
+      "All discovered aggregates are already declared.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'] to defineDomain({...}) in domain.config.ts yourself.\n",
+    );
+  });
+
+  it('explains that the base classes were not saved when every suggestion is declined', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    const { io, stdout } = captureIo(dir, [false]);
+    await run(['init', '--base-class', 'Model'], io);
+
+    expect(stdout()).toMatch(
+      /Nothing declared\.\nNo config was written to domain\.config\.ts, so the --base-class names were not saved\. For check to find the same aggregates, add aggregateBaseClasses: \['Model'\] to defineDomain\(\{\.\.\.\}\) in domain\.config\.ts yourself\.\n$/,
+    );
+  });
+
+  it('leaves an existing config untouched when every aggregate is already declared', async () => {
+    const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': INVOICE_CONFIG });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toBe(INVOICE_CONFIG);
+  });
+
+  it('keeps the message without the option unchanged when no aggregate has a state field', async () => {
+    const dir = writeProject({
+      'src/aggregate-root.ts': AGGREGATE_ROOT,
+      'src/note.ts': "import { AggregateRoot } from './aggregate-root';\nexport class Note extends AggregateRoot<{ text: string }> {}\n",
+    });
+    const { io, stdout } = captureIo(dir);
+    await run(['init', '--yes'], io);
+
+    expect(stdout()).toBe('No state fields found in the discovered aggregates; nothing to declare.\n');
+  });
+});
+
+const NO_AGGREGATE_SOURCES = { 'src/a.ts': 'export const a = 1;\n' };
+
+const noAggregateSourcesIn = (dir: string) => ({
+  [`${dir}/tsconfig.json`]: JSON.stringify({ compilerOptions: { strict: true }, include: ['src'] }),
+  [`${dir}/src/a.ts`]: 'export const a = 1;\n',
+});
+
+const NESTED_NO_AGGREGATE_SOURCES = noAggregateSourcesIn('sub');
+
+describe('init without aggregates', () => {
+  it('ends with the init command to run with the default paths', async () => {
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES));
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toMatch(/: npx domain-integrity init --base-class <Name> --yes\n$/);
+  });
+
+  it('keeps the searched base classes in the message', async () => {
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES));
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toContain('No aggregates found. Searched for classes extending or implementing: AggregateRoot, Entity.');
+  });
+
+  it('tells the user to repeat the option for every base class', async () => {
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES));
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toContain('repeating --base-class for each one');
+  });
+
+  it('leaves --yes out of the command when it was not given', async () => {
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES), [true]);
+    await run(['init'], io);
+
+    expect(stderr()).toMatch(/: npx domain-integrity init --base-class <Name>\n$/);
+  });
+
+  it('includes the project and config paths relative to the working directory when they are not the defaults', async () => {
+    const { io, stderr } = captureIo(writeProject(NESTED_NO_AGGREGATE_SOURCES));
+    await run(['init', '--yes', '-p', 'sub/tsconfig.json', '-c', 'sub/domain.config.ts'], io);
+
+    expect(stderr()).toMatch(
+      /: npx domain-integrity init --base-class <Name> -p sub\/tsconfig\.json -c sub\/domain\.config\.ts --yes\n$/,
+    );
+  });
+
+  it('single-quotes project and config paths that contain a space', async () => {
+    const { io, stderr } = captureIo(writeProject(noAggregateSourcesIn('my sub')));
+    await run(['init', '--yes', '-p', 'my sub/tsconfig.json', '-c', 'my sub/domain.config.ts'], io);
+
+    expect(stderr()).toMatch(/ -p 'my sub\/tsconfig\.json' -c 'my sub\/domain\.config\.ts' --yes\n$/);
+  });
+
+  it('escapes a single quote inside a quoted path', async () => {
+    const { io, stderr } = captureIo(writeProject(noAggregateSourcesIn("it's")));
+    await run(['init', '--yes', '-p', "it's/tsconfig.json"], io);
+
+    expect(stderr()).toContain(" -p 'it'\\''s/tsconfig.json' ");
+  });
+
+  it('exits 2 and writes no config', async () => {
+    const dir = writeProject(NO_AGGREGATE_SOURCES);
+    const exitCode = await run(['init', '--yes'], captureIo(dir).io);
+
+    expect({ exitCode, written: existsSync(join(dir, 'domain.config.ts')) }).toEqual({ exitCode: 2, written: false });
+  });
+});
 
 describe('init', () => {
   it('writes a config that check can read', async () => {
@@ -71,6 +414,13 @@ describe('init', () => {
       addedPayment: config.includes("lifecycle(Payment, { states: { state: { terminal: ['paid'] } } })"),
       ticketCount: config.split('lifecycle(Ticket').length - 1,
     }).toEqual({ keptTicket: true, addedPayment: true, ticketCount: 1 });
+  });
+
+  it('adds the import of a new aggregate to an existing config in single quotes', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'src/payment.ts': PAYMENT, 'domain.config.ts': TICKET_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Payment } from './src/payment';");
   });
 
   it('reports when every aggregate is already declared', async () => {
@@ -195,6 +545,16 @@ describe('init', () => {
     await run(['init', '--yes'], captureIo(dir).io);
 
     expect(readConfig(dir)).toContain("import { defineDomain, lifecycle } from 'domain-integrity';");
+  });
+
+  it('indents the lifecycles it adds to an empty hand-written config as before', async () => {
+    const dir = writeProject({
+      ...TICKET_SOURCES,
+      'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n",
+    });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain('defineDomain({\n    lifecycles: [');
   });
 
   it('writes runtime extensions when the project resolves modules as NodeNext', async () => {
