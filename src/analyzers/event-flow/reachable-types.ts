@@ -22,7 +22,9 @@ const hasOwnProperties = (type: Type): boolean => type.isObject() && !isBuiltIn(
 
 const isPresent = (type: Type | undefined): type is Type => type !== undefined;
 
-const isFixedSignature = (signature: Signature): boolean => signature.getTypeParameters().length === 0;
+const isGenericSignature = (signature: Signature): boolean => signature.getTypeParameters().length > 0;
+
+const isFixedSignature = (signature: Signature): boolean => !isGenericSignature(signature);
 
 const returnTypesOf = (type: Type): readonly Type[] =>
   type
@@ -58,3 +60,5 @@ export const someReachable = (root: Type, location: Node, predicate: (type: Type
   const reachable = reachableTypes(root, location);
   return reachable.kind === 'overflow' || reachable.types.some(predicate);
 };
+
+export const hasGenericCallSignature = (type: Type): boolean => hasOwnProperties(type) && type.getCallSignatures().some(isGenericSignature);

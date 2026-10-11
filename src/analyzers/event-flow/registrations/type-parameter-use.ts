@@ -1,5 +1,5 @@
 import { Node, TypeNode } from 'ts-morph';
-import { someReachable } from '../reachable-types';
+import { hasGenericCallSignature, someReachable } from '../reachable-types';
 
 const declaresTypeParameter = (reference: Node): boolean =>
   Node.isTypeReference(reference) && (reference.getTypeName().getSymbol()?.getDeclarations() ?? []).some(Node.isTypeParameterDeclaration);
@@ -7,4 +7,4 @@ const declaresTypeParameter = (reference: Node): boolean =>
 const annotationReferencesTypeParameter = (annotation: TypeNode): boolean => [annotation, ...annotation.getDescendants()].some(declaresTypeParameter);
 
 export const mentionsTypeParameter = (annotation: TypeNode): boolean =>
-  annotationReferencesTypeParameter(annotation) || someReachable(annotation.getType(), annotation, (type) => type.isTypeParameter());
+  annotationReferencesTypeParameter(annotation) || someReachable(annotation.getType(), annotation, (type) => type.isTypeParameter() || hasGenericCallSignature(type));

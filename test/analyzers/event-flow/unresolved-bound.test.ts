@@ -92,6 +92,18 @@ export class DomainEvent { readonly occurredAt = new Date(); }
 export class Shipped<T = unknown> { constructor(readonly body: T, readonly c?: string) {} }
 `;
 
+const ANY_METHOD_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped extends DomainEvent { constructor(readonly orderId: string) { super(); } toPrimitives(): any { return {}; } }
+`;
+
+const MUTUAL_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+interface EventPing { tag: 'ping';  p0: EventPong;  p1: EventPong;  p2: EventPong;  p3: EventPong;  p4: EventPong;  p5: EventPong;  p6: EventPong;  p7: EventPong;  p8: EventPong;  p9: EventPong; }
+interface EventPong { tag: 'pong';  q0: EventPing;  q1: EventPing;  q2: EventPing;  q3: EventPing;  q4: EventPing;  q5: EventPing;  q6: EventPing;  q7: EventPing;  q8: EventPing;  q9: EventPing; }
+export class Shipped extends DomainEvent { constructor(readonly orderId: string, readonly node: EventPing) {} }
+`;
+
 const LITERAL_EVENTS = `
 export class DomainEvent { readonly occurredAt = new Date(); }
 export class Shipped { readonly type = 'shipped'; constructor(readonly orderId: string) {} }
@@ -484,10 +496,10 @@ describe('unhandledEvent with unresolved registrations', () => {
     ).toEqual(['Shipped']);
   });
 
-  it('reports an event incomparable with a data transfer interface that has a generic method', () => {
+  it('stays silent for a data transfer interface that has a generic method', () => {
     expect(
       findingsFor('listener.ts', "export interface ShippedDto { id: string; at: string; map<U>(f: (id: string) => U): U }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }"),
-    ).toEqual(['Shipped']);
+    ).toEqual([]);
   });
 
   it('reports an event incomparable with a parameter type that has a boolean property', () => {
@@ -524,5 +536,29 @@ describe('unhandledEvent with unresolved registrations', () => {
 
   it('stays silent for an envelope whose index signature values include the event', () => {
     expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { topic: string; [k: string]: Shipped | string }) {} }")).toEqual([]);
+  });
+
+  it('stays silent for an interface with a generic getter method', () => {
+    expect(findingsFor('listener.ts', "interface Envelope { topic: string; payload<T>(): T }\nexport class Listener { @OnEvent('order.shipped') on(e: Envelope) {} }")).toEqual([]);
+  });
+
+  it('stays silent for an interface with a generic method that has a default type argument', () => {
+    expect(findingsFor('listener.ts', "interface Envelope { topic: string; payload<T = unknown>(): T }\nexport class Listener { @OnEvent('order.shipped') on(e: Envelope) {} }")).toEqual([]);
+  });
+
+  it('stays silent for an interface with a generic function-typed property', () => {
+    expect(findingsFor('listener.ts', "interface Envelope { topic: string; payload: <T>() => T }\nexport class Listener { @OnEvent('order.shipped') on(e: Envelope) {} }")).toEqual([]);
+  });
+
+  it('stays silent for an event with a method returning any beside an incompatible handler', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { total: number; topic: string }) {} }", ANY_METHOD_EVENTS)).toEqual([]);
+  });
+
+  it('stays silent for mutually recursive types that differ only in discriminants', () => {
+    expect(findingsFor('listener.ts', "interface HandlerPing { tag: 'ring';  p0: HandlerPong;  p1: HandlerPong;  p2: HandlerPong;  p3: HandlerPong;  p4: HandlerPong;  p5: HandlerPong;  p6: HandlerPong;  p7: HandlerPong;  p8: HandlerPong;  p9: HandlerPong; }\ninterface HandlerPong { tag: 'rong';  q0: HandlerPing;  q1: HandlerPing;  q2: HandlerPing;  q3: HandlerPing;  q4: HandlerPing;  q5: HandlerPing;  q6: HandlerPing;  q7: HandlerPing;  q8: HandlerPing;  q9: HandlerPing; }\nexport class Listener { @OnEvent('order.shipped') on(e: { orderId: string; node: HandlerPing }) {} }", MUTUAL_EVENTS)).toEqual([]);
+  });
+
+  it('reports mutually recursive types when a required top-level field is missing from the event', () => {
+    expect(findingsFor('listener.ts', "interface HandlerPing { tag: 'ring';  p0: HandlerPong;  p1: HandlerPong;  p2: HandlerPong;  p3: HandlerPong;  p4: HandlerPong;  p5: HandlerPong;  p6: HandlerPong;  p7: HandlerPong;  p8: HandlerPong;  p9: HandlerPong; }\ninterface HandlerPong { tag: 'rong';  q0: HandlerPing;  q1: HandlerPing;  q2: HandlerPing;  q3: HandlerPing;  q4: HandlerPing;  q5: HandlerPing;  q6: HandlerPing;  q7: HandlerPing;  q8: HandlerPing;  q9: HandlerPing; }\nexport class Listener { @OnEvent('order.shipped') on(e: { orderId: string; customerId: string; node: HandlerPing }) {} }", MUTUAL_EVENTS)).toEqual(['Shipped']);
   });
 });

@@ -27,37 +27,48 @@ const widen = (checker: ts.TypeChecker, type: ts.Type): ts.Type => checker.getBa
 const narrowerMembersOf = (checker: ts.TypeChecker, type: ts.Type): readonly ts.Type[] =>
   type.isUnion() && type.types.some((member) => widen(checker, member) !== type) ? type.types : [];
 
-const isSamePair = (first: Pair, second: Pair): boolean => first.source === second.source && first.target === second.target;
+class VisitedPairs {
+  private readonly targetsBySource = new Map<ts.Type, Set<ts.Type>>();
 
-const assignable = (checker: ts.TypeChecker, pair: Pair, depth: number): boolean =>
+  claim(pair: Pair): boolean {
+    const targets = this.targetsBySource.get(pair.source) ?? new Set<ts.Type>();
+    this.targetsBySource.set(pair.source, targets);
+    if (targets.has(pair.target)) return false;
+    targets.add(pair.target);
+    return true;
+  }
+}
+
+const assignable = (checker: ts.TypeChecker, pair: Pair, depth: number, visited: VisitedPairs): boolean =>
   checker.isTypeAssignableTo(pair.source, pair.target) ||
   depth > MAX_DEPTH ||
-  widenedAssignable(checker, { source: widen(checker, pair.source), target: widen(checker, pair.target) }, depth);
+  widenedAssignable(checker, { source: widen(checker, pair.source), target: widen(checker, pair.target) }, depth, visited);
 
-const partAssignable = (checker: ts.TypeChecker, whole: Pair, part: Pair, depth: number): boolean => isSamePair(whole, part) || assignable(checker, part, depth + 1);
+const partAssignable = (checker: ts.TypeChecker, part: Pair, depth: number, visited: VisitedPairs): boolean =>
+  !visited.claim(part) || assignable(checker, part, depth + 1, visited);
 
-const propertyAssignable = (checker: ts.TypeChecker, widened: Pair, property: ts.Symbol, depth: number): boolean => {
+const propertyAssignable = (checker: ts.TypeChecker, widened: Pair, property: ts.Symbol, depth: number, visited: VisitedPairs): boolean => {
   const counterpart = checker.getPropertyOfType(widened.source, property.getName());
   if (counterpart === undefined) return isOptional(property);
-  return partAssignable(checker, widened, { source: checker.getTypeOfSymbol(counterpart), target: checker.getTypeOfSymbol(property) }, depth);
+  return partAssignable(checker, { source: checker.getTypeOfSymbol(counterpart), target: checker.getTypeOfSymbol(property) }, depth, visited);
 };
 
-const propertiesAssignable = (checker: ts.TypeChecker, widened: Pair, depth: number): boolean =>
-  checker.getPropertiesOfType(widened.target).every((property) => propertyAssignable(checker, widened, property, depth));
+const propertiesAssignable = (checker: ts.TypeChecker, widened: Pair, depth: number, visited: VisitedPairs): boolean =>
+  checker.getPropertiesOfType(widened.target).every((property) => propertyAssignable(checker, widened, property, depth, visited));
 
-const structurallyAssignable = (checker: ts.TypeChecker, widened: Pair, depth: number): boolean => {
+const structurallyAssignable = (checker: ts.TypeChecker, widened: Pair, depth: number, visited: VisitedPairs): boolean => {
   if (!isStructured(widened.source) || !isStructured(widened.target)) return false;
-  return isOpaque(checker, widened.target) ? isNestedComparison(depth) : propertiesAssignable(checker, widened, depth);
+  return isOpaque(checker, widened.target) ? isNestedComparison(depth) : propertiesAssignable(checker, widened, depth, visited);
 };
 
-const widenedAssignable = (checker: ts.TypeChecker, widened: Pair, depth: number): boolean => {
+const widenedAssignable = (checker: ts.TypeChecker, widened: Pair, depth: number, visited: VisitedPairs): boolean => {
   const { source, target } = widened;
   if (checker.isTypeAssignableTo(source, target)) return true;
   const sourceMembers = narrowerMembersOf(checker, source);
-  if (sourceMembers.length > 0) return sourceMembers.every((member) => partAssignable(checker, widened, { source: member, target }, depth));
+  if (sourceMembers.length > 0) return sourceMembers.every((member) => partAssignable(checker, { source: member, target }, depth, visited));
   const targetMembers = narrowerMembersOf(checker, target);
-  if (targetMembers.length > 0) return targetMembers.some((member) => partAssignable(checker, widened, { source, target: member }, depth));
-  return structurallyAssignable(checker, widened, depth);
+  if (targetMembers.length > 0) return targetMembers.some((member) => partAssignable(checker, { source, target: member }, depth, visited));
+  return structurallyAssignable(checker, widened, depth, visited);
 };
 
 export const hasLiteralType = (type: Type, location: Node): boolean => someReachable(type, location, (reached) => isLiteral(reached.compilerType));
@@ -66,5 +77,5 @@ export const strictlyComparable: Comparable = (checker, first, second) =>
   checker.isTypeAssignableTo(first.compilerType, second.compilerType) || checker.isTypeAssignableTo(second.compilerType, first.compilerType);
 
 export const widelyComparable: Comparable = (checker, first, second) =>
-  assignable(checker, { source: first.compilerType, target: second.compilerType }, 0) ||
-  assignable(checker, { source: second.compilerType, target: first.compilerType }, 0);
+  assignable(checker, { source: first.compilerType, target: second.compilerType }, 0, new VisitedPairs()) ||
+  assignable(checker, { source: second.compilerType, target: first.compilerType }, 0, new VisitedPairs());
