@@ -51,13 +51,17 @@ const appendMissingNames = (array: ArrayLiteralExpression, names: readonly strin
     .forEach((name) => array.addElement(quoted(name)));
 };
 
-export const recordBaseClasses = (file: SourceFile, names: readonly string[]): void => {
+export const recordBaseClasses = (
+  file: SourceFile,
+  names: readonly string[],
+  implicitBaseClasses: readonly string[],
+): void => {
   const config = configObject(file);
   const property = config.getProperty('aggregateBaseClasses');
   if (property === undefined) {
     config.insertPropertyAssignment(0, {
       name: 'aggregateBaseClasses',
-      initializer: `[${uniqueNames(names).map(quoted).join(', ')}]`,
+      initializer: `[${uniqueNames([...implicitBaseClasses, ...names]).map(quoted).join(', ')}]`,
     });
     return;
   }

@@ -73,6 +73,26 @@ export default defineDomain({
 export const broken: number = 'text';
 `;
 
+const TOUCHABLE_AGGREGATE_ROOT = AGGREGATE_ROOT.replace(
+  '  protected addEvent(',
+  '  private version = 0;\n\n  touch(): void {\n    this.version += 1;\n  }\n\n  protected addEvent(',
+);
+
+const ORDER_CONFIG = `import { defineDomain, lifecycle } from 'domain-integrity';
+import { Order } from './src/order';
+
+export default defineDomain({
+  lifecycles: [lifecycle(Order, { states: { state: { terminal: ['paid'] } } })],
+});
+`;
+
+const MIXED_BASE_PROJECT = {
+  ...MODEL_SOURCES,
+  'src/aggregate-root.ts': TOUCHABLE_AGGREGATE_ROOT,
+  'src/order.ts': orderIn('paid').replace("'../aggregate-root'", "'./aggregate-root'"),
+  'domain.config.ts': ORDER_CONFIG,
+};
+
 const declaredBaseClasses = (dir: string): readonly string[] =>
   readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json')), join(dir, 'domain.config.ts'))).aggregateBaseClasses;
 
@@ -128,11 +148,34 @@ describe('init --base-class', () => {
     expect(declaredBaseClasses(dir)).toEqual(['Legacy', 'Model']);
   });
 
-  it('replaces the default base classes in an existing config that lists none', async () => {
+  it('adds the named base class to the default base classes of an existing config that lists none', async () => {
     const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': FOUR_SPACE_CONFIG });
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
-    expect(declaredBaseClasses(dir)).toEqual(['Model']);
+    expect(declaredBaseClasses(dir)).toEqual(['AggregateRoot', 'Entity', 'Model']);
+  });
+
+  it('keeps a declared aggregate clean of its default base class methods in an existing config', async () => {
+    const dir = writeProject(MIXED_BASE_PROJECT);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+    const { io, stdout } = captureIo(dir);
+    await run(['check', '--format', 'json'], io);
+
+    expect(stdout()).not.toContain('"aggregate": "Order"');
+  });
+
+  it('still declares an undeclared aggregate extending a default base class in an existing config', async () => {
+    const dir = writeProject({ ...MIXED_BASE_PROJECT, 'src/payment.ts': PAYMENT });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain('lifecycle(Payment, ');
+  });
+
+  it('records the default base classes before the named one in an existing config that lists none', async () => {
+    const dir = writeProject(MIXED_BASE_PROJECT);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(declaredBaseClasses(dir)).toEqual(['AggregateRoot', 'Entity', 'Model']);
   });
 
   it('keeps the four-space indentation of an existing config when recording the base class', async () => {
@@ -142,7 +185,7 @@ describe('init --base-class', () => {
     });
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
-    expect(readConfig(dir)).toContain("\n    aggregateBaseClasses: ['Model'],\n    lifecycles: [");
+    expect(readConfig(dir)).toContain("\n    aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'],\n    lifecycles: [");
   });
 
   it('reports a type error of an existing config at the line the user wrote', async () => {

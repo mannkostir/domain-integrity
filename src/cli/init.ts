@@ -44,8 +44,9 @@ const validated = (config: SourceFile | undefined): SourceFile | undefined => {
 };
 
 const configWithBaseClasses = (project: Project, configPath: string, names: readonly string[]): SourceFile => {
-  const config = validated(existingConfig(project, configPath)) ?? openConfig(project, configPath);
-  recordBaseClasses(config, names);
+  const existing = validated(existingConfig(project, configPath));
+  const config = existing ?? openConfig(project, configPath);
+  recordBaseClasses(config, names, existing === undefined ? [] : DEFAULT_DECLARATION.aggregateBaseClasses);
   return config;
 };
 
