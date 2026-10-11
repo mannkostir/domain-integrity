@@ -28,8 +28,3 @@ const payloadOf = (parameter: ParameterDeclaration | undefined, isProject: Proje
 
 export const readPayload = (parameters: readonly ParameterDeclaration[], isProject: ProjectClasses): RawPayload =>
   payloadOf(withoutThis(parameters)[0], isProject);
-
-export const readSolePayload = (parameters: readonly ParameterDeclaration[], isProject: ProjectClasses): RawPayload => {
-  const remaining = withoutThis(parameters);
-  return remaining.length > 1 ? UNREADABLE : payloadOf(remaining[0], isProject);
-};

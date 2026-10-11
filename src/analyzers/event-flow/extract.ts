@@ -2,11 +2,13 @@ import { ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { AnalysisInput } from '../../analyzer';
 import { ClassIdentity, classIdentities } from '../../engine/class-identity';
 import { undispatchedBuffers } from './buffers/discover';
+import { areComparable } from './comparable-types';
 import { hierarchyOf } from './hierarchy';
 import { ProjectClasses } from './keys';
-import { ClassRef, EventClassModel, EventFlowModel, Location, Payload, Registration, SagaModel, UnresolvedSite } from './model';
+import { ClassRef, EventClassModel, EventFlowModel, Location, Payload, ReceivableEvents, Registration, SagaModel, UnresolvedSite } from './model';
 import { RawPayload } from './payload';
 import { referenceFacts } from './references';
+import { HandlerBound } from './registrations/handler-bound';
 import { decoratorRecogniser } from './registrations/decorator';
 import { RawRegistration, RecognisedSite, RecogniserContext, enclosingClass } from './registrations/recogniser';
 import { registerCallRecogniser } from './registrations/register-call';
@@ -62,8 +64,13 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
     return owner === undefined ? undefined : identity(owner).id;
   };
 
+  const receivableBy = (bound: HandlerBound): ReceivableEvents =>
+    bound.kind === 'unbounded'
+      ? { kind: 'any' }
+      : { kind: 'events', events: inProcess.filter((cls) => bound.types.some((type) => areComparable(cls.getType(), type))).map((cls) => identity(cls).id) };
+
   const unresolved: readonly UnresolvedSite[] = sites.flatMap((site) =>
-    site.kind === 'resolved' ? [] : [{ owner: ownerOf(site.node), inTest: isTest(site.node.getSourceFile()), payload: payloadOf(site.payload), ...locationOf(site.node) }],
+    site.kind === 'resolved' ? [] : [{ owner: ownerOf(site.node), inTest: isTest(site.node.getSourceFile()), receives: receivableBy(site.bound), ...locationOf(site.node) }],
   );
 
   const libraryKeyed: readonly (string | undefined)[] = sites.flatMap((site) => (site.kind === 'resolved' && site.libraryKeyed ? [ownerOf(site.node)] : []));

@@ -12,12 +12,10 @@ const mightBeHandledUnseen = (model: EventFlowModel, event: EventClassModel): bo
   event.opaque ||
   (event.extendsLibrary && model.libraryKeyed.length > 0);
 
-const mightBeHandledByUnresolvedSite = (model: EventFlowModel, event: EventClassModel): boolean => {
-  const accepted = acceptedIds(model, event.id);
-  const receives = (site: UnresolvedSite): boolean =>
-    site.payload.kind === 'unreadable' || site.payload.classes.some((id) => accepted.has(id));
-  return model.unresolved.some((site) => !site.inTest && receives(site));
-};
+const receives = (site: UnresolvedSite, event: EventClassModel): boolean => site.receives.kind === 'any' || site.receives.events.includes(event.id);
+
+const mightBeHandledByUnresolvedSite = (model: EventFlowModel, event: EventClassModel): boolean =>
+  model.unresolved.some((site) => !site.inTest && receives(site, event));
 
 const isHandled = (model: EventFlowModel, event: EventClassModel): boolean => {
   const accepted = acceptedIds(model, event.id);

@@ -1,4 +1,5 @@
-import { ClassDeclaration } from 'ts-morph';
+import { ClassDeclaration, Node } from 'ts-morph';
+import { HandlerBound } from '../../../src/analyzers/event-flow/registrations/handler-bound';
 import { RawRegistration, RecognisedSite, RegistrationRecogniser } from '../../../src/analyzers/event-flow/registrations/recogniser';
 import { DEFAULT_DECLARATION, DeclaredEvents } from '../../../src/engine/declaration';
 import { inMemoryProject } from '../../helpers/in-memory';
@@ -8,9 +9,11 @@ const describeRegistration = (registration: RawRegistration): string => {
   return `${registration.event.getName()} -> ${registration.handler?.getName() ?? '-'}.${registration.method ?? '-'} (${payload})`;
 };
 
+const describeBound = (bound: HandlerBound, node: Node): string => (bound.kind === 'types' ? ` (${bound.types.map((type) => type.getText(node)).join(', ')})` : '');
+
 const describeSite = (site: RecognisedSite): string =>
   site.kind === 'unresolved'
-    ? `unresolved@${site.node.getStartLineNumber()}${site.payload.kind === 'classes' ? ` (${site.payload.classes.map((cls) => cls.getName()).join('|')})` : ''}`
+    ? `unresolved@${site.node.getStartLineNumber()}${describeBound(site.bound, site.node)}`
     : [...site.registrations.map(describeRegistration), ...(site.libraryKeyed ? ['library'] : [])].join(', ');
 
 export const recognise = (

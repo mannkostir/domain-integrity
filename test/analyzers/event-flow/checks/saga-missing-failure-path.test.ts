@@ -45,13 +45,13 @@ describe('sagaMissingFailurePath', () => {
 
   it('stays silent with an unresolved site in the saga or a foreign base', () => {
     expect([
-      sagaMissingFailurePath(sagaModel([handles('Paid')], { unresolved: [{ owner: 'OrderSaga', inTest: false, payload: { kind: 'unreadable' }, file: '/app/src/OrderSaga.ts', line: 3 }] })),
+      sagaMissingFailurePath(sagaModel([handles('Paid')], { unresolved: [{ owner: 'OrderSaga', inTest: false, receives: { kind: 'any' }, file: '/app/src/OrderSaga.ts', line: 3 }] })),
       sagaMissingFailurePath(sagaModel([handles('Paid')], { sagas: [{ ...SAGA, extendsForeign: true }] })),
     ]).toEqual([[], []]);
   });
 
   it('stays silent with an unresolved site anywhere in the project', () => {
-    expect(sagaMissingFailurePath(sagaModel([handles('Paid')], { unresolved: [{ owner: undefined, inTest: false, payload: { kind: 'unreadable' }, file: '/app/src/bus.ts', line: 3 }] }))).toEqual([]);
+    expect(sagaMissingFailurePath(sagaModel([handles('Paid')], { unresolved: [{ owner: undefined, inTest: false, receives: { kind: 'any' }, file: '/app/src/bus.ts', line: 3 }] }))).toEqual([]);
   });
 
   it('stays silent when the failure could be handled through a shape it cannot see', () => {
@@ -103,7 +103,7 @@ describe('sagaProblems', () => {
       sagaProblems(sagaModel([], { sagas: [{ ...SAGA, extendsForeign: true }] })),
       sagaProblems(sagaModel([handles('Failed')])),
       sagaProblems(sagaModel([], { events: new Map([['Paid', eventClass('Paid', { opaque: true })], ['Failed', eventClass('Failed')]]) })),
-      sagaProblems(sagaModel([], { unresolved: [{ owner: undefined, inTest: false, payload: { kind: 'unreadable' }, file: '/app/src/bus.ts', line: 3 }] })),
+      sagaProblems(sagaModel([], { unresolved: [{ owner: undefined, inTest: false, receives: { kind: 'any' }, file: '/app/src/bus.ts', line: 3 }] })),
       sagaProblems(sagaModel([], { events: new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed', { typedHandling: true })]]) })),
     ]).toEqual([[], [], [], [], []]);
   });

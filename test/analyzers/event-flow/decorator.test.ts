@@ -3,8 +3,8 @@ import { decoratorRecogniser } from '../../../src/analyzers/event-flow/registrat
 import { recognise } from './recognise';
 
 const EVENTS = `
-export class Paid {}
-export class Failed {}
+export class Paid { readonly paidAt = 1; }
+export class Failed { readonly reason = ''; }
 export const EventsHandler = (...events: unknown[]) => (target: unknown) => target;
 export const OnEvent = (...args: unknown[]) => (target: unknown, key: string) => target;
 export const HandleEvent = (event: unknown) => (target: unknown) => target;
@@ -41,7 +41,29 @@ describe('decoratorRecogniser', () => {
   it('carries the handler payload of an unresolved site', () => {
     expect(
       run("export class Listener { @OnEvent('order.created') onCreated(event: Paid) {} @OnEvent('order.failed') onFailed(event: Paid | Failed) {} @OnEvent('order.any') onAny(event) {} }"),
-    ).toEqual(['unresolved@4 (Paid)', 'unresolved@4 (Paid|Failed)', 'unresolved@4']);
+    ).toEqual(['unresolved@4 (Paid)', 'unresolved@4 (Paid | Failed)', 'unresolved@4']);
+  });
+
+  it('bounds an unresolved site by every overload and the implementation', () => {
+    expect(run("export class Listener {\n  on(e: Paid): void;\n  on(e: Failed): void;\n  @OnEvent('x') on(e: Paid | Failed): void {}\n}")).toEqual([
+      'unresolved@7 (Paid, Failed, Paid | Failed)',
+    ]);
+  });
+
+  it('reads an optional parameter of an unresolved site as its type', () => {
+    expect(run("export class Listener { @OnEvent('x') on(e?: Paid) {} }")).toEqual(['unresolved@4 (Paid)']);
+  });
+
+  it('leaves an unresolved site unbounded for a parameter that constrains nothing', () => {
+    expect(
+      run(
+        "export class Empty {}\nexport class Listener { @OnEvent('x') a(e: {}) {} @OnEvent('x') b(e: object) {} @OnEvent('x') c<T>(e: T) {} @OnEvent('x') d(e: unknown) {} @OnEvent('x') f(e: Paid | Empty) {} @OnEvent('x') g(e: { a?: number }) {} @OnEvent('x') h(...e: Paid[]) {} @OnEvent('x') i(e: Missing) {} }",
+      ),
+    ).toEqual(['unresolved@5', 'unresolved@5', 'unresolved@5', 'unresolved@5', 'unresolved@5', 'unresolved@5', 'unresolved@5', 'unresolved@5']);
+  });
+
+  it('leaves an unresolved site unbounded when any overload constrains nothing', () => {
+    expect(run("export class Listener {\n  on(e: Paid): void;\n  on(e: unknown): void;\n  @OnEvent('x') on(e: unknown): void {}\n}")).toEqual(['unresolved@7']);
   });
 
   it('ignores a this parameter when reading the payload of an unresolved site', () => {

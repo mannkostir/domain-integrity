@@ -44,18 +44,18 @@ describe('unhandledEvent', () => {
 
   it('stays silent when an unresolved site outside tests might receive the event', () => {
     expect([
-      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ payload: { kind: 'unreadable' } })] })),
-      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ payload: { kind: 'classes', classes: ['Failed'], file: '/app/src/x.ts', line: 1 } })] })),
-      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ payload: { kind: 'classes', classes: ['Base'], file: '/app/src/x.ts', line: 1 } })] })),
-    ]).toEqual([[], [], []]);
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ receives: { kind: 'any' } })] })),
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ receives: { kind: 'events', events: ['Paid', 'Failed'] } })] })),
+    ]).toEqual([[], []]);
   });
 
   it('still reports when unresolved sites cannot receive the event', () => {
     expect([
-      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ payload: { kind: 'classes', classes: ['Paid'], file: '/app/src/x.ts', line: 1 } })] })).length,
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ receives: { kind: 'events', events: ['Paid'] } })] })).length,
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ receives: { kind: 'events', events: [] } })] })).length,
       unhandledEvent(declared({}, { unresolved: [unresolvedSite({ inTest: true })] })).length,
-      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ inTest: true, payload: { kind: 'classes', classes: ['Failed'], file: '/app/src/x.ts', line: 1 } })] })).length,
-    ]).toEqual([1, 1, 1]);
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ inTest: true, receives: { kind: 'events', events: ['Failed'] } })] })).length,
+    ]).toEqual([1, 1, 1, 1]);
   });
 
   it('stays silent for an opaque event, or a library-based one when a handler is keyed on a library class', () => {

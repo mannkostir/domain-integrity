@@ -4,7 +4,7 @@ import { recognise } from './recognise';
 
 const run = (body: string) =>
   recognise(registerCallRecogniser, {
-    '/src/events.ts': 'export class Paid {}\nexport class Failed {}\nexport class Logger {}\nexport class AppConfig {}\nexport class Db { constructor(config: AppConfig) {} }',
+    '/src/events.ts': 'export class Paid { readonly paidAt = 1; }\nexport class Failed { readonly reason = \'\'; }\nexport class Logger {}\nexport class AppConfig {}\nexport class Db { constructor(config: AppConfig) {} }',
     '/src/use.ts': `import { Paid, Failed, Logger, AppConfig, Db } from './events';\nimport { LibraryEvent } from '../types/lib';\ndeclare const DomainEvents: { register: (...args: unknown[]) => void }; declare const container: { register: (...args: unknown[]) => void }; declare const SomeModule: { register: (...args: unknown[]) => void }; declare const callback: (event: Paid) => void; declare const topic: string; declare const x: Logger;\n${body}`,
   });
 
@@ -44,6 +44,10 @@ describe('registerCallRecogniser', () => {
 
   it('ignores a this parameter in a function callback with a string key', () => {
     expect(run("DomainEvents.register(function (this: Logger, e: Paid) { return e; }, 'paid.topic');")).toEqual(['unresolved@4 (Paid)']);
+  });
+
+  it('leaves an unresolved method reference unbounded when the method cannot be found', () => {
+    expect(run("export class AfterPaid { constructor() { DomainEvents.register(this.onPaid, 'paid.topic'); } }")).toEqual(['unresolved@4']);
   });
 
   it('leaves the payload of an unresolved callback with several parameters unreadable', () => {

@@ -2,6 +2,7 @@ import { ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { DeclaredEvents } from '../../../engine/declaration';
 import { ProjectClasses, resolveKey } from '../keys';
 import { RawPayload } from '../payload';
+import { HandlerBound } from './handler-bound';
 
 export type RawRegistration = {
   readonly event: ClassDeclaration;
@@ -14,7 +15,7 @@ export type RawRegistration = {
 
 export type RecognisedSite =
   | { readonly kind: 'resolved'; readonly node: Node; readonly registrations: readonly RawRegistration[]; readonly libraryKeyed: boolean }
-  | { readonly kind: 'unresolved'; readonly node: Node; readonly payload: RawPayload };
+  | { readonly kind: 'unresolved'; readonly node: Node; readonly bound: HandlerBound };
 
 export type RecogniserContext = { readonly events: DeclaredEvents; readonly isProject: ProjectClasses };
 

@@ -1,12 +1,13 @@
 import { CallExpression, Decorator, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { decoratorName } from './decorator-name';
+import { UNBOUNDED } from './handler-bound';
 import { RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass, resolveKeys } from './recogniser';
 
 const ofTypeCalls = (node: Node): readonly CallExpression[] =>
   node.getDescendantsOfKind(SyntaxKind.CallExpression).filter((call) => call.getExpression().getText() === 'ofType');
 
 const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSite => {
-  const unresolved: RecognisedSite = { kind: 'unresolved', node: decorator, payload: { kind: 'unreadable' } };
+  const unresolved: RecognisedSite = { kind: 'unresolved', node: decorator, bound: UNBOUNDED };
   const property = decorator.getParent();
   const handler = enclosingClass(decorator);
   if (!Node.isPropertyDeclaration(property) || handler === undefined) return unresolved;

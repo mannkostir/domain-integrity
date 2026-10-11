@@ -1,6 +1,7 @@
 import { ClassDeclaration, Decorator, MethodDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
-import { readPayload, readSolePayload } from '../payload';
+import { readPayload } from '../payload';
 import { decoratorName } from './decorator-name';
+import { UNBOUNDED, handlerBound } from './handler-bound';
 import { RawRegistration, RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass, resolveKeys } from './recogniser';
 
 type Target = { readonly handler: ClassDeclaration | undefined; readonly method: MethodDeclaration | undefined; readonly methodName: string | undefined };
@@ -26,10 +27,9 @@ const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSit
     decorator.getArguments().filter((argument) => !Node.isObjectLiteralExpression(argument)),
     context.isProject,
   );
-  if (target === undefined) return { kind: 'unresolved', node: decorator, payload: { kind: 'unreadable' } };
-  const parameters = target.method?.getParameters() ?? [];
-  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: decorator, payload: readSolePayload(parameters, context.isProject) };
-  const payload = readPayload(parameters, context.isProject);
+  if (target === undefined) return { kind: 'unresolved', node: decorator, bound: UNBOUNDED };
+  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: decorator, bound: handlerBound(target.method) };
+  const payload = readPayload(target.method?.getParameters() ?? [], context.isProject);
   const registrations: RawRegistration[] = keys.classes.map(({ cls, key }) => ({
     event: cls,
     key,

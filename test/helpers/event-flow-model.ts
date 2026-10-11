@@ -31,7 +31,7 @@ export const registration = (overrides: Partial<Registration> = {}): Registratio
 export const unresolvedSite = (overrides: Partial<UnresolvedSite> = {}): UnresolvedSite => ({
   owner: undefined,
   inTest: false,
-  payload: { kind: 'unreadable' },
+  receives: { kind: 'any' },
   file: '/app/src/x.ts',
   line: 1,
   ...overrides,

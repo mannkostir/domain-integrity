@@ -1,9 +1,10 @@
-import { CallExpression, ClassDeclaration, MethodDeclaration, Node, ParameterDeclaration, SourceFile, SyntaxKind } from 'ts-morph';
+import { CallExpression, ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { resolveKey } from '../keys';
-import { readPayload, readSolePayload } from '../payload';
+import { readPayload } from '../payload';
+import { HandlerSignature, handlerBound } from './handler-bound';
 import { RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass } from './recogniser';
 
-type Callback = { readonly method: string | undefined; readonly parameters: readonly ParameterDeclaration[] };
+type Callback = { readonly method: string | undefined; readonly signature: HandlerSignature | undefined };
 
 const calledName = (call: CallExpression): string | undefined => {
   const callee = call.getExpression();
@@ -26,12 +27,11 @@ const thisMethodName = (expression: Node): string | undefined => {
 
 const callbackOf = (expression: Node, call: CallExpression): Callback | undefined => {
   if (Node.isArrowFunction(expression) || Node.isFunctionExpression(expression)) {
-    return { method: undefined, parameters: expression.getParameters() };
+    return { method: undefined, signature: expression };
   }
   const name = thisMethodName(expression);
   if (name === undefined) return undefined;
-  const method: MethodDeclaration | undefined = enclosingClass(call)?.getMethod(name);
-  return { method: name, parameters: method?.getParameters() ?? [] };
+  return { method: name, signature: enclosingClass(call)?.getMethod(name) };
 };
 
 const isConstructionOf = (node: Node, cls: ClassDeclaration): boolean => {
@@ -53,13 +53,13 @@ const siteOf = (call: CallExpression, context: RecogniserContext): RecognisedSit
   if (callback === undefined) return undefined;
   const resolution = resolveKey(key, context.isProject);
   if (resolution.kind === 'foreign') return { kind: 'resolved', node: call, registrations: [], libraryKeyed: true };
-  if (resolution.kind === 'unresolved') return { kind: 'unresolved', node: call, payload: readSolePayload(callback.parameters, context.isProject) };
+  if (resolution.kind === 'unresolved') return { kind: 'unresolved', node: call, bound: handlerBound(callback.signature) };
   if (isFactoryOf(first, resolution.cls)) return undefined;
   return {
     kind: 'resolved',
     node: call,
     libraryKeyed: false,
-    registrations: [{ event: resolution.cls, key, handler: enclosingClass(call), method: callback.method, payload: readPayload(callback.parameters, context.isProject), node: call }],
+    registrations: [{ event: resolution.cls, key, handler: enclosingClass(call), method: callback.method, payload: readPayload(callback.signature?.getParameters() ?? [], context.isProject), node: call }],
   };
 };
 
