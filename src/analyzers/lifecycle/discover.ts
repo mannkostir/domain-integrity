@@ -1,6 +1,7 @@
-import { ClassDeclaration, ExpressionWithTypeArguments, InterfaceDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { ClassDeclaration, ExpressionWithTypeArguments, InterfaceDeclaration, Node, SyntaxKind } from 'ts-morph';
 import { className } from '../../engine/class-identity';
 import { ancestry } from '../shared/ancestry';
+import { SourceIndex } from '../shared/source-index';
 
 type BaseNames = ReadonlySet<string>;
 
@@ -53,13 +54,13 @@ const classMatches = (cls: ClassDeclaration, names: BaseNames): boolean => {
 };
 
 export const discoverAggregates = (
-  files: readonly SourceFile[],
+  sources: SourceIndex,
   baseClasses: readonly string[],
   declared: readonly ClassDeclaration[],
 ): ClassDeclaration[] => {
   const names = new Set(baseClasses);
-  const discovered = files
-    .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassDeclaration))
+  const discovered = sources
+    .ofKind(SyntaxKind.ClassDeclaration)
     .filter((cls) => !cls.isAbstract() && classMatches(cls, names));
   return [...new Set([...declared, ...discovered])];
 };

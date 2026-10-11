@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { outsideAssignments } from '../../../src/analyzers/lifecycle/outside';
+import { SourceIndex } from '../../../src/analyzers/shared/source-index';
 import { describeAssigned, resolvedField } from '../../helpers/describe';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
 
@@ -31,7 +32,7 @@ const invitation = project.getSourceFileOrThrow('/src/invitation.ts').getClassOr
 
 describe('outsideAssignments', () => {
   it('finds typed assignments to the field outside the aggregate class', () => {
-    const found = outsideAssignments(project.getSourceFiles(), invitation, resolvedField(invitation, 'status'));
+    const found = outsideAssignments(new SourceIndex(project.getSourceFiles()), invitation, resolvedField(invitation, 'status'));
 
     expect(found.map((assignment) => ({ ...assignment, value: describeAssigned(assignment.value) }))).toEqual([
       { field: 'status', file: '/src/service.ts', line: 3, scope: 'acceptLater', value: { tokens: ['accepted'], unresolved: false, mayWrite: false }, throughOwnSetter: false },
@@ -73,7 +74,7 @@ const ticket = wrappedProject.getSourceFileOrThrow('/src/ticket.ts').getClassOrT
 
 describe('outsideAssignments through wrappers and Object.assign', () => {
   const statusAssignments = outsideAssignments(
-    wrappedProject.getSourceFiles(),
+    new SourceIndex(wrappedProject.getSourceFiles()),
     wrappedInvitation,
     resolvedField(wrappedInvitation, 'status'),
   );
@@ -100,7 +101,7 @@ describe('outsideAssignments through wrappers and Object.assign', () => {
   });
 
   it('records Object.assign onto the props of the aggregate', () => {
-    const found = outsideAssignments(wrappedProject.getSourceFiles(), ticket, resolvedField(ticket, 'status'));
+    const found = outsideAssignments(new SourceIndex(wrappedProject.getSourceFiles()), ticket, resolvedField(ticket, 'status'));
 
     expect(found.map((assignment) => assignment.scope)).toEqual(['viaProps']);
   });
@@ -178,7 +179,7 @@ export const patch = (page: Page): void => { Object.assign(page, { status: 'live
 
 const setterAssignments = (file: string, name: string) => {
   const cls = setterProject.getSourceFileOrThrow(file).getClassOrThrow(name);
-  return outsideAssignments(setterProject.getSourceFiles(), cls, resolvedField(cls, 'status')).map((assignment) => ({
+  return outsideAssignments(new SourceIndex(setterProject.getSourceFiles()), cls, resolvedField(cls, 'status')).map((assignment) => ({
     scope: assignment.scope,
     throughOwnSetter: assignment.throughOwnSetter,
   }));

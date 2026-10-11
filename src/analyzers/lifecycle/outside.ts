@@ -1,7 +1,8 @@
-import { CallExpression, ClassDeclaration, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
+import { BinaryExpression, CallExpression, ClassDeclaration, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
 import { assignedValue, isAssignmentOperator } from './assigned';
 import { inheritanceChain } from './field-ref';
 import { isLibraryNode } from '../shared/library';
+import { SourceIndex } from '../shared/source-index';
 import { OutsideAssignment, StateField } from './model';
 import { UNRESOLVED } from './values';
 import { unwrap } from '../shared/wrappers';
@@ -87,37 +88,57 @@ const located = (node: Node, field: StateField) => ({
   scope: enclosingName(node),
 });
 
-const directAssignments = (file: SourceFile, cls: ClassDeclaration, field: StateField): OutsideAssignment[] =>
-  file
-    .getDescendantsOfKind(SyntaxKind.BinaryExpression)
+const assignmentsTo = (sources: SourceIndex, field: string): readonly BinaryExpression[] =>
+  sources.propertyAccessesNamed(field).flatMap((access) => {
+    const parent = access.getParent();
+    return Node.isBinaryExpression(parent) && parent.getLeft() === access ? [parent] : [];
+  });
+
+const objectAssignCalls = (sources: SourceIndex): readonly CallExpression[] =>
+  sources.propertyAccessesNamed('assign').flatMap((access) => {
+    const call = access.getParent();
+    return Node.isCallExpression(call) && call.getExpression() === access && isObjectAssign(call) ? [call] : [];
+  });
+
+type SourcedAssignment = { readonly source: SourceFile; readonly assignment: OutsideAssignment };
+
+const sourced = (node: Node, assignment: OutsideAssignment): SourcedAssignment => ({
+  source: node.getSourceFile(),
+  assignment,
+});
+
+const directAssignments = (sources: SourceIndex, cls: ClassDeclaration, field: StateField): SourcedAssignment[] =>
+  assignmentsTo(sources, field.name)
     .filter(isAssignmentOperator)
     .filter((binary) => isOutside(binary, cls))
     .filter((binary) => targetsField(binary.getLeft(), cls, field.name))
-    .map((binary) => ({
-      ...located(binary, field),
-      value:
-        binary.getOperatorToken().getKind() === SyntaxKind.EqualsToken
-          ? assignedValue(binary.getRight(), field)
-          : UNRESOLVED,
-      throughOwnSetter: writesThroughOwnSetter(receiverOf(binary.getLeft()), cls, field.name),
-    }));
+    .map((binary) =>
+      sourced(binary, {
+        ...located(binary, field),
+        value:
+          binary.getOperatorToken().getKind() === SyntaxKind.EqualsToken
+            ? assignedValue(binary.getRight(), field)
+            : UNRESOLVED,
+        throughOwnSetter: writesThroughOwnSetter(receiverOf(binary.getLeft()), cls, field.name),
+      }),
+    );
 
-const objectAssignments = (file: SourceFile, cls: ClassDeclaration, field: StateField): OutsideAssignment[] =>
-  file
-    .getDescendantsOfKind(SyntaxKind.CallExpression)
+const objectAssignments = (sources: SourceIndex, cls: ClassDeclaration, field: StateField): SourcedAssignment[] =>
+  objectAssignCalls(sources)
     .filter((call) => isOutside(call, cls))
     .filter((call) => objectAssignTargetsField(call, cls, field.name))
-    .map((call) => ({
-      ...located(call, field),
-      value: UNRESOLVED,
-      throughOwnSetter: writesThroughOwnSetter(call.getArguments()[0], cls, field.name),
-    }));
+    .map((call) =>
+      sourced(call, {
+        ...located(call, field),
+        value: UNRESOLVED,
+        throughOwnSetter: writesThroughOwnSetter(call.getArguments()[0], cls, field.name),
+      }),
+    );
 
-export const outsideAssignments = (
-  files: readonly SourceFile[],
-  cls: ClassDeclaration,
-  field: StateField,
-): OutsideAssignment[] =>
-  files
-    .flatMap((file) => [...directAssignments(file, cls, field), ...objectAssignments(file, cls, field)])
-    .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+const inFileOrder = (files: readonly SourceFile[], entries: readonly SourcedAssignment[]): OutsideAssignment[] =>
+  files.flatMap((file) => entries.filter(({ source }) => source === file).map(({ assignment }) => assignment));
+
+export const outsideAssignments = (sources: SourceIndex, cls: ClassDeclaration, field: StateField): OutsideAssignment[] =>
+  inFileOrder(sources.files, [...directAssignments(sources, cls, field), ...objectAssignments(sources, cls, field)]).sort(
+    (a, b) => a.file.localeCompare(b.file) || a.line - b.line,
+  );

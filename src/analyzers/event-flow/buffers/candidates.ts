@@ -1,5 +1,6 @@
 import { ClassDeclaration, MethodDeclaration, Node, PropertyDeclaration, SourceFile, SyntaxKind, Type, ts } from 'ts-morph';
 import { isPushOnlyMethod, plainEventArrays } from '../../shared/array-store';
+import { BracketWrites } from '../../shared/writes';
 import { hierarchyOf } from '../hierarchy';
 import { ProjectClasses } from '../keys';
 import { BufferCandidate } from './buffer-candidate';
@@ -25,7 +26,7 @@ const holdersOf = (cls: ClassDeclaration, projectFiles: ReadonlySet<SourceFile>)
   ...cls.getDerivedClasses().filter((derived) => projectFiles.has(derived.getSourceFile())),
 ];
 
-const familyLookup = (isProject: ProjectClasses, projectFiles: readonly SourceFile[]): FamilyLookup => {
+const familyLookup = (isProject: ProjectClasses, projectFiles: readonly SourceFile[], writes: BracketWrites): FamilyLookup => {
   const known = new Map<ClassDeclaration, Family>();
   const projectFileSet: ReadonlySet<SourceFile> = new Set(projectFiles);
   return (owner) => {
@@ -33,7 +34,7 @@ const familyLookup = (isProject: ProjectClasses, projectFiles: readonly SourceFi
     if (cached !== undefined) return cached;
     const holders = holdersOf(owner, projectFileSet);
     const members = [...hierarchyOf(owner, isProject).ancestors, ...holders];
-    const family = { members, holders, arrays: plainEventArrays(members, projectFiles) };
+    const family = { members, holders, arrays: plainEventArrays(members, writes) };
     known.set(owner, family);
     return family;
   };
@@ -110,8 +111,9 @@ export const candidatesIn = (
   eventMethods: readonly string[],
   isProject: ProjectClasses,
   projectFiles: readonly SourceFile[],
+  projectWrites: BracketWrites,
 ): readonly BufferCandidate[] => {
-  const families = familyLookup(isProject, projectFiles);
+  const families = familyLookup(isProject, projectFiles, projectWrites);
   const classes = projectClassesIn(projectFiles);
   const pushes = files
     .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassDeclaration))

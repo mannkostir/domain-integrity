@@ -71,7 +71,9 @@ const widenedAssignable = (checker: ts.TypeChecker, widened: Pair, depth: number
   return structurallyAssignable(checker, widened, depth, visited);
 };
 
-export const hasLiteralType = (type: Type, location: Node): boolean => someReachable(type, location, (reached) => isLiteral(reached.compilerType));
+export const isLiteralType = (type: Type): boolean => isLiteral(type.compilerType);
+
+export const hasLiteralType = (type: Type, location: Node): boolean => someReachable(type, location, isLiteralType);
 
 export const strictlyComparable: Comparable = (checker, first, second) =>
   checker.isTypeAssignableTo(first.compilerType, second.compilerType) || checker.isTypeAssignableTo(second.compilerType, first.compilerType);

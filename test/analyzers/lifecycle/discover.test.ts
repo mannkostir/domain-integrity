@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { discoverAggregates } from '../../../src/analyzers/lifecycle/discover';
+import { SourceIndex } from '../../../src/analyzers/shared/source-index';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
 
 const project = inMemoryProject({
@@ -66,7 +67,7 @@ export class ExternalAccount implements Account {}
 });
 
 const discoverByAccountInterface = (): readonly (string | undefined)[] =>
-  names(discoverAggregates(interfaceProject.getSourceFiles(), ['Account'], []));
+  names(discoverAggregates(new SourceIndex(interfaceProject.getSourceFiles()), ['Account'], []));
 
 const DIAMOND_DEPTH = 30;
 
@@ -82,13 +83,13 @@ const diamondProject = inMemoryProject({
 
 describe('discoverAggregates', () => {
   it('finds direct, transitive and unresolved-base subclasses but not abstract or plain classes', () => {
-    expect(names(discoverAggregates(files, ['AggregateRoot'], []))).toEqual(['Direct', 'External', 'Indirect']);
+    expect(names(discoverAggregates(new SourceIndex(files), ['AggregateRoot'], []))).toEqual(['Direct', 'External', 'Indirect']);
   });
 
   it('includes declared classes that extend no known base', () => {
     const plain = project.getSourceFileOrThrow('/src/aggregates.ts').getClassOrThrow('Plain');
 
-    expect(names(discoverAggregates(files, ['AggregateRoot'], [plain]))).toEqual(['Direct', 'External', 'Indirect', 'Plain']);
+    expect(names(discoverAggregates(new SourceIndex(files), ['AggregateRoot'], [plain]))).toEqual(['Direct', 'External', 'Indirect', 'Plain']);
   });
 
   it('finds a class that directly implements a named interface', () => {
@@ -164,10 +165,10 @@ describe('discoverAggregates', () => {
   });
 
   it('finds a class that implements a named generic interface with type arguments', () => {
-    expect(names(discoverAggregates(interfaceProject.getSourceFiles(), ['Repo'], []))).toEqual(['NumberRepo']);
+    expect(names(discoverAggregates(new SourceIndex(interfaceProject.getSourceFiles()), ['Repo'], []))).toEqual(['NumberRepo']);
   });
 
   it('finds nothing in a deep diamond-shaped hierarchy of unrelated interfaces without hanging', () => {
-    expect(names(discoverAggregates(diamondProject.getSourceFiles(), ['Account'], []))).toEqual([]);
+    expect(names(discoverAggregates(new SourceIndex(diamondProject.getSourceFiles()), ['Account'], []))).toEqual([]);
   });
 });

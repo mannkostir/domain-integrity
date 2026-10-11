@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CompilerOptions } from 'ts-morph';
 import { familyHolding } from '../../../../src/analyzers/event-flow/buffers/family-type';
 import { hasEscapeRoute } from '../../../../src/analyzers/event-flow/buffers/escapes';
+import { SourceIndex } from '../../../../src/analyzers/shared/source-index';
 import { inMemoryProject } from '../../../helpers/in-memory';
 
 const ROOT = 'export class Root { private events: object[] = []; readonly id: string = "r"; }';
@@ -53,7 +54,7 @@ const escapes = (usage: string, setup: Setup = {}): boolean => {
   );
   const cls = project.getSourceFileOrThrow('/app/src/root.ts').getClassOrThrow('Root');
   const production = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
-  return hasEscapeRoute(production, familyHolding([cls]));
+  return hasEscapeRoute(new SourceIndex(production), familyHolding([cls]));
 };
 
 describe('hasEscapeRoute', () => {

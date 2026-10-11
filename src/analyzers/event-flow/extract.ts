@@ -1,6 +1,7 @@
 import { ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { AnalysisInput } from '../../analyzer';
 import { ClassIdentity, classIdentities } from '../../engine/class-identity';
+import { SourceIndex } from '../shared/source-index';
 import { undispatchedBuffers } from './buffers/discover';
 import { hierarchyOf } from './hierarchy';
 import { ProjectClasses } from './keys';
@@ -25,7 +26,8 @@ const unique = <T>(items: readonly T[]): readonly T[] => [...new Set(items)];
 export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
   const analysed: ReadonlySet<SourceFile> = new Set(input.files);
   const isProject: ProjectClasses = (cls) => analysed.has(cls.getSourceFile());
-  const identities = classIdentities(input.files.flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassDeclaration)), input.root);
+  const index = new SourceIndex(input.files);
+  const identities = classIdentities(index.ofKind(SyntaxKind.ClassDeclaration), input.root);
   const identity = (cls: ClassDeclaration): ClassIdentity => {
     const found = identities.get(cls);
     if (found === undefined) throw new Error(`${cls.getName() ?? 'anonymous class'} is not in the analysed files`);
@@ -41,7 +43,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
   const eventClasses = unique([...raw.map((registration) => registration.event), ...inProcess, ...sagas.flatMap((saga) => saga.outcomes.flat())]);
   const keys: ReadonlySet<Node> = new Set(raw.map((registration) => registration.key));
   const isTest = (file: SourceFile): boolean => isTestFile(file, input.root);
-  const referenceContext = { analysed, isTest, keys };
+  const referenceContext = { analysed, isTest, keys, index };
   const hierarchies = new Map([...eventClasses, ...sagas.map((saga) => saga.target)].map((cls) => [cls, hierarchyOf(cls, isProject)]));
   const ancestorIds = (cls: ClassDeclaration): readonly string[] => (hierarchies.get(cls)?.ancestors ?? []).map((ancestor) => identity(ancestor).id);
 

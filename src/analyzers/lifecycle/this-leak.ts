@@ -3,7 +3,6 @@ import {
   ClassDeclaration,
   Identifier,
   Node,
-  SourceFile,
   Symbol as MorphSymbol,
   SyntaxKind,
   Type,
@@ -16,6 +15,7 @@ import {
 } from './field-ref';
 import { isLibraryNode } from '../shared/library';
 import { outermostWrapper, unwrap } from '../shared/wrappers';
+import { Subclasses } from './subclasses';
 
 const NON_RETAINING_CALLBACKS = new Set([
   'filter',
@@ -204,18 +204,12 @@ const leaksFrom = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
   cls.getDescendants().some((node) => escapesAggregate(node) || capturesAggregate(node)) ||
   factoryMembersLeak(cls, family);
 
-const projectSubclasses = (cls: ClassDeclaration, files: readonly SourceFile[]): readonly ClassDeclaration[] =>
-  files
-    .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassDeclaration))
-    .filter((candidate) => candidate !== cls && inheritanceChain(candidate).includes(cls));
-
-export const classFamily = (cls: ClassDeclaration, files: readonly SourceFile[]): readonly ClassDeclaration[] => [
+export const classFamily = (cls: ClassDeclaration, subclasses: Subclasses): readonly ClassDeclaration[] => [
   ...inheritanceChain(cls).filter((candidate) => !isLibraryNode(candidate)),
-  ...projectSubclasses(cls, files),
+  ...subclasses.of(cls),
 ];
 
-export const leaksThis = (cls: ClassDeclaration, files: readonly SourceFile[]): boolean => {
-  const family = classFamily(cls, files);
+export const leaksThis = (family: readonly ClassDeclaration[]): boolean => {
   const members = new Set<Node>(family);
   return family.some((candidate) => leaksFrom(candidate, members));
 };

@@ -1,10 +1,11 @@
-import { BinaryExpression, ClassDeclaration, ClassExpression, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { BinaryExpression, ClassDeclaration, ClassExpression, Node, SyntaxKind } from 'ts-morph';
 import { isAssignmentTarget, setsOf } from './assigned';
 import { escapesStateHolder, fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
 import { instanceAccessors, instanceMethods, projectAncestry } from './members';
 import { AssignedValues, StateField } from './model';
 import { outsideAssignments } from './outside';
 import { hasUnknownWrite } from './values';
+import { SourceIndex } from '../shared/source-index';
 import { unwrap } from '../shared/wrappers';
 
 type ClassLike = ClassDeclaration | ClassExpression;
@@ -16,8 +17,8 @@ const mayChange = (value: AssignedValues): boolean => value.tokens.size > 0 || h
 const writtenByAny = (accessors: readonly Node[], field: StateField): boolean =>
   accessors.some((accessor) => mayChange(setsOf(accessor, field)));
 
-const writtenOutsideClass = (files: readonly SourceFile[], cls: ClassDeclaration, field: StateField): boolean =>
-  outsideAssignments(files, cls, field).length > 0;
+const writtenOutsideClass = (sources: SourceIndex, cls: ClassDeclaration, field: StateField): boolean =>
+  outsideAssignments(sources, cls, field).length > 0;
 
 const isAssignment = (binary: BinaryExpression): boolean => {
   const operator = binary.getOperatorToken().getKind();
@@ -119,23 +120,21 @@ const extendsFamily = (expression: ClassExpression, cls: ClassDeclaration, names
 };
 
 const subclassExpressions = (
-  files: readonly SourceFile[],
+  sources: SourceIndex,
   cls: ClassDeclaration,
   subclasses: readonly ClassDeclaration[],
 ): readonly ClassExpression[] => {
   const names = new Set([cls, ...subclasses].flatMap((candidate) => candidate.getName() ?? []));
-  return files
-    .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassExpression))
-    .filter((expression) => extendsFamily(expression, cls, names));
+  return sources.ofKind(SyntaxKind.ClassExpression).filter((expression) => extendsFamily(expression, cls, names));
 };
 
 const uncertainInClass = (
   cls: ClassDeclaration,
   aggregateBaseClasses: readonly string[],
-  files: readonly SourceFile[],
+  sources: SourceIndex,
 ): ((field: StateField) => boolean) => {
   const subclasses = cls.getDerivedClasses();
-  const classes = [...projectAncestry(cls), ...subclasses, ...subclassExpressions(files, cls, subclasses)];
+  const classes = [...projectAncestry(cls), ...subclasses, ...subclassExpressions(sources, cls, subclasses)];
   if (escapesOutsideMethods(classes, new Set(instanceMethods(cls, aggregateBaseClasses)))) return () => true;
   const assignments = assignmentsIn(classes);
   const otherTargets = [...loopTargets(classes), ...deletedTargets(classes)].filter(isMemberAccess);
@@ -151,16 +150,16 @@ const uncertainInClass = (
 export const fieldsWrittenUncertainly = (
   cls: ClassDeclaration,
   aggregateBaseClasses: readonly string[],
-  files: readonly SourceFile[],
+  sources: SourceIndex,
   fields: readonly StateField[],
 ): ReadonlySet<string> => {
   const accessors = instanceAccessors(cls, aggregateBaseClasses);
-  const assignedUncertainly = uncertainInClass(cls, aggregateBaseClasses, files);
+  const assignedUncertainly = uncertainInClass(cls, aggregateBaseClasses, sources);
   return new Set(
     fields
       .filter(
         (field) =>
-          assignedUncertainly(field) || writtenByAny(accessors, field) || writtenOutsideClass(files, cls, field),
+          assignedUncertainly(field) || writtenByAny(accessors, field) || writtenOutsideClass(sources, cls, field),
       )
       .map((field) => field.name),
   );
