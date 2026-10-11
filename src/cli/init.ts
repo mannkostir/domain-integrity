@@ -2,7 +2,7 @@ import { relative } from 'node:path';
 import { Project, SourceFile } from 'ts-morph';
 import { lifecycleAnalyzer } from '../analyzers/lifecycle/analyzer';
 import { LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
-import { DEFAULT_DECLARATION } from '../engine/declaration';
+import { DEFAULT_DECLARATION, DomainDeclaration } from '../engine/declaration';
 import { ProjectError, UsageError } from '../engine/errors';
 import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
@@ -62,6 +62,14 @@ const writeLifecycles = async (
   await config.save();
 };
 
+const unsavedBaseClassesNote = (configPath: string, baseClasses: readonly string[]): string =>
+  `No config was written to ${configPath}, so the --base-class names were not saved. For check to find the same aggregates, add aggregateBaseClasses: [${baseClasses.map((name) => `'${name}'`).join(', ')}] to defineDomain({...}) in ${configPath} yourself.\n`;
+
+const nothingWrittenMessage = (reason: string, options: InitOptions, configPath: string, declaration: DomainDeclaration): string =>
+  options.baseClass === undefined
+    ? `${reason}\n`
+    : `${reason}\n${unsavedBaseClassesNote(configPath, declaration.aggregateBaseClasses)}`;
+
 export const initCommand = async (paths: Paths, options: InitOptions, io: Io): Promise<number> => {
   assertIdentifiers(options.baseClass ?? []);
   if (!options.yes && !io.isInteractive) {
@@ -78,15 +86,20 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   if (suggestions.length === 0) {
     const allDeclared = model.aggregates.every((aggregate) => aggregate.declared);
     io.out(
-      allDeclared
-        ? 'All discovered aggregates are already declared.\n'
-        : 'No state fields found in the discovered aggregates; nothing to declare.\n',
+      nothingWrittenMessage(
+        allDeclared
+          ? 'All discovered aggregates are already declared.'
+          : 'No state fields found in the discovered aggregates; nothing to declare.',
+        options,
+        relative(io.cwd, paths.config),
+        declaration,
+      ),
     );
     return 0;
   }
   const accepted = options.yes ? suggestions : await confirmEach(suggestions, io, paths.root);
   if (accepted.length === 0) {
-    io.out('Nothing declared.\n');
+    io.out(nothingWrittenMessage('Nothing declared.', options, relative(io.cwd, paths.config), declaration));
     return 0;
   }
   try {

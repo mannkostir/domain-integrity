@@ -224,6 +224,69 @@ describe('init --base-class', () => {
   });
 });
 
+const INVOICE_CONFIG = `import { defineDomain, lifecycle } from 'domain-integrity';
+import { Invoice } from './src/invoice';
+
+export default defineDomain({
+  lifecycles: [lifecycle(Invoice, { states: { state: { terminal: ['void'] } } })],
+});
+`;
+
+const STATELESS_MODEL_SOURCES = {
+  'src/model.ts': baseClassSource('Model'),
+  'src/note.ts': "import { Model } from './model';\nexport class Note extends Model<{ text: string }> {}\n",
+};
+
+describe('init --base-class when nothing is declared', () => {
+  it('explains that the base classes were not saved when no aggregate has a state field', async () => {
+    const dir = writeProject(STATELESS_MODEL_SOURCES);
+    const { io, stdout } = captureIo(dir);
+    await run(['init', '--yes', '--base-class', 'Model'], io);
+
+    expect(stdout()).toBe(
+      "No state fields found in the discovered aggregates; nothing to declare.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregateBaseClasses: ['Model'] to defineDomain({...}) in domain.config.ts yourself.\n",
+    );
+  });
+
+  it('explains that the base classes were not saved when every aggregate is already declared', async () => {
+    const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': INVOICE_CONFIG });
+    const { io, stdout } = captureIo(dir);
+    await run(['init', '--yes', '--base-class', 'Model'], io);
+
+    expect(stdout()).toBe(
+      "All discovered aggregates are already declared.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'] to defineDomain({...}) in domain.config.ts yourself.\n",
+    );
+  });
+
+  it('explains that the base classes were not saved when every suggestion is declined', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    const { io, stdout } = captureIo(dir, [false]);
+    await run(['init', '--base-class', 'Model'], io);
+
+    expect(stdout()).toMatch(
+      /Nothing declared\.\nNo config was written to domain\.config\.ts, so the --base-class names were not saved\. For check to find the same aggregates, add aggregateBaseClasses: \['Model'\] to defineDomain\(\{\.\.\.\}\) in domain\.config\.ts yourself\.\n$/,
+    );
+  });
+
+  it('leaves an existing config untouched when every aggregate is already declared', async () => {
+    const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': INVOICE_CONFIG });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toBe(INVOICE_CONFIG);
+  });
+
+  it('keeps the message without the option unchanged when no aggregate has a state field', async () => {
+    const dir = writeProject({
+      'src/aggregate-root.ts': AGGREGATE_ROOT,
+      'src/note.ts': "import { AggregateRoot } from './aggregate-root';\nexport class Note extends AggregateRoot<{ text: string }> {}\n",
+    });
+    const { io, stdout } = captureIo(dir);
+    await run(['init', '--yes'], io);
+
+    expect(stdout()).toBe('No state fields found in the discovered aggregates; nothing to declare.\n');
+  });
+});
+
 const NO_AGGREGATE_SOURCES = { 'src/a.ts': 'export const a = 1;\n' };
 
 const noAggregateSourcesIn = (dir: string) => ({
