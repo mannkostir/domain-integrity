@@ -127,6 +127,14 @@ npx domain-integrity check
 
 `init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. When your tsconfig resolves modules as `node16` or `nodenext`, the imports carry runtime extensions: `.js`, or `.mjs` and `.cjs` for `.mts` and `.cts` files. You review the suggestions once; after that, `check` runs on every commit.
 
+`init` discovers aggregates as classes extending or implementing `AggregateRoot` or `Entity`. If yours use another base class or interface, pass it with `--base-class`, once for each name:
+
+```bash
+npx domain-integrity init --base-class MyAggregateBase
+```
+
+`init` records the names in `aggregateBaseClasses`, so `check` finds the same aggregates. When it finds none, it prints the exact command to run.
+
 **Requirements:** Node 20+, a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
 
 ## What it checks
@@ -177,7 +185,7 @@ npx domain-integrity check -p tsconfig.domain.json
 
 | Command | What it does |
 |---|---|
-| `init [--yes]` | Suggests and writes declarations. On an existing config it only adds new aggregates. |
+| `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. `--base-class` is repeatable and records each name in `aggregateBaseClasses`. |
 | `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error. |
 | `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents. |
