@@ -1,6 +1,7 @@
 import { ArrayLiteralExpression, ImportDeclaration, Node, Project, QuoteKind, SourceFile } from 'ts-morph';
 import { FieldSuggestion, LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
 import { ConfigError } from '../engine/errors';
+import { ModuleSpecifiers, moduleSpecifiers } from './module-specifier';
 
 const INITIAL_CONFIG = `import { defineDomain, lifecycle } from 'domain-integrity';
 
@@ -49,32 +50,44 @@ const importsExportOf = (declaration: ImportDeclaration, local: string, name: st
 
 const candidateLocalName = (name: string, attempt: number): string => (attempt === 1 ? name : `${name}${attempt}`);
 
-const bindExport = (file: SourceFile, name: string, target: string, attempt = 1): string => {
+const bindExport = (
+  file: SourceFile,
+  specifierOf: ModuleSpecifiers,
+  name: string,
+  target: string,
+  attempt = 1,
+): string => {
   const local = candidateLocalName(name, attempt);
   const binding = bindingOf(file, local);
   if (binding === undefined) {
-    addNamedImport(file, name, local === name ? undefined : local, file.getRelativePathAsModuleSpecifierTo(target));
+    addNamedImport(file, name, local === name ? undefined : local, specifierOf(file, target));
     return local;
   }
-  return importsExportOf(binding, local, name, target) ? local : bindExport(file, name, target, attempt + 1);
+  return importsExportOf(binding, local, name, target)
+    ? local
+    : bindExport(file, specifierOf, name, target, attempt + 1);
 };
 
 const renamedEnumSource = (source: string, enumName: string, local: string): string =>
   source.startsWith(`${enumName}.`) ? `${local}${source.slice(enumName.length)}` : source;
 
-const terminalSources = (file: SourceFile, { field, terminal }: FieldSuggestion): readonly string[] => {
+const terminalSources = (
+  file: SourceFile,
+  specifierOf: ModuleSpecifiers,
+  { field, terminal }: FieldSuggestion,
+): readonly string[] => {
   const reference = field.enumReference;
   if (reference === undefined) return terminal.map((value) => value.source);
-  const local = bindExport(file, reference.name, reference.file);
+  const local = bindExport(file, specifierOf, reference.name, reference.file);
   return terminal.map((value) => renamedEnumSource(value.source, reference.name, local));
 };
 
-const fieldSource = (file: SourceFile, suggestion: FieldSuggestion): string =>
-  `${suggestion.field.name}: { terminal: [${terminalSources(file, suggestion).join(', ')}] }`;
+const fieldSource = (file: SourceFile, specifierOf: ModuleSpecifiers, suggestion: FieldSuggestion): string =>
+  `${suggestion.field.name}: { terminal: [${terminalSources(file, specifierOf, suggestion).join(', ')}] }`;
 
-const lifecycleSource = (file: SourceFile, suggestion: LifecycleSuggestion): string => {
-  const target = bindExport(file, suggestion.className, suggestion.file);
-  const fields = suggestion.fields.map((field) => fieldSource(file, field)).join(', ');
+const lifecycleSource = (file: SourceFile, specifierOf: ModuleSpecifiers, suggestion: LifecycleSuggestion): string => {
+  const target = bindExport(file, specifierOf, suggestion.className, suggestion.file);
+  const fields = suggestion.fields.map((field) => fieldSource(file, specifierOf, field)).join(', ');
   return `lifecycle(${target}, { states: { ${fields} } })`;
 };
 
@@ -84,9 +97,10 @@ export const writeSuggestions = (
   suggestions: readonly LifecycleSuggestion[],
 ): SourceFile => {
   project.manipulationSettings.set({ quoteKind: QuoteKind.Single });
+  const specifierOf = moduleSpecifiers(project);
   const file = project.getSourceFile(configPath) ?? project.createSourceFile(configPath, INITIAL_CONFIG);
   const lifecycles = lifecyclesArray(file);
   ensureNamedImport(file, 'lifecycle', 'domain-integrity');
-  suggestions.forEach((suggestion) => lifecycles.addElement(lifecycleSource(file, suggestion)));
+  suggestions.forEach((suggestion) => lifecycles.addElement(lifecycleSource(file, specifierOf, suggestion)));
   return file;
 };
