@@ -1,4 +1,4 @@
-import { ClassDeclaration, ClassExpression, ElementAccessExpression, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
+import { ClassDeclaration, ClassExpression, ElementAccessExpression, Node, SyntaxKind, Type } from 'ts-morph';
 import { SourceIndex } from './source-index';
 import { outermostWrapper, unwrap } from './wrappers';
 
@@ -111,6 +111,3 @@ export class BracketWrites {
     return this.writtenAccesses;
   }
 }
-
-export const bracketWritesOf = (name: string, files: readonly SourceFile[]): readonly Node[] =>
-  new BracketWrites(new SourceIndex(files)).of(name);

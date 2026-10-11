@@ -1,5 +1,6 @@
-import { CallExpression, Node, SourceFile, SyntaxKind } from 'ts-morph';
-import { bracketWritesOf, isKeyFor, isWritten } from '../../shared/writes';
+import { CallExpression, Node, SyntaxKind } from 'ts-morph';
+import { SourceIndex } from '../../shared/source-index';
+import { BracketWrites, isKeyFor, isWritten } from '../../shared/writes';
 import { outermostWrapper, unwrap } from '../../shared/wrappers';
 import { BufferCandidate } from './buffer-candidate';
 
@@ -34,17 +35,14 @@ const installs = (call: CallExpression, name: string): boolean => {
   );
 };
 
-const writesNamedProperty = (file: SourceFile, name: string): boolean =>
-  file
-    .getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)
-    .some((access) => access.getName() === name && isWritten(outermostWrapper(access)));
+const writesNamedProperty = (production: SourceIndex, name: string): boolean =>
+  production.propertyAccessesNamed(name).some((access) => isWritten(outermostWrapper(access)));
 
-const installsNamedProperty = (file: SourceFile, name: string): boolean =>
-  file.getDescendantsOfKind(SyntaxKind.CallExpression).some((call) => installs(call, name));
+const installsNamedProperty = (production: SourceIndex, name: string): boolean =>
+  production.ofKind(SyntaxKind.CallExpression).some((call) => installs(call, name));
 
-const isReassigned = (name: string, files: readonly SourceFile[]): boolean =>
-  bracketWritesOf(name, files).length > 0 ||
-  files.some((file) => writesNamedProperty(file, name) || installsNamedProperty(file, name));
+const isReassigned = (name: string, production: SourceIndex, writes: BracketWrites): boolean =>
+  writes.of(name).length > 0 || writesNamedProperty(production, name) || installsNamedProperty(production, name);
 
-export const hasReassignedPusher = (candidate: BufferCandidate, production: readonly SourceFile[]): boolean =>
-  [...new Set(candidate.pushers.map((pusher) => pusher.getName()))].some((name) => isReassigned(name, production));
+export const hasReassignedPusher = (candidate: BufferCandidate, production: SourceIndex, writes: BracketWrites): boolean =>
+  [...new Set(candidate.pushers.map((pusher) => pusher.getName()))].some((name) => isReassigned(name, production, writes));

@@ -1,6 +1,7 @@
 import { ClassDeclaration, SourceFile } from 'ts-morph';
 import { ClassIdentity } from '../../../engine/class-identity';
 import { isPlainEventArray } from '../../shared/array-store';
+import { BracketWrites } from '../../shared/writes';
 import { isLibraryNode } from '../../shared/library';
 import { SourceIndex } from '../../shared/source-index';
 import { hierarchyOf } from '../hierarchy';
@@ -28,6 +29,8 @@ type Scope = {
   readonly projectFiles: readonly SourceFile[];
   readonly production: readonly SourceFile[];
   readonly productionIndex: SourceIndex;
+  readonly projectWrites: BracketWrites;
+  readonly productionWrites: BracketWrites;
 };
 
 const isScannedFile = (file: SourceFile, context: BufferContext): boolean => file !== context.configFile && !isLibraryNode(file);
@@ -35,11 +38,18 @@ const isScannedFile = (file: SourceFile, context: BufferContext): boolean => fil
 const scopeOf = (context: BufferContext): Scope => {
   const projectFiles = (context.files[0]?.getProject().getSourceFiles() ?? []).filter((file) => isScannedFile(file, context));
   const production = projectFiles.filter((file) => !isTestFile(file, context.root));
-  return { projectFiles, production, productionIndex: new SourceIndex(production) };
+  const productionIndex = new SourceIndex(production);
+  return {
+    projectFiles,
+    production,
+    productionIndex,
+    projectWrites: new BracketWrites(new SourceIndex(projectFiles)),
+    productionWrites: new BracketWrites(productionIndex),
+  };
 };
 
 const isCandidateOpen = (candidate: BufferCandidate, owner: ClassDeclaration, context: BufferContext, scope: Scope): boolean =>
-  isPlainEventArray(candidate.buffer, candidate.family, scope.projectFiles) && !hierarchyOf(owner, context.isProject).extendsForeign;
+  isPlainEventArray(candidate.buffer, candidate.family, scope.projectWrites) && !hierarchyOf(owner, context.isProject).extendsForeign;
 
 const firstPusherName = (candidate: BufferCandidate): string =>
   candidate.pushers.map((pusher) => pusher.getName()).sort()[0] ?? '';
@@ -64,7 +74,7 @@ const raiserIds = (candidate: BufferCandidate, context: BufferContext, scope: Sc
 const undispatched = (candidate: BufferCandidate, context: BufferContext, scope: Scope): UndispatchedBuffer | undefined => {
   const owner = declaringClassOf(candidate.buffer);
   if (owner === undefined || !context.isProject(owner) || !isCandidateOpen(candidate, owner, context, scope)) return undefined;
-  if (hasReassignedPusher(candidate, scope.production) || !isUndrained(candidate, scope.production)) return undefined;
+  if (hasReassignedPusher(candidate, scope.productionIndex, scope.productionWrites) || !isUndrained(candidate, scope.production)) return undefined;
   const raisers = raiserIds(candidate, context, scope);
   const reported = raisers.length > 0 && !hasEscapeRoute(scope.productionIndex, familyHolding(candidate.family));
   return reported ? bufferOf(candidate, owner, raisers, context) : undefined;
@@ -76,7 +86,7 @@ const byLocation = (left: UndispatchedBuffer, right: UndispatchedBuffer): number
 export const undispatchedBuffers = (context: BufferContext): readonly UndispatchedBuffer[] => {
   if (context.eventMethods.length === 0) return [];
   const scope = scopeOf(context);
-  return candidatesIn(context.files, context.eventMethods, context.isProject, scope.projectFiles)
+  return candidatesIn(context.files, context.eventMethods, context.isProject, scope.projectFiles, scope.projectWrites)
     .flatMap((candidate) => undispatched(candidate, context, scope) ?? [])
     .sort(byLocation);
 };

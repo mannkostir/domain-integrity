@@ -4,6 +4,7 @@ import { isPlainArrayPush, isPlainEventArray, isPushOnlyMethod, plainEventArrays
 import { classFamily } from '../../../src/analyzers/lifecycle/this-leak';
 import { Subclasses } from '../../../src/analyzers/lifecycle/subclasses';
 import { SourceIndex } from '../../../src/analyzers/shared/source-index';
+import { BracketWrites } from '../../../src/analyzers/shared/writes';
 import { inMemoryProject } from '../../helpers/in-memory';
 
 const plain = (
@@ -15,7 +16,7 @@ const plain = (
   const project = inMemoryProject({ '/types/library.d.ts': 'export declare class LibraryRoot { protected events: object[]; }', ...extraFiles, '/src/root.ts': source }, compilerOptions);
   const root = project.getSourceFileOrThrow('/src/root.ts').getClassOrThrow('Root');
   const files = project.getSourceFiles();
-  return isPlainEventArray(root.getPropertyOrThrow(field), classFamily(root, new Subclasses(new SourceIndex(files))), files);
+  return isPlainEventArray(root.getPropertyOrThrow(field), classFamily(root, new Subclasses(new SourceIndex(files))), new BracketWrites(new SourceIndex(files)));
 };
 
 describe('plain event array', () => {
@@ -126,7 +127,7 @@ describe('library declaration', () => {
   it('rejects a field declared in a library file', () => {
     const project = inMemoryProject({ '/types/library.d.ts': 'export declare class LibraryRoot { private events; }' });
     const library = project.getSourceFileOrThrow('/types/library.d.ts').getClassOrThrow('LibraryRoot');
-    expect(isPlainEventArray(library.getPropertyOrThrow('events'), [library], project.getSourceFiles())).toBe(false);
+    expect(isPlainEventArray(library.getPropertyOrThrow('events'), [library], new BracketWrites(new SourceIndex(project.getSourceFiles())))).toBe(false);
   });
 });
 
@@ -273,7 +274,7 @@ const arraysAndClass = (source: string) => {
   const project = inMemoryProject({ '/src/root.ts': source });
   const root = project.getSourceFileOrThrow('/src/root.ts').getClassOrThrow('Root');
   const files = project.getSourceFiles();
-  return { root, arrays: plainEventArrays(classFamily(root, new Subclasses(new SourceIndex(files))), files) };
+  return { root, arrays: plainEventArrays(classFamily(root, new Subclasses(new SourceIndex(files))), new BracketWrites(new SourceIndex(files))) };
 };
 
 const firstThisAccess = (root: ClassDeclaration, methodName: string): Node =>

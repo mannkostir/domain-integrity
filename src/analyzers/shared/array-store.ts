@@ -4,13 +4,11 @@ import {
   Node,
   ParameterDeclaration,
   PropertyDeclaration,
-  SourceFile,
   Symbol as MorphSymbol,
   SyntaxKind,
 } from 'ts-morph';
 import { isLibraryNode } from './library';
 import { outermostWrapper, unwrap } from './wrappers';
-import { SourceIndex } from './source-index';
 import { accessOf, BracketWrites, destructuringRoot, isDecorated, isWritten, writesUnknownMembers } from './writes';
 
 const isEmptyArrayLiteral = (node: Node | undefined): boolean => {
@@ -63,9 +61,7 @@ const isBracketWrittenIn = (property: PropertyDeclaration, writes: BracketWrites
   return name !== undefined && writes.of(name).some((target) => !isResetToEmpty(target));
 };
 
-const bracketWritesIn = (files: readonly SourceFile[]): BracketWrites => new BracketWrites(new SourceIndex(files));
-
-export const isPlainEventArrayAmong = (
+export const isPlainEventArray = (
   property: PropertyDeclaration,
   family: readonly ClassDeclaration[],
   writes: BracketWrites,
@@ -79,17 +75,8 @@ export const isPlainEventArrayAmong = (
     .filter((reference) => reference !== property.getNameNode())
     .every(isSafeReference);
 
-export const isPlainEventArray = (
-  property: PropertyDeclaration,
-  family: readonly ClassDeclaration[],
-  files: readonly SourceFile[],
-): boolean => isPlainEventArrayAmong(property, family, bracketWritesIn(files));
-
-export const plainEventArraysAmong = (family: readonly ClassDeclaration[], writes: BracketWrites): ReadonlySet<Node> =>
-  new Set(family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArrayAmong(property, family, writes)));
-
-export const plainEventArrays = (family: readonly ClassDeclaration[], files: readonly SourceFile[]): ReadonlySet<Node> =>
-  plainEventArraysAmong(family, bracketWritesIn(files));
+export const plainEventArrays = (family: readonly ClassDeclaration[], writes: BracketWrites): ReadonlySet<Node> =>
+  new Set(family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArray(property, family, writes)));
 
 const declarationsAreIn = (node: Node, arrays: ReadonlySet<Node>): boolean => {
   const declarations = node.getSymbol()?.getDeclarations() ?? [];

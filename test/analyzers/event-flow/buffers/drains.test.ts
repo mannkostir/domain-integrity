@@ -2,6 +2,8 @@ import { ClassDeclaration, Project, SourceFile } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { isUndrained } from '../../../../src/analyzers/event-flow/buffers/drains';
 import { plainEventArrays } from '../../../../src/analyzers/shared/array-store';
+import { SourceIndex } from '../../../../src/analyzers/shared/source-index';
+import { BracketWrites } from '../../../../src/analyzers/shared/writes';
 import { inMemoryProject } from '../../../helpers/in-memory';
 
 const ROOT = (body: string) => `export class Root { private events: object[] = []; protected addEvent(e: object): void { this.events.push(e); } ${body} }`;
@@ -12,7 +14,7 @@ const productionFiles = (project: Project): readonly SourceFile[] =>
 const undrainedIn = (project: Project, cls: ClassDeclaration, family: readonly ClassDeclaration[]): boolean => {
   const files = productionFiles(project);
   return isUndrained(
-    { buffer: cls.getPropertyOrThrow('events'), pushers: [cls.getMethodOrThrow('addEvent')], family, arrays: plainEventArrays(family, files) },
+    { buffer: cls.getPropertyOrThrow('events'), pushers: [cls.getMethodOrThrow('addEvent')], family, arrays: plainEventArrays(family, new BracketWrites(new SourceIndex(files))) },
     files,
   );
 };

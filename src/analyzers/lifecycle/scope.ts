@@ -1,7 +1,7 @@
 import { ClassDeclaration } from 'ts-morph';
 import { DomainDeclaration } from '../../engine/declaration';
 import { AggregateScope } from './field-ref';
-import { plainEventArraysAmong } from '../shared/array-store';
+import { plainEventArrays } from '../shared/array-store';
 import { assertedInertEventMethods } from './inert-event-method';
 import { ProjectIndex } from './project-index';
 import { classFamily, leaksThis } from './this-leak';
@@ -18,6 +18,6 @@ export const aggregateScope = (
     inertEventMethods: assertedInertEventMethods(declaration.inertEventMethods, cls, family, project),
     inertMembers: new Set(declaration.inertMembers),
     leaksThis: leaksThis(family),
-    plainEventArrays: plainEventArraysAmong(family, project.bracketWrites),
+    plainEventArrays: plainEventArrays(family, project.bracketWrites),
   };
 };
