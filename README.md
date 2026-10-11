@@ -127,7 +127,7 @@ npx domain-integrity check
 
 `init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. You review the suggestions once; after that, `check` runs on every commit.
 
-**Requirements:** Node 20+, a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
+**Requirements:** Node 22 or 24 (`engines: >=22`), a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
 
 ## What it checks
 
@@ -224,10 +224,10 @@ jobs:
   lifecycles:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
       - uses: mannkostir/domain-integrity@v0
         with:
