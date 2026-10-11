@@ -127,7 +127,7 @@ npx domain-integrity check
 
 `init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. When your tsconfig resolves modules as `node16` or `nodenext`, the imports carry runtime extensions: `.js`, or `.mjs` and `.cjs` for `.mts` and `.cts` files. You review the suggestions once; after that, `check` runs on every commit.
 
-When a timestamp or other nullable field is only ever set by methods that also move an enum or literal-union status field into one of the status's suggested terminal values, `init` leaves the nullable field's terminal list empty. The status already marks the end of that lifecycle, and a second terminal field would report methods that are guarded on the status. A timestamp set on its own, say `lockedAt` set by `lock()`, keeps its suggestion.
+When a timestamp or other nullable field is only ever set by methods that also set an enum or literal-union status field, and only to the status's suggested terminal values, `init` leaves the nullable field's terminal list empty. The status already marks the end of that lifecycle, and a second terminal field would report methods that are guarded on the status. A timestamp set on its own, say `lockedAt` set by `lock()`, keeps its suggestion.
 
 `init` discovers aggregates as classes extending or implementing `AggregateRoot` or `Entity`. If yours use another base class or interface, pass it with `--base-class`, once for each name. In a new config the names you pass replace `AggregateRoot` and `Entity`; to keep one of them, pass it too:
 
