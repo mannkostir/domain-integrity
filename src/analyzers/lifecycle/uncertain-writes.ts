@@ -1,0 +1,96 @@
+import { BinaryExpression, ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { setsOf } from './assigned';
+import { fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
+import { instanceAccessors, instanceMethods, projectHierarchy } from './members';
+import { AssignedValues, StateField } from './model';
+import { outsideAssignments } from './outside';
+import { hasUnknownWrite } from './values';
+import { unwrap } from '../shared/wrappers';
+
+type Assignment = { readonly binary: BinaryExpression; readonly target: Node };
+
+const mayChange = (value: AssignedValues): boolean => value.tokens.size > 0 || hasUnknownWrite(value);
+
+const writtenByAny = (accessors: readonly Node[], field: StateField): boolean =>
+  accessors.some((accessor) => mayChange(setsOf(accessor, field)));
+
+const writtenOutsideClass = (files: readonly SourceFile[], cls: ClassDeclaration, field: StateField): boolean =>
+  outsideAssignments(files, cls, field).length > 0;
+
+const isAssignment = (binary: BinaryExpression): boolean => {
+  const operator = binary.getOperatorToken().getKind();
+  return operator >= SyntaxKind.FirstAssignment && operator <= SyntaxKind.LastAssignment;
+};
+
+const isMemberAccess = (node: Node): boolean => Node.isPropertyAccessExpression(node) || Node.isElementAccessExpression(node);
+
+const isDestructuring = (node: Node): boolean => Node.isArrayLiteralExpression(node) || Node.isObjectLiteralExpression(node);
+
+const targetsOf = (binary: BinaryExpression): readonly Node[] => {
+  const left = unwrap(binary.getLeft());
+  return isDestructuring(left) ? left.getDescendants().filter(isMemberAccess) : [left];
+};
+
+const assignmentsIn = (classes: readonly ClassDeclaration[]): readonly Assignment[] =>
+  classes
+    .flatMap((cls) => cls.getDescendantsOfKind(SyntaxKind.BinaryExpression))
+    .filter(isAssignment)
+    .flatMap((binary) => targetsOf(binary).map((target) => ({ binary, target })));
+
+const isScopeBoundary = (node: Node): boolean =>
+  Node.isFunctionLikeDeclaration(node) ||
+  Node.isFunctionExpression(node) ||
+  Node.isClassStaticBlockDeclaration(node) ||
+  Node.isPropertyDeclaration(node);
+
+const certainWriters = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ReadonlySet<Node> =>
+  new Set<Node>([
+    ...instanceMethods(cls, aggregateBaseClasses),
+    ...projectHierarchy(cls, aggregateBaseClasses).flatMap((candidate) => candidate.getConstructors()),
+  ]);
+
+const isCertain = ({ binary, target }: Assignment, writers: ReadonlySet<Node>): boolean => {
+  const scope = target.getFirstAncestor(isScopeBoundary);
+  return (
+    binary.getOperatorToken().getKind() === SyntaxKind.EqualsToken &&
+    unwrap(binary.getLeft()) === target &&
+    fieldNameOf(target) !== undefined &&
+    scope !== undefined &&
+    writers.has(scope)
+  );
+};
+
+const uncertainlyAssigned = (assignments: readonly Assignment[], writers: ReadonlySet<Node>): ReadonlySet<string> =>
+  new Set(
+    assignments
+      .filter((assignment) => isMemberAccess(assignment.target) && !isCertain(assignment, writers))
+      .flatMap(({ target }) => memberName(target) ?? []),
+  );
+
+const writesThroughComputedKey = (assignments: readonly Assignment[]): boolean =>
+  assignments.some(({ target }) => isComputedStateAccess(target));
+
+const uncertainInClass = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ((field: StateField) => boolean) => {
+  const assignments = assignmentsIn(projectHierarchy(cls, aggregateBaseClasses));
+  if (writesThroughComputedKey(assignments)) return () => true;
+  const names = uncertainlyAssigned(assignments, certainWriters(cls, aggregateBaseClasses));
+  return (field) => names.has(field.name);
+};
+
+export const fieldsWrittenUncertainly = (
+  cls: ClassDeclaration,
+  aggregateBaseClasses: readonly string[],
+  files: readonly SourceFile[],
+  fields: readonly StateField[],
+): ReadonlySet<string> => {
+  const accessors = instanceAccessors(cls, aggregateBaseClasses);
+  const assignedUncertainly = uncertainInClass(cls, aggregateBaseClasses);
+  return new Set(
+    fields
+      .filter(
+        (field) =>
+          assignedUncertainly(field) || writtenByAny(accessors, field) || writtenOutsideClass(files, cls, field),
+      )
+      .map((field) => field.name),
+  );
+};

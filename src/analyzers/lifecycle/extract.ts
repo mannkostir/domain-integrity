@@ -15,7 +15,7 @@ import { mentionedTokens } from './mentions';
 import { outsideAssignments } from './outside';
 import { aggregateScope } from './scope';
 import { resolveStateField } from './state-field';
-import { fieldsWrittenOutsideMethods } from './unmodelled-writes';
+import { fieldsWrittenUncertainly } from './uncertain-writes';
 import { writtenAlongside } from './written-alongside';
 
 type DeclaredOutcome =
@@ -134,9 +134,9 @@ const extractAggregate = (
       initial: new Map(resolved.fields.map((field) => [field.name, initialValues(cls, field)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(files, field)]) : []),
       outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(files, cls, field)) : [],
-      writtenOutsideMethods: declared
+      uncertainlyWritten: declared
         ? new Set()
-        : fieldsWrittenOutsideMethods(cls, declaration.aggregateBaseClasses, files, resolved.fields),
+        : fieldsWrittenUncertainly(cls, declaration.aggregateBaseClasses, files, resolved.fields),
     },
   };
 };

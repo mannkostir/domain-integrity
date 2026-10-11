@@ -6,11 +6,13 @@ import { unwrap } from '../shared/wrappers';
 
 const NOTHING: ReadonlySet<string> = new Set();
 
-const JUMPS: readonly SyntaxKind[] = [
+const INTERRUPTIONS: readonly SyntaxKind[] = [
   SyntaxKind.ReturnStatement,
   SyntaxKind.ThrowStatement,
   SyntaxKind.BreakStatement,
   SyntaxKind.ContinueStatement,
+  SyntaxKind.AwaitExpression,
+  SyntaxKind.YieldExpression,
 ];
 
 const isPlainWriteTo = (binary: BinaryExpression, field: StateField): boolean =>
@@ -28,7 +30,7 @@ const tokensWrittenBy = (statement: Statement, field: StateField): ReadonlySet<s
 };
 
 const mayLeave = (statement: Statement): boolean =>
-  [statement, ...statement.getDescendants()].some((node) => JUMPS.includes(node.getKind()));
+  [statement, ...statement.getDescendants()].some((node) => INTERRUPTIONS.includes(node.getKind()));
 
 const enclosingBlocks = (statement: Statement): Block[] => {
   const ancestors = statement.getAncestors();

@@ -48,7 +48,7 @@ const setsAnyOf = (method: MethodModel, field: StateField, values: readonly Stat
   values.some((value) => method.fields.get(field.name)?.sets.tokens.has(value.token) === true);
 
 const writtenUncertainly = (aggregate: AggregateModel, field: StateField): boolean =>
-  aggregate.writtenOutsideMethods.has(field.name) ||
+  aggregate.uncertainlyWritten.has(field.name) ||
   aggregate.methods.some((method) => {
     const behaviour = method.fields.get(field.name);
     return behaviour !== undefined && hasUnknownWrite(behaviour.sets);

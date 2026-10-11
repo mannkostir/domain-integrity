@@ -7,7 +7,7 @@ const inheritedClasses = (cls: ClassDeclaration, aggregateBaseClasses: ReadonlyS
   return [base, ...inheritedClasses(base, aggregateBaseClasses)];
 };
 
-const projectHierarchy = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): readonly ClassDeclaration[] => [
+export const projectHierarchy = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): readonly ClassDeclaration[] => [
   cls,
   ...inheritedClasses(cls, new Set(aggregateBaseClasses)),
 ];

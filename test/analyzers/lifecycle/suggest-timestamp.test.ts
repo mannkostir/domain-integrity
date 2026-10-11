@@ -197,3 +197,162 @@ describe('terminal suggestion for a timestamp settled by the status lifecycle', 
     expect(terminals).toEqual(new Map([['status', ['CLOSED']], ['closedAt', []]]));
   });
 });
+
+const COVERED_CLOSE = `close(): void {
+    this.status = Status.Closed;
+    this.closedAt = new Date();
+  }`;
+
+const coveredTicket = (extraMembers: string) => ({ '/src/ticket.ts': closingTicket(COVERED_CLOSE, extraMembers) });
+
+const PROPS_TICKET = `
+import { AggregateRoot } from './aggregate-root';
+export enum Status { Open = 'OPEN', Closed = 'CLOSED' }
+export class Ticket extends AggregateRoot<{ status: Status; closedAt: Date | null }> {
+  close(): void {
+    if (this.props.status === Status.Closed) throw new Error('closed');
+    this.props.status = Status.Closed;
+    this.props.closedAt = new Date();
+  }
+}
+`;
+
+describe('terminal suggestion for a timestamp written where the status cannot be followed', () => {
+  it('is kept when an arrow-function property writes the timestamp', () => {
+    const terminals = suggestedTerminals(coveredTicket('force = (): void => { this.closedAt = new Date(); };'));
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a closure built in the constructor writes the timestamp', () => {
+    const terminals = suggestedTerminals(
+      coveredTicket(`private forcer: () => void;
+  constructor() {
+    super({});
+    this.forcer = () => { this.closedAt = new Date(); };
+  }
+  force(): void { this.forcer(); }`),
+    );
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a static member writes the timestamp', () => {
+    const terminals = suggestedTerminals(coveredTicket('static force(t: Ticket): void { t.closedAt = new Date(); }'));
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a method writes the timestamp of another instance', () => {
+    const terminals = suggestedTerminals(coveredTicket('stampOther(o: Ticket): void { o.closedAt = new Date(); }'));
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a method writes through a computed key', () => {
+    const terminals = suggestedTerminals(coveredTicket("other(k: 'closedAt'): void { this[k] = new Date(); }"));
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when an await separates the timestamp from a later status write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`async close(): Promise<void> {
+    this.closedAt = new Date();
+    await Promise.resolve();
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a yield separates the timestamp from a later status write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`*close(): Generator<number> {
+    this.closedAt = new Date();
+    yield 1;
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a throw separates the timestamp from a later status write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(now: Date): void {
+    this.closedAt = now;
+    if (now.getTime() === 0) throw new Error('x');
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a break inside a loop separates the timestamp from a later status write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(dates: readonly Date[]): void {
+    for (const date of dates) {
+      this.closedAt = date;
+      if (date.getTime() === 0) break;
+      this.status = Status.Closed;
+    }
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a continue inside a loop separates the timestamp from a later status write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(dates: readonly Date[]): void {
+    for (const date of dates) {
+      this.closedAt = date;
+      if (date.getTime() === 0) continue;
+      this.status = Status.Closed;
+    }
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a getter writes the timestamp', () => {
+    const terminals = suggestedTerminals(
+      coveredTicket('get stamped(): boolean { this.closedAt = new Date(); return true; }'),
+    );
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when the status is written before a nested callback that writes the timestamp', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(): void {
+    ${STATUS_GUARD}
+    this.status = Status.Closed;
+    [1].forEach(() => { this.closedAt = new Date(); });
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is dropped when the status and the timestamp are written through the props holder', () => {
+    const terminals = suggestedTerminals({ '/src/ticket.ts': PROPS_TICKET });
+
+    expect(terminals).toEqual(new Map([['status', ['CLOSED']], ['closedAt', []]]));
+  });
+
+  it('is dropped when the constructor assigns the timestamp from a parameter', () => {
+    const terminals = suggestedTerminals(
+      coveredTicket(`constructor(closedAt: Date | null) {
+    super({});
+    this.closedAt = closedAt;
+  }`),
+    );
+
+    expect(terminals.get('closedAt')).toEqual([]);
+  });
+});
