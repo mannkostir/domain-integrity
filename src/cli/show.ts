@@ -1,5 +1,7 @@
+import { AnalyzerRun } from '../analysis';
 import { AmbiguousReference, DiagramOutcome } from '../analyzer';
 import { UsageError } from '../engine/errors';
+import { failuresAmong, reportInternalErrors } from './internal-errors';
 import { Io, Paths } from './io';
 import { openSession } from './session';
 
@@ -14,19 +16,22 @@ const diagramText = (outcomes: readonly DiagramOutcome[]): string =>
 const firstAmbiguity = (outcomes: readonly DiagramOutcome[]): AmbiguousReference | undefined =>
   outcomes.find((outcome): outcome is AmbiguousReference => outcome.kind === 'ambiguous');
 
-export const showCommand = (paths: Paths, aggregate: string | undefined, io: Io): number => {
-  const { results } = openSession(paths);
+const nothingToShowError = (aggregate: string | undefined): UsageError =>
+  new UsageError(
+    aggregate
+      ? `No declared aggregate or event named "${aggregate}".`
+      : 'No declared aggregates or event flows to show. Run "domain-integrity init" first.',
+  );
+
+export const showCommand = (paths: Paths, aggregate: string | undefined, io: Io, analyzers: readonly AnalyzerRun[]): number => {
+  const { results } = openSession(paths, analyzers);
   const outcomes = results.map((result) => result.diagram(aggregate));
+  const failures = failuresAmong(outcomes);
+  reportInternalErrors(failures, io);
   const ambiguity = firstAmbiguity(outcomes);
   if (ambiguity) throw ambiguityError(ambiguity);
   const output = diagramText(outcomes);
-  if (output.length === 0) {
-    throw new UsageError(
-      aggregate
-        ? `No declared aggregate or event named "${aggregate}".`
-        : 'No declared aggregates or event flows to show. Run "domain-integrity init" first.',
-    );
-  }
-  io.out(`${output}\n`);
-  return 0;
+  if (output.length === 0 && failures.length === 0) throw nothingToShowError(aggregate);
+  if (output.length > 0) io.out(`${output}\n`);
+  return failures.length > 0 ? 2 : 0;
 };

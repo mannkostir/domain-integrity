@@ -135,7 +135,7 @@ npx domain-integrity init --base-class AggregateRoot --base-class MyAggregateBas
 
 In an existing config the names are added: to `AggregateRoot` and `Entity` when it lists no base classes yet, to its list otherwise. `init` records the names in `aggregateBaseClasses`, so `check` finds the same aggregates. When it finds none, it prints the exact command to run.
 
-**Requirements:** Node 20+, a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
+**Requirements:** Node 22 or 24 (`engines: >=22`), a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
 
 ## What it checks
 
@@ -186,11 +186,13 @@ npx domain-integrity check -p tsconfig.domain.json
 | Command | What it does |
 |---|---|
 | `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. `--base-class` is repeatable and records each name in `aggregateBaseClasses`. In a new config the names replace `AggregateRoot` and `Entity`; to keep one, pass it too. In an existing config they are added to the defaults when it lists no base classes yet, to its list otherwise. |
-| `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error. |
+| `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error, or an internal error. |
 | `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents. |
 
 Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. The config is read statically and never executed.
+
+If one analyzer crashes, the command prints `internal error in <analyzer>, please report (domain-integrity <version>)` with a short stack trace, still prints the other analyzers' results, and exits `2`; `--update-baseline` and `context --write` then write nothing.
 
 ## Built for codebases that agents write
 
@@ -232,10 +234,10 @@ jobs:
   lifecycles:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
       - uses: mannkostir/domain-integrity@v0
         with:
@@ -251,7 +253,7 @@ Findings appear as code-scanning alerts on the pull request, and the job fails w
 | `baseline` | none | baseline file to apply |
 | `upload` | `true` | upload the SARIF report to code scanning; set `false` when code scanning is unavailable |
 
-The step exposes `exit-code`, the exit code of `check`, and `sarif-file`, the path to the SARIF report.
+The step exposes `exit-code`, the exit code of `check`, and `sarif-file`, the path to the SARIF report. The upload is skipped when `check` exits `2`, because a report from a failed run would make code scanning close the open alerts of the analyzer that failed.
 
 ## The declaration
 
@@ -335,6 +337,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Values mentioned elsewhere.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types.
 - **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
+- **Circular inheritance.** A class whose `extends` chain loops, which TypeScript rejects, is not analysed, for aggregates and event classes alike.
 
 Every analysis sees only the files your tsconfig includes and the files they import. A file outside both is invisible to every rule: it produces no findings and cannot keep one silent. A decorated ORM subclass loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
 
