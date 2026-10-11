@@ -76,6 +76,22 @@ const DECLARED_CONTRACTS = 'export declare class Shipped { private readonly mark
 
 const INCOMPATIBLE_CREATED = 'export class OrderCreated extends DomainEvent { constructor(readonly orderId: string, readonly total: number) { super(); } }\n';
 
+const BODY_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped extends DomainEvent { constructor(readonly body: string, readonly carrier: string) { super(); } }
+`;
+
+const META_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Meta { private readonly x = 1; readonly at = 1; }
+export class Shipped { constructor(readonly orderId: string, readonly meta: Meta) {} }
+`;
+
+const GENERIC_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped<T = unknown> { constructor(readonly body: T, readonly c?: string) {} }
+`;
+
 describe('unhandledEvent with unresolved registrations', () => {
   it('stays silent for a structurally identical consumer-owned class', () => {
     expect(
@@ -253,5 +269,65 @@ describe('unhandledEvent with unresolved registrations', () => {
         "export class Other { constructor(readonly code: number) {} }\nexport class Listener { @OnEvent('order.shipped') on(event = new Other(1)) {} }",
       ),
     ).toEqual([]);
+  });
+
+  it('stays silent for a callback typed with a local alias over a function type parameter', () => {
+    expect(
+      findingsFor('listener.ts', "export function make<T>() { type W = { body: T }; DomainEvents.register((e: W) => undefined, 'order.shipped'); }", CARRIER_EVENTS),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a callback typed with a local alias over a body-compatible type parameter', () => {
+    expect(
+      findingsFor('listener.ts', "export function make<T>() { type W = { body: T }; DomainEvents.register((e: W) => undefined, 'order.shipped'); }", BODY_EVENTS),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a callback typed with a local alias over a class type parameter', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "export class B<T> { wire() { type W = { orderId: T }; DomainEvents.register((e: W) => undefined, 'order.shipped'); } }",
+        CARRIER_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a callback typed with typeof a generic value', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "export function f<T>(sample: T) { DomainEvents.register((e: { orderId: typeof sample }) => undefined, 'order.shipped'); }",
+        CARRIER_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a literal type whose property has a private member', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "class Meta { private readonly x = 1; readonly at = 1; }\nexport class Listener { @OnEvent('order.shipped') on(e: { meta: Meta }) {} }",
+        META_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a class whose property has a private member', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "class Meta { private readonly x = 1; readonly at = 1; }\nclass OS { orderId!: string; meta!: Meta }\nexport class Listener { @OnEvent('order.shipped') on(e: OS) {} }",
+        META_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a generic event class', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { body: string }) {} }", GENERIC_EVENTS)).toEqual([]);
+  });
+
+  it('reports an event whose type is incomparable with a built-in object type annotation', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: Function) {} }", CARRIER_EVENTS)).toEqual(['Shipped']);
   });
 });

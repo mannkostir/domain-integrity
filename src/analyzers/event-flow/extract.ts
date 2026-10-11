@@ -20,6 +20,8 @@ const RECOGNISERS = [decoratorRecogniser, registerCallRecogniser, subscribedToRe
 
 const locationOf = (node: Node): Location => ({ file: node.getSourceFile().getFilePath(), line: node.getStartLineNumber() });
 
+const isGeneric = (cls: ClassDeclaration): boolean => cls.getTypeParameters().length > 0;
+
 const unique = <T>(items: readonly T[]): readonly T[] => [...new Set(items)];
 
 export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
@@ -67,7 +69,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
   const receivableBy = (bound: HandlerBound): ReceivableEvents =>
     bound.kind === 'unbounded'
       ? { kind: 'any' }
-      : { kind: 'events', events: inProcess.filter((cls) => bound.types.some((type) => areComparable(cls.getType(), type))).map((cls) => identity(cls).id) };
+      : { kind: 'events', events: inProcess.filter((cls) => isGeneric(cls) || bound.types.some((type) => areComparable(cls.getType(), type))).map((cls) => identity(cls).id) };
 
   const unresolved: readonly UnresolvedSite[] = sites.flatMap((site) =>
     site.kind === 'resolved' ? [] : [{ owner: ownerOf(site.node), inTest: isTest(site.node.getSourceFile()), receives: receivableBy(site.bound), ...locationOf(site.node) }],

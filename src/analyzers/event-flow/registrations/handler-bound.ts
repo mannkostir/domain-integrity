@@ -24,7 +24,7 @@ const soleParameter = (signature: HandlerSignature): ParameterDeclaration | unde
 };
 
 const isComparableBound = (annotation: TypeNode, type: Type): boolean =>
-  !mentionsTypeParameter(annotation) && !hasNominalMember(type) && membersOf(type).every(isConstraining);
+  !mentionsTypeParameter(annotation) && !hasNominalMember(type, annotation) && membersOf(type).every(isConstraining);
 
 const boundOfParameter = (parameter: ParameterDeclaration): HandlerBound => {
   const annotation = parameter.getTypeNode();
