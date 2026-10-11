@@ -33,14 +33,15 @@ const INDENTATIONS: readonly IndentationText[] = Object.values(IndentationText);
 const leadingWhitespace = (node: Node): string =>
   node.getSourceFile().getFullText().slice(node.getStartLinePos(), node.getStart());
 
-const indentationOf = (config: ObjectLiteralExpression): IndentationText => {
+const indentationOf = (config: ObjectLiteralExpression): IndentationText | undefined => {
   const first = config.getProperties()[0];
   const written = first === undefined ? undefined : leadingWhitespace(first);
-  return INDENTATIONS.find((indentation) => indentation === written) ?? IndentationText.TwoSpaces;
+  return INDENTATIONS.find((indentation) => indentation === written);
 };
 
 const useIndentationOf = (file: SourceFile): void => {
-  file.getProject().manipulationSettings.set({ indentationText: indentationOf(configObject(file)) });
+  const indentationText = indentationOf(configObject(file));
+  if (indentationText !== undefined) file.getProject().manipulationSettings.set({ indentationText });
 };
 
 const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {

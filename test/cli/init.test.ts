@@ -547,6 +547,16 @@ describe('init', () => {
     expect(readConfig(dir)).toContain("import { defineDomain, lifecycle } from 'domain-integrity';");
   });
 
+  it('indents the lifecycles it adds to an empty hand-written config as before', async () => {
+    const dir = writeProject({
+      ...TICKET_SOURCES,
+      'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n",
+    });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain('defineDomain({\n    lifecycles: [');
+  });
+
   it('writes runtime extensions when the project resolves modules as NodeNext', async () => {
     const dir = writeProject(TICKET_SOURCES, { module: 'NodeNext', moduleResolution: 'NodeNext' });
     await run(['init', '--yes'], captureIo(dir).io);
