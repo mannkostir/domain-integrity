@@ -42,6 +42,14 @@ describe('registerCallRecogniser', () => {
     ]);
   });
 
+  it('ignores a this parameter in a function callback with a string key', () => {
+    expect(run("DomainEvents.register(function (this: Logger, e: Paid) { return e; }, 'paid.topic');")).toEqual(['unresolved@4 (Paid)']);
+  });
+
+  it('leaves the payload of an unresolved callback with several parameters unreadable', () => {
+    expect(run("DomainEvents.register((meta: Failed, e: Paid) => undefined, 'paid.topic');")).toEqual(['unresolved@4']);
+  });
+
   it('reads no site from a call without a callback first and a key second', () => {
     expect(
       run(

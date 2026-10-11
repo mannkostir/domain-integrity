@@ -9,7 +9,7 @@ const payloadsOf = (signature: string): readonly string[] => {
     '/src/handler.ts': `import { Paid, Failed, Shape } from './events';\nimport { LibraryEvent } from '../types/lib';\nexport class H { ${signature} }`,
   });
   const method = project.getSourceFileOrThrow('/src/handler.ts').getClassOrThrow('H').getMethods()[0]!;
-  const payload = readPayload(method.getParameters()[0], (cls) => !cls.getSourceFile().isDeclarationFile());
+  const payload = readPayload(method.getParameters(), (cls) => !cls.getSourceFile().isDeclarationFile());
   return payload.kind === 'classes' ? payload.classes.map((cls) => cls.getName() ?? '') : ['unreadable'];
 };
 
@@ -20,6 +20,10 @@ describe('readPayload', () => {
 
   it('reads a union of project classes', () => {
     expect(payloadsOf('handle(event: Paid | Failed) {}')).toEqual(['Paid', 'Failed']);
+  });
+
+  it('ignores a this parameter and reads the first remaining one', () => {
+    expect(payloadsOf('handle(this: H, event: Paid, other: Failed) {}')).toEqual(['Paid']);
   });
 
   it('cannot read interfaces, library classes, any, unknown, generics, untyped or missing parameters', () => {

@@ -44,6 +44,18 @@ describe('decoratorRecogniser', () => {
     ).toEqual(['unresolved@4 (Paid)', 'unresolved@4 (Paid|Failed)', 'unresolved@4']);
   });
 
+  it('ignores a this parameter when reading the payload of an unresolved site', () => {
+    expect(run("export class Listener { @OnEvent('x') on(this: Listener, e: Paid) {} }")).toEqual(['unresolved@4 (Paid)']);
+  });
+
+  it('leaves the payload of an unresolved site with several parameters unreadable', () => {
+    expect(run("export class Listener { @OnEvent('x') on(meta: Failed, e: Paid) {} }")).toEqual(['unresolved@4']);
+  });
+
+  it('ignores a this parameter when reading the payload of a resolved site', () => {
+    expect(run('export class Listener { @OnEvent(Paid) on(this: Listener, e: Failed) {} }')).toEqual(['Paid -> Listener.on (Failed)']);
+  });
+
   it('registers nothing for a library event key but notes it', () => {
     expect(
       run('@EventsHandler(LibraryEvent) export class External { handle(event: LibraryEvent) {} }\n@EventsHandler(Paid, LibraryEvent) export class Mixed { handle(event: Paid) {} }'),

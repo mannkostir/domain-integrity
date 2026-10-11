@@ -1,5 +1,5 @@
 import { ClassDeclaration, Decorator, MethodDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
-import { readPayload } from '../payload';
+import { readPayload, readSolePayload } from '../payload';
 import { decoratorName } from './decorator-name';
 import { RawRegistration, RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass, resolveKeys } from './recogniser';
 
@@ -27,8 +27,9 @@ const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSit
     context.isProject,
   );
   if (target === undefined) return { kind: 'unresolved', node: decorator, payload: { kind: 'unreadable' } };
-  const payload = readPayload(target.method?.getParameters()[0], context.isProject);
-  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: decorator, payload };
+  const parameters = target.method?.getParameters() ?? [];
+  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: decorator, payload: readSolePayload(parameters, context.isProject) };
+  const payload = readPayload(parameters, context.isProject);
   const registrations: RawRegistration[] = keys.classes.map(({ cls, key }) => ({
     event: cls,
     key,
