@@ -1,10 +1,12 @@
 import { ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { SourceIndex } from '../shared/source-index';
 import { Location } from './model';
 
 export type ReferenceContext = {
   readonly analysed: ReadonlySet<SourceFile>;
   readonly isTest: (file: SourceFile) => boolean;
   readonly keys: ReadonlySet<Node>;
+  readonly index: SourceIndex;
 };
 
 export type ReferenceFacts = {
@@ -85,13 +87,9 @@ const constructsItself = (cls: ClassDeclaration): boolean =>
     return Node.isThisExpression(target) || (Node.isPropertyAccessExpression(target) && Node.isThisExpression(target.getExpression()));
   });
 
-const namedInString = (cls: ClassDeclaration, analysed: ReadonlySet<SourceFile>): boolean => {
+const namedInString = (cls: ClassDeclaration, index: SourceIndex): boolean => {
   const name = cls.getName();
-  return [...analysed].some((file) =>
-    file
-      .getDescendants()
-      .some((node) => (Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)) && node.getLiteralText() === name),
-  );
+  return name !== undefined && index.literalsWithText(name).length > 0;
 };
 
 export const referenceFacts = (cls: ClassDeclaration, context: ReferenceContext): ReferenceFacts => {
@@ -108,6 +106,6 @@ export const referenceFacts = (cls: ClassDeclaration, context: ReferenceContext)
     escaped: has('escape') || constructsItself(cls),
     instanceofChecked: has('instanceof'),
     typedHandling: has('typed-handling'),
-    namedInString: namedInString(cls, context.analysed),
+    namedInString: namedInString(cls, context.index),
   };
 };

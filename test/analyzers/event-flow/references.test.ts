@@ -1,6 +1,7 @@
 import { Node, SyntaxKind } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { ReferenceFacts, referenceFacts } from '../../../src/analyzers/event-flow/references';
+import { SourceIndex } from '../../../src/analyzers/shared/source-index';
 import { inMemoryProject } from '../../helpers/in-memory';
 
 const factsOf = (sources: Readonly<Record<string, string>>, keyText?: string): ReferenceFacts => {
@@ -12,7 +13,7 @@ const factsOf = (sources: Readonly<Record<string, string>>, keyText?: string): R
       : [...analysed].flatMap((file) => file.getDescendantsOfKind(SyntaxKind.CallExpression)).flatMap((call) => call.getArguments().filter((argument) => argument.getText() === keyText)),
   );
   const paid = project.getSourceFileOrThrow('/app/src/events.ts').getClassOrThrow('Paid');
-  return referenceFacts(paid, { analysed, isTest: (file) => file.getFilePath().endsWith('.spec.ts'), keys });
+  return referenceFacts(paid, { analysed, isTest: (file) => file.getFilePath().endsWith('.spec.ts'), keys, index: new SourceIndex([...analysed]) });
 };
 
 const QUIET: ReferenceFacts = { constructions: [], subclassed: false, escaped: false, instanceofChecked: false, typedHandling: false, namedInString: false };
@@ -62,7 +63,7 @@ describe('referenceFacts', () => {
     const project = inMemoryProject({ '/app/src/events.ts': 'export class Paid { static make() { return new this(); } }' });
     const paid = project.getSourceFileOrThrow('/app/src/events.ts').getClassOrThrow('Paid');
 
-    const facts = referenceFacts(paid, { analysed: new Set(project.getSourceFiles()), isTest: () => false, keys: new Set() });
+    const facts = referenceFacts(paid, { analysed: new Set(project.getSourceFiles()), isTest: () => false, keys: new Set(), index: new SourceIndex(project.getSourceFiles()) });
 
     expect([facts.escaped, facts.constructions]).toEqual([true, []]);
   });
