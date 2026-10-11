@@ -92,6 +92,36 @@ export class DomainEvent { readonly occurredAt = new Date(); }
 export class Shipped<T = unknown> { constructor(readonly body: T, readonly c?: string) {} }
 `;
 
+const LITERAL_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped { readonly type = 'shipped'; constructor(readonly orderId: string) {} }
+`;
+
+const ENUM_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export enum Kind { Shipped = 'shipped', Created = 'created' }
+export class Shipped { readonly kind = Kind.Shipped; constructor(readonly orderId: string) {} }
+`;
+
+const PROTECTED_BASE_EVENTS = `
+export class DomainEvent { protected readonly occurredAt = new Date(); }
+export class Shipped extends DomainEvent { constructor(readonly orderId: string) { super(); } }
+`;
+
+const PRIVATE_PARAMETER_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped { constructor(private readonly orderId: string) {} }
+`;
+
+const UNRESOLVED_PROPERTY_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped { constructor(readonly orderId: string, readonly meta: NotDeclared) {} }
+`;
+
+const SHIPPED_MESSAGE = 'export interface ShippedMessage { topic: string; payload: Shipped }\n';
+
+const ISSUE_CREATED = 'export class OrderCreated { constructor(readonly orderId: string, readonly customerId: string) {} }\n';
+
 describe('unhandledEvent with unresolved registrations', () => {
   it('stays silent for a structurally identical consumer-owned class', () => {
     expect(
@@ -329,5 +359,118 @@ describe('unhandledEvent with unresolved registrations', () => {
 
   it('reports an event whose type is incomparable with a built-in object type annotation', () => {
     expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: Function) {} }", CARRIER_EVENTS)).toEqual(['Shipped']);
+  });
+
+  it('stays silent for an envelope interface whose property is the event', () => {
+    expect(findingsFor('listener.ts', `${SHIPPED_MESSAGE}export class Listener { @OnEvent('order.shipped') on(message: ShippedMessage) {} }`)).toEqual([]);
+  });
+
+  it('stays silent for an array alias of the event', () => {
+    expect(findingsFor('listener.ts', "export type ShippedBatch = readonly Shipped[];\nexport class Listener { @OnEvent('order.shipped') on(batch: ShippedBatch) {} }")).toEqual([]);
+  });
+
+  it('stays silent for a generic envelope alias over the event', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "interface Envelope<P> { topic: string; payload: P }\nexport type ShippedEnvelope = Envelope<Shipped>;\nexport class Listener { @OnEvent('order.shipped') on(message: ShippedEnvelope) {} }",
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for an envelope interface imported from another file', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "import { ShippedMessage } from './messages';\nexport class Listener { @OnEvent('order.shipped') on(message: ShippedMessage) {} }",
+        SHIPPED_EVENTS,
+        { '/app/src/messages.ts': `import { Shipped } from './events';\n${SHIPPED_MESSAGE}` },
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a parameter type with an unresolved property type', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(event: { orderId: string; meta: NotDeclared }) {} }")).toEqual([]);
+  });
+
+  it('stays silent for a parameter interface extending an unresolved import', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "import { LibEvent } from 'missing-lib';\nexport interface ShippedLike extends LibEvent { carrier: string }\nexport class Listener { @OnEvent('order.shipped') on(event: ShippedLike) {} }",
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a parameter interface whose base extends an unresolved import', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "import { LibEvent } from 'missing-lib';\ninterface Base extends LibEvent {}\nexport interface ShippedLike extends Base { carrier: string }\nexport class Listener { @OnEvent('order.shipped') on(event: ShippedLike) {} }",
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for an event with an unresolved property type', () => {
+    expect(
+      findingsFor('listener.ts', "export interface ShippedDto { id: string; at: string }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }", UNRESOLVED_PROPERTY_EVENTS),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a sibling event that differs only in a string discriminant', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "export class OrderCreated { readonly type = 'created'; constructor(readonly orderId: string) {} }\nexport class Listener { @OnEvent(['order.created', 'order.shipped']) on(event: OrderCreated) {} }",
+        LITERAL_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a parameter type that differs only in an enum member discriminant', () => {
+    expect(
+      findingsFor('listener.ts', "import { Kind } from './events';\nexport class Listener { @OnEvent('order.shipped') on(event: { kind: Kind.Created; orderId: string }) {} }", ENUM_EVENTS),
+    ).toEqual([]);
+  });
+
+  it('stays silent for an event with an inherited protected member', () => {
+    expect(
+      findingsFor('listener.ts', "interface Shape { orderId: string; occurredAt: Date }\nexport class Listener { @OnEvent('order.shipped') on(event: Shape) {} }", PROTECTED_BASE_EVENTS),
+    ).toEqual([]);
+  });
+
+  it('stays silent for an event with a private parameter property', () => {
+    expect(findingsFor('listener.ts', "interface Shape { orderId: string }\nexport class Listener { @OnEvent('order.shipped') on(event: Shape) {} }", PRIVATE_PARAMETER_EVENTS)).toEqual([]);
+  });
+
+  it('reports an event incomparable with a consumer-owned class of other fields', () => {
+    expect(findingsFor('listener.ts', `${ISSUE_CREATED}export class Listener { @OnEvent('order.created') on(event: OrderCreated) {} }`)).toEqual(['Shipped']);
+  });
+
+  it('reports an event incomparable with a callback registered in a constructor', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        `${ISSUE_CREATED}export class Bus { register(_h: (e: unknown) => void, _k: unknown): void {} }\nexport class Listener { constructor(bus: Bus) { bus.register((e: OrderCreated) => console.log(e.customerId), 'order.created'); } }`,
+      ),
+    ).toEqual(['Shipped']);
+  });
+
+  it('reports an event incomparable with a trusted data transfer interface', () => {
+    expect(
+      findingsFor('listener.ts', "export interface ShippedDto { id: string; at: string }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }"),
+    ).toEqual(['Shipped']);
+  });
+
+  it('reports an event with a discriminant incomparable with a trusted data transfer interface', () => {
+    expect(
+      findingsFor('listener.ts', "export interface ShippedDto { type: string; id: string }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }", LITERAL_EVENTS),
+    ).toEqual(['Shipped']);
+  });
+
+  it('reports an event incomparable with a data transfer interface that has a method', () => {
+    expect(
+      findingsFor('listener.ts', "export interface ShippedDto { type: string; id: string; toJSON(): object }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }", LITERAL_EVENTS),
+    ).toEqual(['Shipped']);
   });
 });

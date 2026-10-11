@@ -8,7 +8,20 @@ const MAX_TYPES = 1000;
 
 const OVERFLOW: ReachableTypes = { kind: 'overflow' };
 
-const propertyTypesOf = (type: Type, location: Node): readonly Type[] => type.getProperties().map((property) => property.getTypeAtLocation(location));
+const isDefaultLibrary = (declaration: Node): boolean => {
+  const file = declaration.getSourceFile();
+  return file.getProject().getProgram().compilerObject.isSourceFileDefaultLibrary(file.compilerNode);
+};
+
+const isBuiltIn = (type: Type): boolean => {
+  const declarations = type.getSymbol()?.getDeclarations() ?? [];
+  return declarations.length > 0 && declarations.every(isDefaultLibrary);
+};
+
+const hasOwnProperties = (type: Type): boolean => type.isObject() && !isBuiltIn(type);
+
+const propertyTypesOf = (type: Type, location: Node): readonly Type[] =>
+  hasOwnProperties(type) ? type.getProperties().map((property) => property.getTypeAtLocation(location)) : [];
 
 const childrenOf = (type: Type, location: Node): readonly Type[] =>
   type.isTypeParameter()

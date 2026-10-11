@@ -9,7 +9,7 @@ const describeRegistration = (registration: RawRegistration): string => {
   return `${registration.event.getName()} -> ${registration.handler?.getName() ?? '-'}.${registration.method ?? '-'} (${payload})`;
 };
 
-const describeBound = (bound: HandlerBound, node: Node): string => (bound.kind === 'types' ? ` (${bound.types.map((type) => type.getText(node)).join(', ')})` : '');
+const describeBound = (bound: HandlerBound, node: Node): string => (bound.kind === 'types' ? ` (${bound.types.map(({ type }) => type.getText(node)).join(', ')})` : '');
 
 const describeSite = (site: RecognisedSite): string =>
   site.kind === 'unresolved'
