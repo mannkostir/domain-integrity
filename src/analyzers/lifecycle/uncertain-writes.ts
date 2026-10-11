@@ -1,7 +1,7 @@
 import { BinaryExpression, ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { isAssignmentTarget, setsOf } from './assigned';
 import { escapesStateHolder, fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
-import { instanceAccessors, instanceMethods, projectHierarchy } from './members';
+import { instanceAccessors, instanceMethods, projectAncestry } from './members';
 import { AssignedValues, StateField } from './model';
 import { outsideAssignments } from './outside';
 import { hasUnknownWrite } from './values';
@@ -55,7 +55,7 @@ const isScopeBoundary = (node: Node): boolean =>
 const certainWriters = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ReadonlySet<Node> =>
   new Set<Node>([
     ...instanceMethods(cls, aggregateBaseClasses),
-    ...projectHierarchy(cls, aggregateBaseClasses).flatMap((candidate) => candidate.getConstructors()),
+    ...projectAncestry(cls).flatMap((candidate) => candidate.getConstructors()),
   ]);
 
 const isCertain = ({ binary, target }: Assignment, writers: ReadonlySet<Node>): boolean => {
@@ -92,7 +92,7 @@ const escapesOutsideMethods = (classes: readonly ClassDeclaration[], methods: Re
     .some((node) => escapesStateHolder(node) && !isAssignmentTarget(node) && !isModelledEscape(node, methods));
 
 const uncertainInClass = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ((field: StateField) => boolean) => {
-  const classes = [...projectHierarchy(cls, aggregateBaseClasses), ...cls.getDerivedClasses()];
+  const classes = [...projectAncestry(cls), ...cls.getDerivedClasses()];
   if (escapesOutsideMethods(classes, new Set(instanceMethods(cls, aggregateBaseClasses)))) return () => true;
   const assignments = assignmentsIn(classes);
   const otherTargets = [...loopTargets(classes), ...deletedTargets(classes)].filter(isMemberAccess);

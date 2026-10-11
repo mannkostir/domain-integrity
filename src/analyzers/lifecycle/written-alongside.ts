@@ -37,7 +37,7 @@ const interrupts = (node: Node): boolean =>
 
 const mayLeave = (statement: Statement): boolean => [statement, ...statement.getDescendants()].some(interrupts);
 
-const enclosingBlocks = (statement: Statement): Block[] => {
+const enclosingBlocks = (statement: Statement): readonly Block[] => {
   const ancestors = statement.getAncestors();
   const boundary = ancestors.findIndex(Node.isFunctionLikeDeclaration);
   return ancestors.slice(0, boundary === -1 ? ancestors.length : boundary).filter(Node.isBlock);

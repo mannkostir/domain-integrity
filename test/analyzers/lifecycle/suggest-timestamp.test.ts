@@ -498,3 +498,42 @@ describe('terminal suggestion for a timestamp whose later status write follows c
     expect(terminals.get('closedAt')).toEqual([]);
   });
 });
+
+const rootWith = (members: string) => `
+export abstract class AggregateRoot<P extends object = object> {
+  protected props: P;
+  constructor(props: P) {
+    this.props = props;
+  }
+  ${members}
+}
+`;
+
+describe('terminal suggestion for a timestamp on an aggregate whose own base class is named as an aggregate base', () => {
+  it('is kept when a base helper copies a patch into this', () => {
+    const terminals = suggestedTerminals({
+      '/src/aggregate-root.ts': rootWith('protected update(patch: object): void { Object.assign(this, patch); }'),
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, 'stamp(): void { this.update({ closedAt: new Date() }); }'),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a base property initializer passes this to a function', () => {
+    const terminals = suggestedTerminals({
+      '/src/aggregate-root.ts': `declare function register(root: object): void;\n${rootWith('private registered = register(this);')}`,
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, ''),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is dropped when the base only stores its props', () => {
+    const terminals = suggestedTerminals({
+      '/src/aggregate-root.ts': rootWith(''),
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, ''),
+    });
+
+    expect(terminals.get('closedAt')).toEqual([]);
+  });
+});

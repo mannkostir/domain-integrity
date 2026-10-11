@@ -12,8 +12,15 @@ const inheritedBase =
     return base !== undefined && isInheritedFrom(base, aggregateBaseClasses) ? base : undefined;
   };
 
-export const projectHierarchy = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): readonly ClassDeclaration[] =>
+const projectHierarchy = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): readonly ClassDeclaration[] =>
   ancestry(cls, inheritedBase(new Set(aggregateBaseClasses))).chain;
+
+const projectBase = (cls: ClassDeclaration): ClassDeclaration | undefined => {
+  const base = cls.getBaseClass();
+  return base !== undefined && !isLibraryNode(base) ? base : undefined;
+};
+
+export const projectAncestry = (cls: ClassDeclaration): readonly ClassDeclaration[] => ancestry(cls, projectBase).chain;
 
 export const instanceMethods = (
   cls: ClassDeclaration,
