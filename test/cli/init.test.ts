@@ -136,6 +136,59 @@ describe('init --base-class', () => {
   });
 });
 
+const NO_AGGREGATE_SOURCES = { 'src/a.ts': 'export const a = 1;\n' };
+
+const NESTED_NO_AGGREGATE_SOURCES = {
+  'sub/tsconfig.json': JSON.stringify({ compilerOptions: { strict: true }, include: ['src'] }),
+  'sub/src/a.ts': 'export const a = 1;\n',
+};
+
+describe('init without aggregates', () => {
+  it('ends with the init command to run with the default paths', async () => {
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES));
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toMatch(/: npx domain-integrity init --base-class <Name> --yes\n$/);
+  });
+
+  it('keeps the searched base classes in the message', async () => {
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES));
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toContain('No aggregates found. Searched for classes extending or implementing: AggregateRoot, Entity.');
+  });
+
+  it('tells the user to repeat the option for every base class', async () => {
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES));
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toContain('repeating --base-class for each one');
+  });
+
+  it('leaves --yes out of the command when it was not given', async () => {
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES), [true]);
+    await run(['init'], io);
+
+    expect(stderr()).toMatch(/: npx domain-integrity init --base-class <Name>\n$/);
+  });
+
+  it('includes the project and config paths relative to the working directory when they are not the defaults', async () => {
+    const { io, stderr } = captureIo(writeProject(NESTED_NO_AGGREGATE_SOURCES));
+    await run(['init', '--yes', '-p', 'sub/tsconfig.json', '-c', 'sub/domain.config.ts'], io);
+
+    expect(stderr()).toMatch(
+      /: npx domain-integrity init --base-class <Name> -p sub\/tsconfig\.json -c sub\/domain\.config\.ts --yes\n$/,
+    );
+  });
+
+  it('exits 2 and writes no config', async () => {
+    const dir = writeProject(NO_AGGREGATE_SOURCES);
+    const exitCode = await run(['init', '--yes'], captureIo(dir).io);
+
+    expect({ exitCode, written: existsSync(join(dir, 'domain.config.ts')) }).toEqual({ exitCode: 2, written: false });
+  });
+});
+
 describe('init', () => {
   it('writes a config that check can read', async () => {
     const dir = writeProject(TICKET_SOURCES);

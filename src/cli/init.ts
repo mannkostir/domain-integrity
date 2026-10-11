@@ -7,9 +7,9 @@ import { ProjectError, UsageError } from '../engine/errors';
 import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
 import { addLifecycles, openConfig, recordBaseClasses } from './config-writer';
+import { initRetryCommand, noAggregatesForInitMessage } from './init-retry';
 import { Io, Paths } from './io';
 import { moduleSpecifiers } from './module-specifier';
-import { noAggregatesMessage } from './session';
 
 const describeSuggestion = (suggestion: LifecycleSuggestion, root: string): string => {
   const fields = suggestion.fields
@@ -65,7 +65,9 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   const existing = startingConfig(project, paths.config, options.baseClass);
   const declaration = existing ? readDeclaration(existing) : DEFAULT_DECLARATION;
   const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, paths.root, existing), root: paths.root, configFile: existing });
-  if (lifecycleAnalyzer.isEmpty(model)) throw new ProjectError(noAggregatesMessage(declaration));
+  if (lifecycleAnalyzer.isEmpty(model)) {
+    throw new ProjectError(noAggregatesForInitMessage(declaration, initRetryCommand(paths, io.cwd, options.yes === true)));
+  }
   const suggestions = lifecycleAnalyzer.suggest(model);
   if (suggestions.length === 0) {
     const allDeclared = model.aggregates.every((aggregate) => aggregate.declared);

@@ -8,8 +8,11 @@ import { Paths } from './io';
 
 export type Session = { readonly results: readonly AnalysisResult[] };
 
-export const noAggregatesMessage = (declaration: DomainDeclaration): string =>
-  `No aggregates found. Searched for classes extending or implementing: ${declaration.aggregateBaseClasses.join(', ')}. Set "aggregateBaseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregateBaseClasses: ['MyAggregateBase'] })`;
+export const noAggregatesFound = (declaration: DomainDeclaration): string =>
+  `No aggregates found. Searched for classes extending or implementing: ${declaration.aggregateBaseClasses.join(', ')}.`;
+
+const noAggregatesMessage = (declaration: DomainDeclaration): string =>
+  `${noAggregatesFound(declaration)} Set "aggregateBaseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregateBaseClasses: ['MyAggregateBase'] })`;
 
 export const nothingToAnalyseMessage = (declaration: DomainDeclaration): string =>
   `${noAggregatesMessage(declaration)} No event handlers were found either. Recognised handlers use the decorators ${declaration.events.handlerDecorators.join(', ')} (set "events.handlerDecorators" for your own), the methods ${declaration.events.registerMethods.join(', ')} (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().`;
