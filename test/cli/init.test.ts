@@ -183,10 +183,12 @@ describe('init --base-class', () => {
 
 const NO_AGGREGATE_SOURCES = { 'src/a.ts': 'export const a = 1;\n' };
 
-const NESTED_NO_AGGREGATE_SOURCES = {
-  'sub/tsconfig.json': JSON.stringify({ compilerOptions: { strict: true }, include: ['src'] }),
-  'sub/src/a.ts': 'export const a = 1;\n',
-};
+const noAggregateSourcesIn = (dir: string) => ({
+  [`${dir}/tsconfig.json`]: JSON.stringify({ compilerOptions: { strict: true }, include: ['src'] }),
+  [`${dir}/src/a.ts`]: 'export const a = 1;\n',
+});
+
+const NESTED_NO_AGGREGATE_SOURCES = noAggregateSourcesIn('sub');
 
 describe('init without aggregates', () => {
   it('ends with the init command to run with the default paths', async () => {
@@ -224,6 +226,20 @@ describe('init without aggregates', () => {
     expect(stderr()).toMatch(
       /: npx domain-integrity init --base-class <Name> -p sub\/tsconfig\.json -c sub\/domain\.config\.ts --yes\n$/,
     );
+  });
+
+  it('single-quotes project and config paths that contain a space', async () => {
+    const { io, stderr } = captureIo(writeProject(noAggregateSourcesIn('my sub')));
+    await run(['init', '--yes', '-p', 'my sub/tsconfig.json', '-c', 'my sub/domain.config.ts'], io);
+
+    expect(stderr()).toMatch(/ -p 'my sub\/tsconfig\.json' -c 'my sub\/domain\.config\.ts' --yes\n$/);
+  });
+
+  it('escapes a single quote inside a quoted path', async () => {
+    const { io, stderr } = captureIo(writeProject(noAggregateSourcesIn("it's")));
+    await run(['init', '--yes', '-p', "it's/tsconfig.json"], io);
+
+    expect(stderr()).toContain(" -p 'it'\\''s/tsconfig.json' ");
   });
 
   it('exits 2 and writes no config', async () => {
