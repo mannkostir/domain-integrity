@@ -1,4 +1,5 @@
 import { ClassDeclaration, SyntaxKind } from 'ts-morph';
+import { groupedBy } from '../shared/grouping';
 import { SourceIndex } from '../shared/source-index';
 import { inheritanceChain } from './field-ref';
 
@@ -7,17 +8,7 @@ type SubclassesByAncestor = ReadonlyMap<ClassDeclaration, readonly ClassDeclarat
 const ancestorsOf = (cls: ClassDeclaration): readonly ClassDeclaration[] =>
   [...new Set(inheritanceChain(cls))].filter((ancestor) => ancestor !== cls);
 
-const subclassesByAncestor = (classes: readonly ClassDeclaration[]): SubclassesByAncestor => {
-  const subclasses = new Map<ClassDeclaration, ClassDeclaration[]>();
-  classes.forEach((cls) =>
-    ancestorsOf(cls).forEach((ancestor) => {
-      const known = subclasses.get(ancestor);
-      if (known === undefined) subclasses.set(ancestor, [cls]);
-      else known.push(cls);
-    }),
-  );
-  return subclasses;
-};
+const subclassesByAncestor = (classes: readonly ClassDeclaration[]): SubclassesByAncestor => groupedBy(classes, ancestorsOf);
 
 export class Subclasses {
   private byAncestor: SubclassesByAncestor | undefined;

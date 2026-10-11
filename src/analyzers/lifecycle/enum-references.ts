@@ -1,4 +1,5 @@
 import { EnumDeclaration, Identifier, Node, SyntaxKind } from 'ts-morph';
+import { groupedBy } from '../shared/grouping';
 import { SourceIndex } from '../shared/source-index';
 
 type ReferencesByEnum = ReadonlyMap<EnumDeclaration, readonly Identifier[]>;
@@ -20,19 +21,11 @@ const referencedEnums = (identifier: Identifier): readonly EnumDeclaration[] => 
   return [...new Set(target?.getDeclarations() ?? [])].filter(Node.isEnumDeclaration);
 };
 
-const referencesByEnum = (identifiers: readonly Identifier[]): ReferencesByEnum => {
-  const references = new Map<EnumDeclaration, Identifier[]>();
-  identifiers
-    .filter((identifier) => !isModuleBinding(identifier))
-    .forEach((identifier) =>
-      referencedEnums(identifier).forEach((declaration) => {
-        const known = references.get(declaration);
-        if (known === undefined) references.set(declaration, [identifier]);
-        else known.push(identifier);
-      }),
-    );
-  return references;
-};
+const referencesByEnum = (identifiers: readonly Identifier[]): ReferencesByEnum =>
+  groupedBy(
+    identifiers.filter((identifier) => !isModuleBinding(identifier)),
+    referencedEnums,
+  );
 
 export class EnumReferences {
   private byEnum: ReferencesByEnum | undefined;
