@@ -28,6 +28,21 @@ const configObject = (file: SourceFile): ObjectLiteralExpression => {
   return config;
 };
 
+const INDENTATIONS: readonly IndentationText[] = Object.values(IndentationText);
+
+const leadingWhitespace = (node: Node): string =>
+  node.getSourceFile().getFullText().slice(node.getStartLinePos(), node.getStart());
+
+const indentationOf = (config: ObjectLiteralExpression): IndentationText => {
+  const first = config.getProperties()[0];
+  const written = first === undefined ? undefined : leadingWhitespace(first);
+  return INDENTATIONS.find((indentation) => indentation === written) ?? IndentationText.TwoSpaces;
+};
+
+const useIndentationOf = (file: SourceFile): void => {
+  file.getProject().manipulationSettings.set({ indentationText: indentationOf(configObject(file)) });
+};
+
 const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
   const config = configObject(file);
   const property =
@@ -56,6 +71,7 @@ export const recordBaseClasses = (
   names: readonly string[],
   implicitBaseClasses: readonly string[],
 ): void => {
+  useIndentationOf(file);
   const config = configObject(file);
   const property = config.getProperty('aggregateBaseClasses');
   if (property === undefined) {
@@ -158,6 +174,7 @@ export const addLifecycles = (
   suggestions: readonly LifecycleSuggestion[],
 ): void => {
   useSingleQuotes(file);
+  useIndentationOf(file);
   const lifecycles = lifecyclesArray(file);
   ensureNamedImport(file, 'lifecycle', 'domain-integrity');
   suggestions.forEach((suggestion) => lifecycles.addElement(lifecycleSource(file, specifierOf, suggestion)));

@@ -188,6 +188,16 @@ describe('init --base-class', () => {
     expect(readConfig(dir)).toContain("\n    aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'],\n    lifecycles: [");
   });
 
+  it('keeps the two-space indentation of an existing config when recording the base class', async () => {
+    const dir = writeProject({
+      ...MODEL_SOURCES,
+      'domain.config.ts': FOUR_SPACE_CONFIG.replace('    lifecycles', '  lifecycles'),
+    });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("\n  aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'],\n  lifecycles: [");
+  });
+
   it('reports a type error of an existing config at the line the user wrote', async () => {
     const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': CONFIG_WITH_TYPE_ERROR_ON_LINE_6 });
     const withoutFlag = captureIo(dir);
