@@ -12,7 +12,7 @@ node bench/time.mjs --runs 3 /tmp/bench/a50-f500 /tmp/bench/a200-f2000 /tmp/benc
 
 `generate.mjs` writes aggregates with an enum status and a union kind (every fourth one undeclared), their events and
 handlers, and services that read, compare and sometimes assign the status from outside. `--events`, `--dto-members` and
-`--sites` add in-process events and unresolved handler registrations typed with one DTO union. `--tool` sets the
+`--sites` add in-process events and unresolved handler registrations typed with one DTO union. `--out` is replaced on every run, but only when it is missing, empty, or was written by `generate.mjs` before. `--tool` sets the
 `node_modules/domain-integrity` link the generated config imports (default: this checkout).
 
 `time.mjs` runs `check --format json` on each project, prints the median of `--runs` runs, every run, the exit codes

@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -208,7 +208,18 @@ ${lifecycles.join('\n')}
 `;
 };
 
+const MARKER = '.domain-integrity-bench';
+
+const isReplaceable = (directory) =>
+  !existsSync(directory) || readdirSync(directory).length === 0 || existsSync(join(directory, MARKER));
+
+if (!isReplaceable(out)) {
+  process.stderr.write(`refusing to replace ${out}: it is not empty and was not written by generate.mjs\n`);
+  process.exit(2);
+}
+
 rmSync(out, { recursive: true, force: true });
+write(MARKER, '');
 
 write(
   'tsconfig.json',
