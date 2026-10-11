@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const PACKAGE_NAME = 'domain-integrity';
 
-export const UNKNOWN_VERSION = 'unknown version';
+const UNKNOWN_VERSION = 'unknown version';
 
 const ownVersion = (manifest: unknown): string | undefined =>
   typeof manifest === 'object' &&

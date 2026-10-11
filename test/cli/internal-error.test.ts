@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AnalyzerRun, DEFAULT_ANALYZERS } from '../../src/analysis';
+import { AnalyzerRun } from '../../src/analysis';
 import { AnalysisInput, Analyzer, analyse } from '../../src/analyzer';
+import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
 import { packageVersion } from '../../src/cli/version';
 import { TICKET_PROJECT, captureIo, writeProject } from '../helpers/disk';
@@ -27,12 +28,25 @@ const broken: Analyzer<string, never> = {
 
 const failingRun: AnalyzerRun = (input: AnalysisInput) => analyse(broken, input);
 
-const ANALYZERS: readonly AnalyzerRun[] = [failingRun, ...DEFAULT_ANALYZERS.slice(0, 1)];
+const ANALYZERS: readonly AnalyzerRun[] = [failingRun, (input) => analyse(lifecycleAnalyzer, input)];
 
-const runBroken = async (argv: readonly string[]) => {
+const DEEP_STACK = ['Error: deep', '    at f1 (a.js:1:1)', '    at f2 (a.js:2:1)', '    at f3 (a.js:3:1)', '    at f4 (a.js:4:1)', '    at f5 (a.js:5:1)', '    at f6 (a.js:6:1)'].join('\n');
+
+const throwing = (thrown: unknown): AnalyzerRun => (input: AnalysisInput) =>
+  analyse(
+    {
+      ...broken,
+      check: () => {
+        throw thrown;
+      },
+    },
+    input,
+  );
+
+const runBroken = async (argv: readonly string[], analyzers: readonly AnalyzerRun[] = ANALYZERS) => {
   const dir = writeProject(TICKET_PROJECT);
   const { io, stdout, stderr } = captureIo(dir);
-  const code = await run(argv, io, ANALYZERS);
+  const code = await run(argv, io, analyzers);
   return { dir, code, stdout: stdout(), stderr: stderr() };
 };
 
@@ -109,6 +123,18 @@ describe('an analyzer that throws', () => {
     const { io, stderr } = captureIo(dir);
 
     expect({ code: await run(['show'], io, [failingRun]), report: stderr().includes(REPORT) }).toEqual({ code: 2, report: true });
+  });
+
+  it('shortens the trace to the message and five frames', async () => {
+    const { stderr } = await runBroken(['check'], [throwing(Object.assign(new Error('deep'), { stack: DEEP_STACK }))]);
+
+    expect({ fifth: stderr.includes('at f5'), sixth: stderr.includes('at f6') }).toEqual({ fifth: true, sixth: false });
+  });
+
+  it('reports a thrown value that cannot be converted to a string', async () => {
+    const { code, stderr } = await runBroken(['check'], [throwing(Object.create(null))]);
+
+    expect({ code, reported: stderr.includes(`${REPORT}\n{}`) }).toEqual({ code: 2, reported: true });
   });
 });
 
