@@ -16,9 +16,15 @@ const projectClassOf = (node: TypeNode, isProject: ProjectClasses): ClassDeclara
 
 const members = (node: TypeNode): readonly TypeNode[] => (Node.isUnionTypeNode(node) ? node.getTypeNodes() : [node]);
 
-export const readPayload = (parameter: ParameterDeclaration | undefined, isProject: ProjectClasses): RawPayload => {
+const withoutThis = (parameters: readonly ParameterDeclaration[]): readonly ParameterDeclaration[] =>
+  parameters.filter((parameter) => parameter.getName() !== 'this');
+
+const payloadOf = (parameter: ParameterDeclaration | undefined, isProject: ProjectClasses): RawPayload => {
   const typeNode = parameter?.getTypeNode();
   if (parameter === undefined || typeNode === undefined) return UNREADABLE;
   const classes = members(typeNode).map((member) => projectClassOf(member, isProject));
   return classes.every((cls): cls is ClassDeclaration => cls !== undefined) ? { kind: 'classes', classes, node: parameter } : UNREADABLE;
 };
+
+export const readPayload = (parameters: readonly ParameterDeclaration[], isProject: ProjectClasses): RawPayload =>
+  payloadOf(withoutThis(parameters)[0], isProject);

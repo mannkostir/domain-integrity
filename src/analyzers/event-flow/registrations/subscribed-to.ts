@@ -1,4 +1,5 @@
 import { ArrayLiteralExpression, MethodDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { UNBOUNDED } from './handler-bound';
 import { RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass, resolveKeys } from './recogniser';
 
 const returnedArray = (method: MethodDeclaration): ArrayLiteralExpression | undefined => {
@@ -12,9 +13,9 @@ const returnedArray = (method: MethodDeclaration): ArrayLiteralExpression | unde
 const siteOf = (method: MethodDeclaration, context: RecogniserContext): RecognisedSite => {
   const array = returnedArray(method);
   const handler = enclosingClass(method);
-  if (array === undefined || handler === undefined) return { kind: 'unresolved', node: method };
+  if (array === undefined || handler === undefined) return { kind: 'unresolved', node: method, bound: UNBOUNDED };
   const keys = resolveKeys(array.getElements(), context.isProject);
-  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: method };
+  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: method, bound: UNBOUNDED };
   return {
     kind: 'resolved',
     node: method,
