@@ -71,6 +71,7 @@ export const aggregate = (overrides: Partial<AggregateModel>): AggregateModel =>
   initial: new Map([['status', assigned('PENDING')]]),
   outside: [],
   mentioned: new Map(),
+  writtenOutsideMethods: new Set(),
   ...overrides,
 });
 

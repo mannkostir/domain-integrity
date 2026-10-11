@@ -1,5 +1,5 @@
 import { AggregateModel, FieldBehaviour, LifecycleModel, MethodModel, StateField, StateValue } from './model';
-import { writesField } from './values';
+import { hasUnknownWrite, writesField } from './values';
 
 export type FieldSuggestion = { readonly field: StateField; readonly terminal: readonly StateValue[] };
 
@@ -42,6 +42,13 @@ const settlesLifecycle = (method: MethodModel, lifecycleGuesses: TerminalGuesses
 const setsAnyOf = (method: MethodModel, field: StateField, values: readonly StateValue[]): boolean =>
   values.some((value) => method.fields.get(field.name)?.sets.tokens.has(value.token) === true);
 
+const writtenUncertainly = (aggregate: AggregateModel, field: StateField): boolean =>
+  aggregate.writtenOutsideMethods.has(field.name) ||
+  aggregate.methods.some((method) => {
+    const behaviour = method.fields.get(field.name);
+    return behaviour !== undefined && hasUnknownWrite(behaviour.sets);
+  });
+
 const coveredByLifecycle = (
   aggregate: AggregateModel,
   field: StateField,
@@ -49,6 +56,7 @@ const coveredByLifecycle = (
   lifecycleGuesses: TerminalGuesses,
 ): boolean =>
   field.kind === 'nullable' &&
+  !writtenUncertainly(aggregate, field) &&
   aggregate.methods
     .filter((method) => setsAnyOf(method, field, guess))
     .every((method) => settlesLifecycle(method, lifecycleGuesses));

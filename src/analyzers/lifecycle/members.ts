@@ -1,4 +1,4 @@
-import { ClassDeclaration, MethodDeclaration } from 'ts-morph';
+import { ClassDeclaration, GetAccessorDeclaration, MethodDeclaration, SetAccessorDeclaration } from 'ts-morph';
 import { isLibraryNode } from '../shared/library';
 
 const inheritedClasses = (cls: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): readonly ClassDeclaration[] => {
@@ -7,12 +7,16 @@ const inheritedClasses = (cls: ClassDeclaration, aggregateBaseClasses: ReadonlyS
   return [base, ...inheritedClasses(base, aggregateBaseClasses)];
 };
 
+const projectHierarchy = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): readonly ClassDeclaration[] => [
+  cls,
+  ...inheritedClasses(cls, new Set(aggregateBaseClasses)),
+];
+
 export const instanceMethods = (
   cls: ClassDeclaration,
   aggregateBaseClasses: readonly string[],
 ): readonly MethodDeclaration[] => {
-  const hierarchy = [cls, ...inheritedClasses(cls, new Set(aggregateBaseClasses))];
-  const byName = hierarchy
+  const byName = projectHierarchy(cls, aggregateBaseClasses)
     .flatMap((candidate) => candidate.getInstanceMethods())
     .reduce<ReadonlyMap<string, MethodDeclaration>>(
       (found, method) => (found.has(method.getName()) ? found : new Map([...found, [method.getName(), method]])),
@@ -20,3 +24,11 @@ export const instanceMethods = (
     );
   return [...byName.values()];
 };
+
+export const instanceAccessors = (
+  cls: ClassDeclaration,
+  aggregateBaseClasses: readonly string[],
+): readonly (GetAccessorDeclaration | SetAccessorDeclaration)[] =>
+  projectHierarchy(cls, aggregateBaseClasses)
+    .flatMap((candidate) => [...candidate.getGetAccessors(), ...candidate.getSetAccessors()])
+    .filter((accessor) => !accessor.isStatic());
