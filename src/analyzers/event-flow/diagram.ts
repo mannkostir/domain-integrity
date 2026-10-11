@@ -1,4 +1,4 @@
-import { DiagramOutcome } from '../../analyzer';
+import { AnalyzerDiagram } from '../../analyzer';
 import { escapeLabel } from '../mermaid-label';
 import { handlerLabel } from './checks/handler-label';
 import { ClassRef, EventFlowModel } from './model';
@@ -24,7 +24,7 @@ const render = (model: EventFlowModel, events: readonly ClassRef[]): string => {
   return ['## Event flows', '', '```mermaid', 'flowchart LR', ...lines, '```'].join('\n');
 };
 
-export const eventFlowDiagram = (model: EventFlowModel, only: string | undefined): DiagramOutcome => {
+export const eventFlowDiagram = (model: EventFlowModel, only: string | undefined): AnalyzerDiagram => {
   const events = handledEvents(model);
   if (only === undefined) return { kind: 'diagram', text: render(model, events) };
   const matches = events.filter((event) => isNamed(event, only));

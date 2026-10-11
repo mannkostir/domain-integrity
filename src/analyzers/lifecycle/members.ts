@@ -1,17 +1,22 @@
 import { ClassDeclaration, MethodDeclaration } from 'ts-morph';
+import { ancestry } from '../shared/ancestry';
 import { isLibraryNode } from '../shared/library';
 
-const inheritedClasses = (cls: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): readonly ClassDeclaration[] => {
-  const base = cls.getBaseClass();
-  if (base === undefined || isLibraryNode(base) || aggregateBaseClasses.has(base.getName() ?? '')) return [];
-  return [base, ...inheritedClasses(base, aggregateBaseClasses)];
-};
+const isInheritedFrom = (base: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): boolean =>
+  !isLibraryNode(base) && !aggregateBaseClasses.has(base.getName() ?? '');
+
+const inheritedBase =
+  (aggregateBaseClasses: ReadonlySet<string>) =>
+  (cls: ClassDeclaration): ClassDeclaration | undefined => {
+    const base = cls.getBaseClass();
+    return base !== undefined && isInheritedFrom(base, aggregateBaseClasses) ? base : undefined;
+  };
 
 export const instanceMethods = (
   cls: ClassDeclaration,
   aggregateBaseClasses: readonly string[],
 ): readonly MethodDeclaration[] => {
-  const hierarchy = [cls, ...inheritedClasses(cls, new Set(aggregateBaseClasses))];
+  const hierarchy = ancestry(cls, inheritedBase(new Set(aggregateBaseClasses))).chain;
   const byName = hierarchy
     .flatMap((candidate) => candidate.getInstanceMethods())
     .reduce<ReadonlyMap<string, MethodDeclaration>>(

@@ -39,7 +39,7 @@ runs:
         echo "sarif-file=domain-integrity.sarif" >> "$GITHUB_OUTPUT"
         if [ -s domain-integrity.sarif ]; then echo "sarif=true" >> "$GITHUB_OUTPUT"; else echo "sarif=false" >> "$GITHUB_OUTPUT"; fi
     - uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d
-      if: always() && inputs.upload == 'true' && steps.check.outputs.sarif == 'true'
+      if: always() && inputs.upload == 'true' && steps.check.outputs.sarif == 'true' && steps.check.outputs.code != '2'
       with:
         sarif_file: domain-integrity.sarif
         category: domain-integrity
