@@ -5,6 +5,7 @@ import { run } from '../../src/cli/run';
 import { configSourceFile, loadProject } from '../../src/engine/project';
 import { readDeclaration } from '../../src/engine/read-config';
 import { TICKET_CONFIG, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
+import { AGGREGATE_ROOT } from '../helpers/in-memory';
 
 const readConfig = (dir: string): string => readFileSync(join(dir, 'domain.config.ts'), 'utf8');
 
@@ -32,6 +33,108 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
   finish(): void { if (this.props.status === OrderStatus.${status}) return; this.props.status = OrderStatus.${status}; }
 }
 `;
+
+const baseClassSource = (name: string): string => AGGREGATE_ROOT.replace('class AggregateRoot<', `class ${name}<`);
+
+const invoiceExtending = (base: string, file: string) => `
+import { ${base} } from './${file}';
+export class Invoice extends ${base}<{ state: 'draft' | 'void'; note: string }> {
+  static draft(note: string): Invoice { return new Invoice({ state: 'draft', note }); }
+  annotate(note: string): void { this.props.note = note; }
+  cancel(): void { if (this.props.state === 'void') return; this.props.state = 'void'; }
+}
+`;
+
+const SHIPMENT_EXTENDING_RECORD = `
+import { Record } from './record';
+export class Shipment extends Record<{ state: 'pending' | 'delivered' }> {
+  static pending(): Shipment { return new Shipment({ state: 'pending' }); }
+  deliver(): void { if (this.props.state === 'delivered') return; this.props.state = 'delivered'; }
+}
+`;
+
+const MODEL_SOURCES = {
+  'src/model.ts': baseClassSource('Model'),
+  'src/invoice.ts': invoiceExtending('Model', 'model'),
+};
+
+const declaredBaseClasses = (dir: string): readonly string[] =>
+  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json')), join(dir, 'domain.config.ts'))).aggregateBaseClasses;
+
+describe('init --base-class', () => {
+  it('declares an aggregate extending the named base class', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("lifecycle(Invoice, { states: { state: { terminal: ['void'] } } })");
+  });
+
+  it('records the named base class in the written config', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect({
+      text: readConfig(dir).includes("aggregateBaseClasses: ['Model']"),
+      declared: declaredBaseClasses(dir),
+    }).toEqual({ text: true, declared: ['Model'] });
+  });
+
+  it('lets check find the leak of an aggregate discovered through the named base class', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+
+  it('declares aggregates of every repeated base class and records each name', async () => {
+    const dir = writeProject({
+      ...MODEL_SOURCES,
+      'src/record.ts': baseClassSource('Record'),
+      'src/shipment.ts': SHIPMENT_EXTENDING_RECORD,
+    });
+    await run(['init', '--yes', '--base-class', 'Model', '--base-class', 'Record'], captureIo(dir).io);
+    const config = readConfig(dir);
+
+    expect({
+      invoice: config.includes('lifecycle(Invoice, '),
+      shipment: config.includes('lifecycle(Shipment, '),
+      declared: declaredBaseClasses(dir),
+    }).toEqual({ invoice: true, shipment: true, declared: ['Model', 'Record'] });
+  });
+
+  it('appends the named base class to the base classes an existing config lists', async () => {
+    const dir = writeProject({
+      ...MODEL_SOURCES,
+      'domain.config.ts':
+        "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ aggregateBaseClasses: ['Legacy'], lifecycles: [] });\n",
+    });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(declaredBaseClasses(dir)).toEqual(['Legacy', 'Model']);
+  });
+
+  it('exits 2 and writes nothing for a base class that is not an identifier', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    const exitCode = await run(['init', '--yes', '--base-class', 'Not valid'], captureIo(dir).io);
+
+    expect({ exitCode, written: existsSync(join(dir, 'domain.config.ts')) }).toEqual({ exitCode: 2, written: false });
+  });
+
+  it('names the rejected base class in the error', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    const { io, stderr } = captureIo(dir);
+    await run(['init', '--yes', '--base-class', 'Not valid'], io);
+
+    expect(stderr()).toContain('"Not valid"');
+  });
+
+  it('leaves the base classes out of the config when the option is not given', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).not.toContain('aggregateBaseClasses');
+  });
+});
 
 describe('init', () => {
   it('writes a config that check can read', async () => {

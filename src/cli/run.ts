@@ -3,11 +3,13 @@ import { Command, CommanderError } from 'commander';
 import { DomainIntegrityError } from '../engine/errors';
 import { CheckOptions, checkCommand } from './check';
 import { contextCommand } from './context';
-import { initCommand } from './init';
+import { InitOptions, initCommand } from './init';
 import { Io, Paths } from './io';
 import { showCommand } from './show';
 
 type CommonOptions = { readonly project: string; readonly config: string };
+
+const collect = (value: string, previous: readonly string[] | undefined): readonly string[] => [...(previous ?? []), value];
 
 const pathsFrom = (options: CommonOptions, io: Io): Paths => {
   const tsconfig = resolve(io.cwd, options.project);
@@ -46,7 +48,8 @@ const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
 
   withCommonOptions(program.command('init').description('suggest and write lifecycle declarations'))
     .option('-y, --yes', 'accept every suggestion without prompting')
-    .action(async (options: CommonOptions & { readonly yes?: boolean }) => {
+    .option('--base-class <name>', 'discover aggregates extending or implementing this class or interface (repeatable)', collect)
+    .action(async (options: CommonOptions & InitOptions) => {
       outcome.exitCode = await initCommand(pathsFrom(options, io), options, io);
     });
 

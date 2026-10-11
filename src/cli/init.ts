@@ -1,12 +1,14 @@
 import { relative } from 'node:path';
+import { Project, SourceFile } from 'ts-morph';
 import { lifecycleAnalyzer } from '../analyzers/lifecycle/analyzer';
 import { LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
 import { DEFAULT_DECLARATION } from '../engine/declaration';
 import { ProjectError, UsageError } from '../engine/errors';
 import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
-import { writeSuggestions } from './config-writer';
+import { addLifecycles, openConfig, recordBaseClasses } from './config-writer';
 import { Io, Paths } from './io';
+import { moduleSpecifiers } from './module-specifier';
 import { noAggregatesMessage } from './session';
 
 const describeSuggestion = (suggestion: LifecycleSuggestion, root: string): string => {
@@ -22,12 +24,45 @@ const confirmEach = (suggestions: readonly LifecycleSuggestion[], io: Io, root: 
     return (await io.prompt(describeSuggestion(suggestion, root))) ? [...previous, suggestion] : previous;
   }, Promise.resolve([]));
 
-export const initCommand = async (paths: Paths, options: { readonly yes?: boolean }, io: Io): Promise<number> => {
+export type InitOptions = { readonly yes?: boolean; readonly baseClass?: readonly string[] };
+
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
+const assertIdentifiers = (names: readonly string[]): void => {
+  const invalid = names.find((name) => !IDENTIFIER.test(name));
+  if (invalid !== undefined) {
+    throw new UsageError(`--base-class "${invalid}" is not a valid class or interface name.`);
+  }
+};
+
+const existingConfig = (project: Project, configPath: string): SourceFile | undefined =>
+  project.getFileSystem().fileExistsSync(configPath) ? configSourceFile(project, configPath) : undefined;
+
+const configWithBaseClasses = (project: Project, configPath: string, names: readonly string[]): SourceFile => {
+  const config = openConfig(project, configPath);
+  recordBaseClasses(config, names);
+  return config;
+};
+
+const startingConfig = (project: Project, configPath: string, baseClasses: readonly string[] | undefined): SourceFile | undefined =>
+  baseClasses === undefined ? existingConfig(project, configPath) : configWithBaseClasses(project, configPath, baseClasses);
+
+const writeLifecycles = async (
+  project: Project,
+  config: SourceFile,
+  accepted: readonly LifecycleSuggestion[],
+): Promise<void> => {
+  addLifecycles(config, moduleSpecifiers(project), accepted);
+  await config.save();
+};
+
+export const initCommand = async (paths: Paths, options: InitOptions, io: Io): Promise<number> => {
+  assertIdentifiers(options.baseClass ?? []);
   if (!options.yes && !io.isInteractive) {
     throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
   }
   const project = loadProject(paths.tsconfig);
-  const existing = project.getFileSystem().fileExistsSync(paths.config) ? configSourceFile(project, paths.config) : undefined;
+  const existing = startingConfig(project, paths.config, options.baseClass);
   const declaration = existing ? readDeclaration(existing) : DEFAULT_DECLARATION;
   const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, paths.root, existing), root: paths.root, configFile: existing });
   if (lifecycleAnalyzer.isEmpty(model)) throw new ProjectError(noAggregatesMessage(declaration));
@@ -47,7 +82,7 @@ export const initCommand = async (paths: Paths, options: { readonly yes?: boolea
     return 0;
   }
   try {
-    await writeSuggestions(project, paths.config, accepted).save();
+    await writeLifecycles(project, existing ?? openConfig(project, paths.config), accepted);
   } catch (error) {
     throw new UsageError(`Cannot write ${paths.config}: ${error instanceof Error ? error.message : String(error)}`);
   }

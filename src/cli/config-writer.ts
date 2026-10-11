@@ -1,7 +1,16 @@
-import { ArrayLiteralExpression, ImportDeclaration, Node, Project, QuoteKind, SourceFile } from 'ts-morph';
+import {
+  ArrayLiteralExpression,
+  ImportDeclaration,
+  IndentationText,
+  Node,
+  ObjectLiteralExpression,
+  Project,
+  QuoteKind,
+  SourceFile,
+} from 'ts-morph';
 import { FieldSuggestion, LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
 import { ConfigError } from '../engine/errors';
-import { ModuleSpecifiers, moduleSpecifiers } from './module-specifier';
+import { ModuleSpecifiers } from './module-specifier';
 
 const INITIAL_CONFIG = `import { defineDomain, lifecycle } from 'domain-integrity';
 
@@ -10,17 +19,53 @@ export default defineDomain({
 });
 `;
 
-const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
+const configObject = (file: SourceFile): ObjectLiteralExpression => {
   const call = file.getExportAssignment((assignment) => !assignment.isExportEquals())?.getExpression();
   const config = Node.isCallExpression(call) ? call.getArguments()[0] : undefined;
   if (!Node.isObjectLiteralExpression(config)) {
     throw new ConfigError('domain.config.ts must "export default defineDomain({...})".');
   }
+  return config;
+};
+
+const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
+  const config = configObject(file);
   const property =
     config.getProperty('lifecycles') ?? config.addPropertyAssignment({ name: 'lifecycles', initializer: '[]' });
   const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
   if (!Node.isArrayLiteralExpression(array)) throw new ConfigError('"lifecycles" in domain.config.ts must be an array literal.');
   return array;
+};
+
+const quoted = (name: string): string => `'${name}'`;
+
+const listedNames = (array: ArrayLiteralExpression): readonly string[] =>
+  array.getElements().flatMap((element) => (Node.isStringLiteral(element) ? [element.getLiteralValue()] : []));
+
+const uniqueNames = (names: readonly string[]): readonly string[] => names.filter((name, index) => names.indexOf(name) === index);
+
+const appendMissingNames = (array: ArrayLiteralExpression, names: readonly string[]): void => {
+  const listed = listedNames(array);
+  uniqueNames(names)
+    .filter((name) => !listed.includes(name))
+    .forEach((name) => array.addElement(quoted(name)));
+};
+
+export const recordBaseClasses = (file: SourceFile, names: readonly string[]): void => {
+  const config = configObject(file);
+  const property = config.getProperty('aggregateBaseClasses');
+  if (property === undefined) {
+    config.insertPropertyAssignment(0, {
+      name: 'aggregateBaseClasses',
+      initializer: `[${uniqueNames(names).map(quoted).join(', ')}]`,
+    });
+    return;
+  }
+  const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+  if (!Node.isArrayLiteralExpression(array)) {
+    throw new ConfigError('"aggregateBaseClasses" in domain.config.ts must be an array literal.');
+  }
+  appendMissingNames(array, names);
 };
 
 const bindsName = (declaration: ImportDeclaration, name: string): boolean =>
@@ -91,16 +136,17 @@ const lifecycleSource = (file: SourceFile, specifierOf: ModuleSpecifiers, sugges
   return `lifecycle(${target}, { states: { ${fields} } })`;
 };
 
-export const writeSuggestions = (
-  project: Project,
-  configPath: string,
+export const openConfig = (project: Project, configPath: string): SourceFile => {
+  project.manipulationSettings.set({ quoteKind: QuoteKind.Single, indentationText: IndentationText.TwoSpaces });
+  return project.addSourceFileAtPathIfExists(configPath) ?? project.createSourceFile(configPath, INITIAL_CONFIG);
+};
+
+export const addLifecycles = (
+  file: SourceFile,
+  specifierOf: ModuleSpecifiers,
   suggestions: readonly LifecycleSuggestion[],
-): SourceFile => {
-  project.manipulationSettings.set({ quoteKind: QuoteKind.Single });
-  const specifierOf = moduleSpecifiers(project);
-  const file = project.getSourceFile(configPath) ?? project.createSourceFile(configPath, INITIAL_CONFIG);
+): void => {
   const lifecycles = lifecyclesArray(file);
   ensureNamedImport(file, 'lifecycle', 'domain-integrity');
   suggestions.forEach((suggestion) => lifecycles.addElement(lifecycleSource(file, specifierOf, suggestion)));
-  return file;
 };
