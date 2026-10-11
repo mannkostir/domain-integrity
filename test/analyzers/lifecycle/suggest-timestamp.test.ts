@@ -565,3 +565,56 @@ export abstract class AggregateRoot<P extends object = object> {
     expect(terminals.get('closedAt')).toEqual(['set']);
   });
 });
+
+const PROTECTED_CLOSED_AT = 'protected closedAt: Date | null = null;';
+
+describe('terminal suggestion for a timestamp on an aggregate extended by a class expression', () => {
+  it('is kept when the class expression writes the timestamp', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource(PROTECTED_CLOSED_AT, ''),
+      '/src/reopenable.ts': `
+import { Ticket } from './ticket';
+export const Reopenable = class extends Ticket { reopen(): void { this.closedAt = null; } };
+`,
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when the class expression lets this escape', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource(PROTECTED_CLOSED_AT, ''),
+      '/src/leaky.ts': `
+import { Ticket } from './ticket';
+declare function hook(ticket: object): void;
+export const Leaky = class extends Ticket { constructor() { super({}); hook(this); } };
+`,
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a class expression whose base cannot be resolved names the aggregate', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource(PROTECTED_CLOSED_AT, ''),
+      '/src/mixin.ts': `
+declare const tickets: { Ticket: new () => object };
+export const Reopenable = class extends tickets.Ticket { reopen(): void { this.closedAt = null; } };
+`,
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is dropped when a class expression extends an unrelated class', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource(PROTECTED_CLOSED_AT, ''),
+      '/src/other.ts': `
+class Other { closedAt: Date | null = null; }
+export const Reopenable = class extends Other { reopen(): void { this.closedAt = null; } };
+`,
+    });
+
+    expect(terminals.get('closedAt')).toEqual([]);
+  });
+});

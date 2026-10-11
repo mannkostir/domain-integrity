@@ -1,4 +1,4 @@
-import { BinaryExpression, ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
+import { BinaryExpression, ClassDeclaration, ClassExpression, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { isAssignmentTarget, setsOf } from './assigned';
 import { escapesStateHolder, fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
 import { instanceAccessors, instanceMethods, projectAncestry } from './members';
@@ -6,6 +6,8 @@ import { AssignedValues, StateField } from './model';
 import { outsideAssignments } from './outside';
 import { hasUnknownWrite } from './values';
 import { unwrap } from '../shared/wrappers';
+
+type ClassLike = ClassDeclaration | ClassExpression;
 
 type Assignment = { readonly binary: BinaryExpression; readonly target: Node };
 
@@ -31,19 +33,19 @@ const targetsOf = (binary: BinaryExpression): readonly Node[] => {
   return isDestructuring(left) ? left.getDescendants().filter(isMemberAccess) : [left];
 };
 
-const assignmentsIn = (classes: readonly ClassDeclaration[]): readonly Assignment[] =>
+const assignmentsIn = (classes: readonly ClassLike[]): readonly Assignment[] =>
   classes
     .flatMap((cls) => cls.getDescendantsOfKind(SyntaxKind.BinaryExpression))
     .filter(isAssignment)
     .flatMap((binary) => targetsOf(binary).map((target) => ({ binary, target })));
 
-const loopTargets = (classes: readonly ClassDeclaration[]): readonly Node[] =>
+const loopTargets = (classes: readonly ClassLike[]): readonly Node[] =>
   classes
     .flatMap((cls) => [...cls.getDescendantsOfKind(SyntaxKind.ForOfStatement), ...cls.getDescendantsOfKind(SyntaxKind.ForInStatement)])
     .map((loop) => unwrap(loop.getInitializer()))
     .flatMap((initializer) => (isDestructuring(initializer) ? initializer.getDescendants().filter(isMemberAccess) : [initializer]));
 
-const deletedTargets = (classes: readonly ClassDeclaration[]): readonly Node[] =>
+const deletedTargets = (classes: readonly ClassLike[]): readonly Node[] =>
   classes.flatMap((cls) => cls.getDescendantsOfKind(SyntaxKind.DeleteExpression)).map((deletion) => unwrap(deletion.getExpression()));
 
 const isScopeBoundary = (node: Node): boolean =>
@@ -98,7 +100,7 @@ const isComparedOnly = (node: Node): boolean => {
   return Node.isBinaryExpression(comparison) && EQUALITY_OPERATORS.includes(comparison.getOperatorToken().getKind());
 };
 
-const escapesOutsideMethods = (classes: readonly ClassDeclaration[], methods: ReadonlySet<Node>): boolean =>
+const escapesOutsideMethods = (classes: readonly ClassLike[], methods: ReadonlySet<Node>): boolean =>
   classes
     .flatMap((candidate) => candidate.getDescendants())
     .some(
@@ -106,8 +108,34 @@ const escapesOutsideMethods = (classes: readonly ClassDeclaration[], methods: Re
         escapesStateHolder(node) && !isAssignmentTarget(node) && !isComparedOnly(node) && !isModelledEscape(node, methods),
     );
 
-const uncertainInClass = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ((field: StateField) => boolean) => {
-  const classes = [...projectAncestry(cls), ...cls.getDerivedClasses()];
+const namesAnyOf = (heritage: Node, names: ReadonlySet<string>): boolean =>
+  [heritage, ...heritage.getDescendants()].some((node) => Node.isIdentifier(node) && names.has(node.getText()));
+
+const extendsFamily = (expression: ClassExpression, cls: ClassDeclaration, names: ReadonlySet<string>): boolean => {
+  const heritage = expression.getExtends();
+  if (heritage === undefined) return false;
+  const base = expression.getBaseClass();
+  return base === undefined ? namesAnyOf(heritage, names) : projectAncestry(base).includes(cls);
+};
+
+const subclassExpressions = (
+  files: readonly SourceFile[],
+  cls: ClassDeclaration,
+  subclasses: readonly ClassDeclaration[],
+): readonly ClassExpression[] => {
+  const names = new Set([cls, ...subclasses].flatMap((candidate) => candidate.getName() ?? []));
+  return files
+    .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassExpression))
+    .filter((expression) => extendsFamily(expression, cls, names));
+};
+
+const uncertainInClass = (
+  cls: ClassDeclaration,
+  aggregateBaseClasses: readonly string[],
+  files: readonly SourceFile[],
+): ((field: StateField) => boolean) => {
+  const subclasses = cls.getDerivedClasses();
+  const classes = [...projectAncestry(cls), ...subclasses, ...subclassExpressions(files, cls, subclasses)];
   if (escapesOutsideMethods(classes, new Set(instanceMethods(cls, aggregateBaseClasses)))) return () => true;
   const assignments = assignmentsIn(classes);
   const otherTargets = [...loopTargets(classes), ...deletedTargets(classes)].filter(isMemberAccess);
@@ -127,7 +155,7 @@ export const fieldsWrittenUncertainly = (
   fields: readonly StateField[],
 ): ReadonlySet<string> => {
   const accessors = instanceAccessors(cls, aggregateBaseClasses);
-  const assignedUncertainly = uncertainInClass(cls, aggregateBaseClasses);
+  const assignedUncertainly = uncertainInClass(cls, aggregateBaseClasses, files);
   return new Set(
     fields
       .filter(
