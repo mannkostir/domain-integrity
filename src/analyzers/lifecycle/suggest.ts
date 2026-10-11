@@ -29,15 +29,20 @@ type TerminalGuesses = ReadonlyMap<string, readonly StateValue[]>;
 
 const tracksLifecycle = (field: StateField): boolean => field.kind === 'enum' || field.kind === 'union';
 
-const writesOnlyTerminal = (behaviour: FieldBehaviour | undefined, terminal: readonly StateValue[]): boolean =>
-  behaviour !== undefined &&
-  !behaviour.sets.unresolved &&
-  !behaviour.sets.mayWrite &&
-  behaviour.sets.tokens.size > 0 &&
-  [...behaviour.sets.tokens].every((token) => terminal.some((value) => value.token === token));
+const onlyTerminal = (tokens: ReadonlySet<string>, terminal: readonly StateValue[]): boolean =>
+  tokens.size > 0 && [...tokens].every((token) => terminal.some((value) => value.token === token));
 
-const settlesLifecycle = (method: MethodModel, lifecycleGuesses: TerminalGuesses): boolean =>
-  [...lifecycleGuesses].some(([name, terminal]) => writesOnlyTerminal(method.fields.get(name), terminal));
+const writesOnlyTerminal = (behaviour: FieldBehaviour | undefined, terminal: readonly StateValue[]): boolean =>
+  behaviour !== undefined && !behaviour.sets.unresolved && !behaviour.sets.mayWrite && onlyTerminal(behaviour.sets.tokens, terminal);
+
+const alwaysWrittenTerminal = (method: MethodModel, field: StateField, name: string, terminal: readonly StateValue[]): boolean =>
+  onlyTerminal(method.writtenAlongside.get(field.name)?.get(name) ?? new Set(), terminal);
+
+const settlesLifecycle = (method: MethodModel, field: StateField, lifecycleGuesses: TerminalGuesses): boolean =>
+  [...lifecycleGuesses].some(
+    ([name, terminal]) =>
+      writesOnlyTerminal(method.fields.get(name), terminal) && alwaysWrittenTerminal(method, field, name, terminal),
+  );
 
 const setsAnyOf = (method: MethodModel, field: StateField, values: readonly StateValue[]): boolean =>
   values.some((value) => method.fields.get(field.name)?.sets.tokens.has(value.token) === true);
@@ -59,7 +64,7 @@ const coveredByLifecycle = (
   !writtenUncertainly(aggregate, field) &&
   aggregate.methods
     .filter((method) => setsAnyOf(method, field, guess))
-    .every((method) => settlesLifecycle(method, lifecycleGuesses));
+    .every((method) => settlesLifecycle(method, field, lifecycleGuesses));
 
 const suggestFields = (aggregate: AggregateModel): FieldSuggestion[] => {
   const guesses = aggregate.fields.map((field) => ({ field, terminal: terminalGuess(aggregate, field) }));

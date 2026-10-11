@@ -24,6 +24,24 @@ export class Ticket extends ${baseClass} {
 }
 `;
 
+const closingTicket = (closeMember: string, extraMembers = '') => `
+import { AggregateRoot } from './aggregate-root';
+export enum Status { Open = 'OPEN', Closed = 'CLOSED' }
+export class Ticket extends AggregateRoot {
+  private status: Status = Status.Open;
+  private closedAt: Date | null = null;
+  private title = '';
+  ${closeMember}
+  rename(title: string): void {
+    if (this.status === Status.Closed) throw new Error('closed');
+    this.title = title;
+  }
+  ${extraMembers}
+}
+`;
+
+const STATUS_GUARD = "if (this.status === Status.Closed) throw new Error('closed');";
+
 const suggestedTerminals = (files: Readonly<Record<string, string>>): ReadonlyMap<string, readonly string[]> => {
   const project = inMemoryProject({ '/src/aggregate-root.ts': AGGREGATE_ROOT, ...files });
   const model = lifecycleAnalyzer.extract({
@@ -105,5 +123,77 @@ describe('terminal suggestion for a timestamp settled by the status lifecycle', 
     });
 
     expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when the status is written only on some paths through the method', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(
+        `close(force: boolean): void {
+    if (this.closedAt !== null) throw new Error('closed');
+    this.closedAt = new Date();
+    if (force) this.status = Status.Closed;
+  }`,
+        `forceClose(): void {
+    ${STATUS_GUARD}
+    this.status = Status.Closed;
+  }`,
+      ),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a branch writing the timestamp returns before the status write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(now: Date): void {
+    ${STATUS_GUARD}
+    if (now.getTime() === 0) {
+      this.closedAt = now;
+      return;
+    }
+    this.closedAt = now;
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when the timestamp is written inside a conditional expression', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(now: Date | null): void {
+    ${STATUS_GUARD}
+    now ? (this.closedAt = now) : undefined;
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when the timestamp is written inside a logical expression', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(now: Date | null): void {
+    ${STATUS_GUARD}
+    now && (this.closedAt = now);
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is dropped when the status is written in an enclosing block before a nested timestamp write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(now: Date | null): void {
+    ${STATUS_GUARD}
+    this.status = Status.Closed;
+    if (now) {
+      this.closedAt = now;
+    }
+  }`),
+    });
+
+    expect(terminals).toEqual(new Map([['status', ['CLOSED']], ['closedAt', []]]));
   });
 });
