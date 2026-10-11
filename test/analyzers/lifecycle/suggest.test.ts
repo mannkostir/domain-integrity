@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { suggestLifecycles } from '../../../src/analyzers/lifecycle/suggest';
-import { STATUS, aggregate, assigned, known, mayWriteValue, method, stateField, unknownSources } from '../../helpers/model';
+import {
+  STATUS,
+  aggregate,
+  assigned,
+  known,
+  mayWriteValue,
+  method,
+  stateField,
+  unknownSources,
+  unresolvedValue,
+} from '../../helpers/model';
+
+const closedAt = stateField('closedAt', 'nullable', ['set', 'unset']);
+const lockedAt = stateField('lockedAt', 'nullable', ['set', 'unset']);
+const confirm = method('confirm', true, { status: { sources: known('PENDING'), sets: assigned('CONFIRMED') } });
+const cancel = method('cancel', true, { status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') } });
+const setClosedAt = { sources: known('unset'), sets: assigned('set') };
 
 const terminalLabels = (model: Parameters<typeof suggestLifecycles>[0]) =>
   suggestLifecycles(model).flatMap((suggestion) =>
@@ -44,6 +60,103 @@ describe('suggestLifecycles', () => {
 
     expect(terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), methods })], problems: [] })).toEqual([
       ['status', ['CANCELLED']],
+    ]);
+  });
+
+  it('suggests no terminal value for a timestamp set only alongside a terminal status', () => {
+    const close = method('cancel', true, {
+      status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') },
+      closedAt: setClosedAt,
+    });
+
+    expect(
+      terminalLabels({
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close] })],
+        problems: [],
+      }),
+    ).toEqual([
+      ['status', ['CANCELLED']],
+      ['closedAt', []],
+    ]);
+  });
+
+  it('keeps the terminal value of a timestamp set without touching the status', () => {
+    const lock = method('lock', true, { lockedAt: { sources: known('unset'), sets: assigned('set') } });
+
+    expect(
+      terminalLabels({
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, lockedAt], methods: [confirm, cancel, lock] })],
+        problems: [],
+      }),
+    ).toEqual([
+      ['status', ['CANCELLED']],
+      ['lockedAt', ['set']],
+    ]);
+  });
+
+  it('keeps the terminal value of a timestamp when the status it is set with has no terminal value', () => {
+    const close = method('cancel', true, {
+      status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') },
+      closedAt: setClosedAt,
+    });
+    const reopen = method('reopen', true, { status: { sources: known('CANCELLED'), sets: assigned('PENDING') } });
+
+    expect(
+      terminalLabels({
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close, reopen] })],
+        problems: [],
+      }),
+    ).toEqual([
+      ['status', []],
+      ['closedAt', ['set']],
+    ]);
+  });
+
+  it('keeps the terminal value of a timestamp set alongside a non-terminal status', () => {
+    const confirmAndClose = method('confirm', true, {
+      status: { sources: known('PENDING'), sets: assigned('CONFIRMED') },
+      closedAt: setClosedAt,
+    });
+
+    expect(
+      terminalLabels({
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirmAndClose, cancel] })],
+        problems: [],
+      }),
+    ).toEqual([
+      ['status', ['CANCELLED']],
+      ['closedAt', ['set']],
+    ]);
+  });
+
+  it('keeps the terminal value of a timestamp set alongside a status that may also be non-terminal', () => {
+    const settle = method('settle', true, {
+      status: { sources: known('PENDING'), sets: assigned('CONFIRMED', 'CANCELLED') },
+      closedAt: setClosedAt,
+    });
+
+    expect(
+      terminalLabels({
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [settle, cancel] })],
+        problems: [],
+      }),
+    ).toEqual([
+      ['status', ['CANCELLED']],
+      ['closedAt', ['set']],
+    ]);
+  });
+
+  it('keeps the terminal value of a timestamp set alongside an unresolved status write', () => {
+    const close = method('close', true, { status: { sources: known('PENDING'), sets: unresolvedValue }, closedAt: setClosedAt });
+
+    expect(
+      terminalLabels({
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [cancel, close] })],
+        problems: [],
+      }),
+    ).toEqual([
+      ['status', []],
+      ['closedAt', ['set']],
     ]);
   });
 
