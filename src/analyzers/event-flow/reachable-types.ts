@@ -1,6 +1,6 @@
 import { Node, Signature, Type } from 'ts-morph';
 
-type ReachableTypes = { readonly kind: 'bounded'; readonly types: readonly Type[] } | { readonly kind: 'overflow' };
+export type ReachableTypes = { readonly kind: 'bounded'; readonly types: readonly Type[] } | { readonly kind: 'overflow' };
 
 const MAX_DEPTH = 8;
 
@@ -54,11 +54,12 @@ const expand = (frontier: readonly Type[], reached: readonly Type[], depth: numb
   return expand(next, [...reached, ...next], depth + 1, location);
 };
 
-const reachableTypes = (root: Type, location: Node): ReachableTypes => expand([root], [root], 0, location);
+export const reachableTypes = (root: Type, location: Node): ReachableTypes => expand([root], [root], 0, location);
 
-export const someReachable = (root: Type, location: Node, predicate: (type: Type) => boolean): boolean => {
-  const reachable = reachableTypes(root, location);
-  return reachable.kind === 'overflow' || reachable.types.some(predicate);
-};
+export const anyReached = (reachable: ReachableTypes, predicate: (type: Type) => boolean): boolean =>
+  reachable.kind === 'overflow' || reachable.types.some(predicate);
+
+export const someReachable = (root: Type, location: Node, predicate: (type: Type) => boolean): boolean =>
+  anyReached(reachableTypes(root, location), predicate);
 
 export const hasGenericCallSignature = (type: Type): boolean => hasOwnProperties(type) && type.getCallSignatures().some(isGenericSignature);
