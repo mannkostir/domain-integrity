@@ -125,7 +125,7 @@ npx domain-integrity init
 npx domain-integrity check
 ```
 
-`init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. When your tsconfig resolves modules as `node16` or `nodenext`, the imports carry `.js` extensions. You review the suggestions once; after that, `check` runs on every commit.
+`init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. When your tsconfig resolves modules as `node16` or `nodenext`, the imports carry runtime extensions: `.js`, or `.mjs` and `.cjs` for `.mts` and `.cts` files. You review the suggestions once; after that, `check` runs on every commit.
 
 **Requirements:** Node 20+, a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
 
