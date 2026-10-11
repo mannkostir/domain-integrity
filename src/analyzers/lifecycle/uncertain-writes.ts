@@ -1,6 +1,6 @@
 import { BinaryExpression, ClassDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
-import { setsOf } from './assigned';
-import { fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
+import { isAssignmentTarget, setsOf } from './assigned';
+import { escapesStateHolder, fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
 import { instanceAccessors, instanceMethods, projectHierarchy } from './members';
 import { AssignedValues, StateField } from './model';
 import { outsideAssignments } from './outside';
@@ -76,8 +76,24 @@ const uncertainlyAssigned = (assignments: readonly Assignment[], writers: Readon
       .flatMap(({ target }) => memberName(target) ?? []),
   );
 
+const isObjectAssignTarget = (node: Node): boolean => {
+  const call = node.getParent();
+  return Node.isCallExpression(call) && call.getExpression().getText() === 'Object.assign' && call.getArguments()[0] === node;
+};
+
+const isModelledEscape = (node: Node, methods: ReadonlySet<Node>): boolean => {
+  const scope = node.getFirstAncestor(isScopeBoundary);
+  return scope !== undefined && (methods.has(scope) || (Node.isConstructorDeclaration(scope) && isObjectAssignTarget(node)));
+};
+
+const escapesOutsideMethods = (classes: readonly ClassDeclaration[], methods: ReadonlySet<Node>): boolean =>
+  classes
+    .flatMap((candidate) => candidate.getDescendants())
+    .some((node) => escapesStateHolder(node) && !isAssignmentTarget(node) && !isModelledEscape(node, methods));
+
 const uncertainInClass = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ((field: StateField) => boolean) => {
   const classes = [...projectHierarchy(cls, aggregateBaseClasses), ...cls.getDerivedClasses()];
+  if (escapesOutsideMethods(classes, new Set(instanceMethods(cls, aggregateBaseClasses)))) return () => true;
   const assignments = assignmentsIn(classes);
   const otherTargets = [...loopTargets(classes), ...deletedTargets(classes)].filter(isMemberAccess);
   const targets = [...assignments.map(({ target }) => target), ...otherTargets];

@@ -13,12 +13,15 @@ const INTERRUPTIONS: readonly SyntaxKind[] = [
   SyntaxKind.ContinueStatement,
   SyntaxKind.AwaitExpression,
   SyntaxKind.YieldExpression,
+  SyntaxKind.CallExpression,
+  SyntaxKind.NewExpression,
+  SyntaxKind.TaggedTemplateExpression,
 ];
 
 const isPlainWriteTo = (binary: BinaryExpression, field: StateField): boolean =>
   binary.getOperatorToken().getKind() === SyntaxKind.EqualsToken && fieldNameOf(unwrap(binary.getLeft())) === field.name;
 
-const writeSites = (scope: Node, field: StateField): BinaryExpression[] =>
+const writeSites = (scope: Node, field: StateField): readonly BinaryExpression[] =>
   scope.getDescendantsOfKind(SyntaxKind.BinaryExpression).filter((binary) => isPlainWriteTo(binary, field));
 
 const tokensWrittenBy = (statement: Statement, field: StateField): ReadonlySet<string> => {
@@ -40,15 +43,17 @@ const enclosingBlocks = (statement: Statement): Block[] => {
   return ancestors.slice(0, boundary === -1 ? ancestors.length : boundary).filter(Node.isBlock);
 };
 
-const runsWith = (statements: readonly Statement[], site: number, position: number): boolean =>
-  position < site || (position > site && !statements.slice(site, position).some(mayLeave));
+const runsWith = (statements: readonly Statement[], site: number, position: number, write: Statement): boolean => {
+  const between = statements.slice(statements[site] === write ? site + 1 : site, position);
+  return position < site || (position > site && !between.some(mayLeave));
+};
 
-const tokensWrittenAround = (block: Block, statement: Statement, field: StateField): string[] => {
+const tokensWrittenAround = (block: Block, statement: Statement, field: StateField): readonly string[] => {
   const statements = block.getStatements();
   const lineage: readonly Node[] = [statement, ...statement.getAncestors()];
   const site = statements.findIndex((candidate) => lineage.includes(candidate));
   return statements.flatMap((candidate, position) =>
-    runsWith(statements, site, position) ? [...tokensWrittenBy(candidate, field)] : [],
+    runsWith(statements, site, position, statement) ? [...tokensWrittenBy(candidate, field)] : [],
   );
 };
 

@@ -405,3 +405,96 @@ export class UrgentTicket extends Ticket {
     expect(terminals.get('closedAt')).toEqual(['set']);
   });
 });
+
+const MUTATE = 'declare function mutate(ticket: object): void;';
+const PRIVATE_CLOSED_AT = 'private closedAt: Date | null = null;';
+
+describe('terminal suggestion for a timestamp on an aggregate that lets this escape outside its methods', () => {
+  it('is kept when an arrow-function property passes this to a function', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, 'later = (): void => { mutate(this); };', MUTATE),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a property initializer passes this to a function', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, 'registered = mutate(this);', MUTATE),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when the constructor passes this to a function', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, 'constructor() { super({}); mutate(this); }', MUTATE),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is dropped when the constructor only copies its argument into this', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, 'constructor(props: object) { super({}); Object.assign(this, props); }'),
+    });
+
+    expect(terminals.get('closedAt')).toEqual([]);
+  });
+});
+
+describe('terminal suggestion for a timestamp whose later status write follows code that may throw', () => {
+  it('is kept when a method call separates the writes', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(
+        `close(): void {
+    ${STATUS_GUARD}
+    this.closedAt = new Date();
+    this.validate();
+    this.status = Status.Closed;
+  }`,
+        "private validate(): void { if (this.title === '') throw new Error('untitled'); }",
+      ),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a new expression separates the writes', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(): void {
+    ${STATUS_GUARD}
+    this.closedAt = new Date();
+    this.title = new String('closed').toString();
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a tagged template separates the writes', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(): void {
+    ${STATUS_GUARD}
+    this.closedAt = new Date();
+    this.title = String.raw\`closed\`;
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is dropped when the timestamp value itself is constructed before a later status write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`close(): void {
+    ${STATUS_GUARD}
+    this.closedAt = new Date();
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual([]);
+  });
+});
