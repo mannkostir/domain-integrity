@@ -26,8 +26,9 @@ const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSit
     decorator.getArguments().filter((argument) => !Node.isObjectLiteralExpression(argument)),
     context.isProject,
   );
-  if (target === undefined || keys.kind === 'unresolved') return { kind: 'unresolved', node: decorator };
+  if (target === undefined) return { kind: 'unresolved', node: decorator, payload: { kind: 'unreadable' } };
   const payload = readPayload(target.method?.getParameters()[0], context.isProject);
+  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: decorator, payload };
   const registrations: RawRegistration[] = keys.classes.map(({ cls, key }) => ({
     event: cls,
     key,

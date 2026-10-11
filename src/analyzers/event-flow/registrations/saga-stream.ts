@@ -6,7 +6,7 @@ const ofTypeCalls = (node: Node): readonly CallExpression[] =>
   node.getDescendantsOfKind(SyntaxKind.CallExpression).filter((call) => call.getExpression().getText() === 'ofType');
 
 const siteOf = (decorator: Decorator, context: RecogniserContext): RecognisedSite => {
-  const unresolved: RecognisedSite = { kind: 'unresolved', node: decorator };
+  const unresolved: RecognisedSite = { kind: 'unresolved', node: decorator, payload: { kind: 'unreadable' } };
   const property = decorator.getParent();
   const handler = enclosingClass(decorator);
   if (!Node.isPropertyDeclaration(property) || handler === undefined) return unresolved;

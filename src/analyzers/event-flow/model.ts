@@ -8,7 +8,7 @@ export type Registration = {
   readonly payload: Payload;
   readonly inTest: boolean;
 } & Location;
-export type UnresolvedSite = { readonly owner: string | undefined } & Location;
+export type UnresolvedSite = { readonly owner: string | undefined; readonly inTest: boolean; readonly payload: Payload } & Location;
 export type EventClassModel = {
   readonly id: string;
   readonly abstract: boolean;

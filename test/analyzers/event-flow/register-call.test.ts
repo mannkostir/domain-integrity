@@ -32,7 +32,14 @@ describe('registerCallRecogniser', () => {
   it('marks a callback registration with a key that is not a class unresolved', () => {
     expect(
       run("export class AfterPaid { constructor() { DomainEvents.register(this.onPaid.bind(this), 'paid.topic'); } onPaid(event: Paid) {} }\nDomainEvents.register((event: Paid) => undefined, topic);"),
-    ).toEqual(['unresolved@4', 'unresolved@5']);
+    ).toEqual(['unresolved@4 (Paid)', 'unresolved@5 (Paid)']);
+  });
+
+  it('carries the callback payload of an unresolved site and leaves an untyped one unreadable', () => {
+    expect(run("DomainEvents.register((event: Paid) => undefined, 'paid.topic');\nDomainEvents.register((event) => undefined, topic);")).toEqual([
+      'unresolved@4 (Paid)',
+      'unresolved@5',
+    ]);
   });
 
   it('reads no site from a call without a callback first and a key second', () => {

@@ -89,6 +89,19 @@ describe('extractEventFlows', () => {
     ]);
   });
 
+  it('bounds unresolved sites by their payload and marks those in test files', () => {
+    const model = extract('/app/src/', {
+      '/app/src/dynamic.ts': "import { Paid } from './events';\ndeclare const OnEvent: (...args: unknown[]) => (target: unknown, key: string) => void;\nexport class Dynamic { @OnEvent('order.created') onCreated(event: Paid) {} @OnEvent('order.any') onAny(event: unknown) {} }",
+      '/app/src/dynamic.spec.ts': "import { Paid } from './events';\ndeclare const OnEvent: (...args: unknown[]) => (target: unknown, key: string) => void;\nexport class SpecDynamic { @OnEvent('order.created') onCreated(event: Paid) {} }",
+    });
+
+    expect(model.unresolved.map((site) => [site.owner, site.inTest, site.payload])).toEqual([
+      ['SpecDynamic', true, { kind: 'classes', classes: ['Paid'], file: '/app/src/dynamic.spec.ts', line: 3 }],
+      ['Dynamic', false, { kind: 'classes', classes: ['Paid'], file: '/app/src/dynamic.ts', line: 3 }],
+      ['Dynamic', false, { kind: 'unreadable' }],
+    ]);
+  });
+
   it('records opaque and library-based event hierarchies and the owners of library-keyed sites', () => {
     const model = extract('/app/src/', {
       '/app/lib/external.ts': 'export class LibraryEvent {}',

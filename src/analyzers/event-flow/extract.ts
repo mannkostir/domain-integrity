@@ -5,6 +5,7 @@ import { undispatchedBuffers } from './buffers/discover';
 import { hierarchyOf } from './hierarchy';
 import { ProjectClasses } from './keys';
 import { ClassRef, EventClassModel, EventFlowModel, Location, Payload, Registration, SagaModel, UnresolvedSite } from './model';
+import { RawPayload } from './payload';
 import { referenceFacts } from './references';
 import { decoratorRecogniser } from './registrations/decorator';
 import { RawRegistration, RecognisedSite, RecogniserContext, enclosingClass } from './registrations/recogniser';
@@ -42,16 +43,16 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
   const hierarchies = new Map([...eventClasses, ...sagas.map((saga) => saga.target)].map((cls) => [cls, hierarchyOf(cls, isProject)]));
   const ancestorIds = (cls: ClassDeclaration): readonly string[] => (hierarchies.get(cls)?.ancestors ?? []).map((ancestor) => identity(ancestor).id);
 
-  const payloadOf = (registration: RawRegistration): Payload =>
-    registration.payload.kind === 'classes'
-      ? { kind: 'classes', classes: registration.payload.classes.map((cls) => identity(cls).id), ...locationOf(registration.payload.node) }
+  const payloadOf = (payload: RawPayload): Payload =>
+    payload.kind === 'classes'
+      ? { kind: 'classes', classes: payload.classes.map((cls) => identity(cls).id), ...locationOf(payload.node) }
       : { kind: 'unreadable' };
 
   const registrations: readonly Registration[] = raw.map((registration) => ({
     event: identity(registration.event).id,
     handlerClass: registration.handler === undefined ? undefined : identity(registration.handler).id,
     handlerMethod: registration.method,
-    payload: payloadOf(registration),
+    payload: payloadOf(registration.payload),
     inTest: isTest(registration.node.getSourceFile()),
     ...locationOf(registration.node),
   }));
@@ -62,7 +63,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
   };
 
   const unresolved: readonly UnresolvedSite[] = sites.flatMap((site) =>
-    site.kind === 'resolved' ? [] : [{ owner: ownerOf(site.node), ...locationOf(site.node) }],
+    site.kind === 'resolved' ? [] : [{ owner: ownerOf(site.node), inTest: isTest(site.node.getSourceFile()), payload: payloadOf(site.payload), ...locationOf(site.node) }],
   );
 
   const libraryKeyed: readonly (string | undefined)[] = sites.flatMap((site) => (site.kind === 'resolved' && site.libraryKeyed ? [ownerOf(site.node)] : []));

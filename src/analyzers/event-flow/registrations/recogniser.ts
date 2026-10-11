@@ -14,7 +14,7 @@ export type RawRegistration = {
 
 export type RecognisedSite =
   | { readonly kind: 'resolved'; readonly node: Node; readonly registrations: readonly RawRegistration[]; readonly libraryKeyed: boolean }
-  | { readonly kind: 'unresolved'; readonly node: Node };
+  | { readonly kind: 'unresolved'; readonly node: Node; readonly payload: RawPayload };
 
 export type RecogniserContext = { readonly events: DeclaredEvents; readonly isProject: ProjectClasses };
 

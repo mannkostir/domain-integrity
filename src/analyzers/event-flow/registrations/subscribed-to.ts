@@ -12,9 +12,9 @@ const returnedArray = (method: MethodDeclaration): ArrayLiteralExpression | unde
 const siteOf = (method: MethodDeclaration, context: RecogniserContext): RecognisedSite => {
   const array = returnedArray(method);
   const handler = enclosingClass(method);
-  if (array === undefined || handler === undefined) return { kind: 'unresolved', node: method };
+  if (array === undefined || handler === undefined) return { kind: 'unresolved', node: method, payload: { kind: 'unreadable' } };
   const keys = resolveKeys(array.getElements(), context.isProject);
-  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: method };
+  if (keys.kind === 'unresolved') return { kind: 'unresolved', node: method, payload: { kind: 'unreadable' } };
   return {
     kind: 'resolved',
     node: method,

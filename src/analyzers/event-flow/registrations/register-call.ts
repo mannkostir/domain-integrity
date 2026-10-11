@@ -53,7 +53,7 @@ const siteOf = (call: CallExpression, context: RecogniserContext): RecognisedSit
   if (callback === undefined) return undefined;
   const resolution = resolveKey(key, context.isProject);
   if (resolution.kind === 'foreign') return { kind: 'resolved', node: call, registrations: [], libraryKeyed: true };
-  if (resolution.kind === 'unresolved') return { kind: 'unresolved', node: call };
+  if (resolution.kind === 'unresolved') return { kind: 'unresolved', node: call, payload: callback.payload };
   if (isFactoryOf(first, resolution.cls)) return undefined;
   return {
     kind: 'resolved',

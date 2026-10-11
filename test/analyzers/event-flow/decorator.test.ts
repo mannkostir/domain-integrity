@@ -33,9 +33,15 @@ describe('decoratorRecogniser', () => {
 
   it('marks a site with any unresolvable argument as unresolved and keeps none of its keys', () => {
     expect(run("@EventsHandler(Paid, someKey) export class Mixed { handle(event: Paid) {} }\nexport class Topic { @OnEvent('order.*') on() {} }")).toEqual([
-      'unresolved@4',
+      'unresolved@4 (Paid)',
       'unresolved@5',
     ]);
+  });
+
+  it('carries the handler payload of an unresolved site', () => {
+    expect(
+      run("export class Listener { @OnEvent('order.created') onCreated(event: Paid) {} @OnEvent('order.failed') onFailed(event: Paid | Failed) {} @OnEvent('order.any') onAny(event) {} }"),
+    ).toEqual(['unresolved@4 (Paid)', 'unresolved@4 (Paid|Failed)', 'unresolved@4']);
   });
 
   it('registers nothing for a library event key but notes it', () => {
@@ -68,6 +74,6 @@ describe('decoratorRecogniser', () => {
   });
 
   it('marks a decorator with only object-literal arguments unresolved', () => {
-    expect(run('export class Listener { @OnEvent({ async: true }) onPaid(event: Paid) {} }')).toEqual(['unresolved@4']);
+    expect(run('export class Listener { @OnEvent({ async: true }) onPaid(event: Paid) {} }')).toEqual(['unresolved@4 (Paid)']);
   });
 });

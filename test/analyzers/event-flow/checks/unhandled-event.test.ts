@@ -34,7 +34,7 @@ describe('unhandledEvent', () => {
 
   it('stays silent when anything could hide a handler or the event is never constructed', () => {
     expect([
-      unhandledEvent(declared({}, { unresolved: [{ owner: undefined, file: '/app/src/x.ts', line: 1 }] })),
+      unhandledEvent(declared({}, { unresolved: [{ owner: undefined, inTest: false, payload: { kind: 'unreadable' }, file: '/app/src/x.ts', line: 1 }] })),
       unhandledEvent(declared({ constructions: [] })),
       unhandledEvent(declared({ escaped: true })),
       unhandledEvent(declared({ instanceofChecked: true })),

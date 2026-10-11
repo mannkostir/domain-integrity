@@ -10,7 +10,7 @@ const describeRegistration = (registration: RawRegistration): string => {
 
 const describeSite = (site: RecognisedSite): string =>
   site.kind === 'unresolved'
-    ? `unresolved@${site.node.getStartLineNumber()}`
+    ? `unresolved@${site.node.getStartLineNumber()}${site.payload.kind === 'classes' ? ` (${site.payload.classes.map((cls) => cls.getName()).join('|')})` : ''}`
     : [...site.registrations.map(describeRegistration), ...(site.libraryKeyed ? ['library'] : [])].join(', ');
 
 export const recognise = (
