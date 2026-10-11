@@ -55,7 +55,7 @@ const mayWriteThroughDestructuring = (binary: BinaryExpression): boolean => {
   return isDestructuringTarget(target) && destructuresIntoState(target);
 };
 
-const isAssignmentTarget = (node: Node): boolean => {
+export const isAssignmentTarget = (node: Node): boolean => {
   const parent = node.getParent();
   if (parent === undefined) return false;
   if (Node.isBinaryExpression(parent)) return isAssignmentOperator(parent) && parent.getLeft() === node;

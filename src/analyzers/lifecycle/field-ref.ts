@@ -27,7 +27,7 @@ const isThis = (node: Node): boolean => {
 const stringKey = (node: Node): string | undefined =>
   Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node) ? node.getLiteralText() : undefined;
 
-const memberName = (node: Node): string | undefined => {
+export const memberName = (node: Node): string | undefined => {
   if (Node.isPropertyAccessExpression(node)) return node.getName();
   if (!Node.isElementAccessExpression(node)) return undefined;
   const argument = node.getArgumentExpression();
@@ -359,7 +359,7 @@ const isHandedToEventMethod = (node: Node, scope: AggregateScope): boolean => {
 const escapesIntoUnknown = (node: Node, scope: AggregateScope): boolean =>
   escapesStateHolder(node) && !isHandedToEventMethod(node, scope);
 
-const readsWithComputedKey = (node: Node): boolean =>
+export const isComputedStateAccess = (node: Node): boolean =>
   Node.isElementAccessExpression(node) && isStateHolder(node.getExpression()) && memberName(node) === undefined;
 
 const readsThroughMember = (node: Node, field: string, scope: AggregateScope, depth: number): boolean => {
@@ -382,7 +382,7 @@ const readsThroughMember = (node: Node, field: string, scope: AggregateScope, de
 export const referencesFieldDirectly = (node: Node, field: string, scope: AggregateScope, depth = 0): boolean =>
   fieldNameOf(node) === field ||
   escapesIntoUnknown(node, scope) ||
-  readsWithComputedKey(node) ||
+  isComputedStateAccess(node) ||
   readsThroughMember(node, field, scope, depth);
 
 export const referencesField = (node: Node, field: string, scope: AggregateScope, depth = 0): boolean =>
