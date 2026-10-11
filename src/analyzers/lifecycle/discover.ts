@@ -1,5 +1,6 @@
 import { ClassDeclaration, ExpressionWithTypeArguments, InterfaceDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { className } from '../../engine/class-identity';
+import { ancestry } from '../shared/ancestry';
 
 type BaseNames = ReadonlySet<string>;
 
@@ -31,18 +32,6 @@ const reachableInterfaces = (roots: readonly InterfaceDeclaration[]): ReadonlySe
 const interfaceMatches = (iface: InterfaceDeclaration, names: BaseNames): boolean =>
   names.has(iface.getName()) || iface.getExtends().some((clause) => clauseNamesEntry(clause, names));
 
-const classChain = (cls: ClassDeclaration): readonly ClassDeclaration[] => {
-  const chain: ClassDeclaration[] = [];
-  for (
-    let current: ClassDeclaration | undefined = cls;
-    current !== undefined && !chain.includes(current);
-    current = current.getBaseClass()
-  ) {
-    chain.push(current);
-  }
-  return chain;
-};
-
 const extendsClauseMatches = (cls: ClassDeclaration, names: BaseNames): boolean => {
   const heritage = cls.getExtends();
   return heritage !== undefined && clauseNamesEntry(heritage, names);
@@ -53,7 +42,7 @@ const implementsClausesMatch = (clauses: readonly ExpressionWithTypeArguments[],
   [...reachableInterfaces(clauses.flatMap(resolvedInterfaces))].some((iface) => interfaceMatches(iface, names));
 
 const classMatches = (cls: ClassDeclaration, names: BaseNames): boolean => {
-  const chain = classChain(cls);
+  const chain = ancestry(cls, (member) => member.getBaseClass()).chain;
   return (
     chain.some((member) => extendsClauseMatches(member, names)) ||
     implementsClausesMatch(

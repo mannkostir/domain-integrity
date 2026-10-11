@@ -1,16 +1,19 @@
 import { ClassDeclaration, GetAccessorDeclaration, MethodDeclaration, SetAccessorDeclaration } from 'ts-morph';
+import { ancestry } from '../shared/ancestry';
 import { isLibraryNode } from '../shared/library';
 
-const inheritedClasses = (cls: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): readonly ClassDeclaration[] => {
-  const base = cls.getBaseClass();
-  if (base === undefined || isLibraryNode(base) || aggregateBaseClasses.has(base.getName() ?? '')) return [];
-  return [base, ...inheritedClasses(base, aggregateBaseClasses)];
-};
+const isInheritedFrom = (base: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): boolean =>
+  !isLibraryNode(base) && !aggregateBaseClasses.has(base.getName() ?? '');
 
-export const projectHierarchy = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): readonly ClassDeclaration[] => [
-  cls,
-  ...inheritedClasses(cls, new Set(aggregateBaseClasses)),
-];
+const inheritedBase =
+  (aggregateBaseClasses: ReadonlySet<string>) =>
+  (cls: ClassDeclaration): ClassDeclaration | undefined => {
+    const base = cls.getBaseClass();
+    return base !== undefined && isInheritedFrom(base, aggregateBaseClasses) ? base : undefined;
+  };
+
+export const projectHierarchy = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): readonly ClassDeclaration[] =>
+  ancestry(cls, inheritedBase(new Set(aggregateBaseClasses))).chain;
 
 export const instanceMethods = (
   cls: ClassDeclaration,

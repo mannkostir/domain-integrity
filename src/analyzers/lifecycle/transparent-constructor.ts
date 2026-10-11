@@ -9,7 +9,8 @@ import {
   SyntaxKind,
 } from 'ts-morph';
 import { isDefaultLibraryNode, isLibraryNode } from '../shared/library';
-import { classNamedBy, declarationsOf, namedClassChain } from './named-chain';
+import { namedClassChain } from './named-chain';
+import { classNamedBy, declarationsOf } from '../shared/named-class';
 
 type Store = { readonly field: string; readonly value: Node };
 
