@@ -40,7 +40,10 @@ export const EVENT_FLOW_PROJECT = {
   'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n",
 };
 
-export const writeProject = (files: Readonly<Record<string, string>>): string => {
+export const writeProject = (
+  files: Readonly<Record<string, string>>,
+  compilerOptions: Readonly<Record<string, unknown>> = {},
+): string => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-cli-')));
   const tsconfig = {
     compilerOptions: {
@@ -49,6 +52,7 @@ export const writeProject = (files: Readonly<Record<string, string>>): string =>
       module: 'ESNext',
       moduleResolution: 'Bundler',
       paths: { 'domain-integrity': [HELPERS_ENTRY] },
+      ...compilerOptions,
     },
     include: ['src'],
   };
