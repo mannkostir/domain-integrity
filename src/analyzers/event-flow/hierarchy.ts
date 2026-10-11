@@ -1,5 +1,6 @@
 import { ClassDeclaration, Node } from 'ts-morph';
 import { ancestry } from '../shared/ancestry';
+import { hasCyclicInheritance } from '../shared/cyclic-heritage';
 import { ProjectClasses } from './keys';
 
 export type Hierarchy = { readonly ancestors: readonly ClassDeclaration[]; readonly extendsForeign: boolean; readonly opaque: boolean };
@@ -26,7 +27,7 @@ const topOf = (top: ClassDeclaration): Hierarchy => {
 };
 
 export const hierarchyOf = (cls: ClassDeclaration, isProject: ProjectClasses): Hierarchy => {
-  const { chain, cyclic } = ancestry(cls, projectBase(isProject));
-  const top = cyclic ? OPAQUE : topOf(chain.at(-1) ?? cls);
-  return { ...top, ancestors: chain.slice(1) };
+  if (hasCyclicInheritance(cls)) return OPAQUE;
+  const { chain } = ancestry(cls, projectBase(isProject));
+  return { ...topOf(chain.at(-1) ?? cls), ancestors: chain.slice(1) };
 };

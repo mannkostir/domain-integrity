@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { analyse } from '../../../src/analyzer';
 import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
-import { hasCyclicInheritance, inheritanceChain } from '../../../src/analyzers/lifecycle/field-ref';
+import { inheritanceChain } from '../../../src/analyzers/lifecycle/field-ref';
+import { hasCyclicInheritance } from '../../../src/analyzers/shared/cyclic-heritage';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
 
