@@ -32,6 +32,7 @@ const tracksLifecycle = (field: StateField): boolean => field.kind === 'enum' ||
 const writesOnlyTerminal = (behaviour: FieldBehaviour | undefined, terminal: readonly StateValue[]): boolean =>
   behaviour !== undefined &&
   !behaviour.sets.unresolved &&
+  !behaviour.sets.mayWrite &&
   behaviour.sets.tokens.size > 0 &&
   [...behaviour.sets.tokens].every((token) => terminal.some((value) => value.token === token));
 
