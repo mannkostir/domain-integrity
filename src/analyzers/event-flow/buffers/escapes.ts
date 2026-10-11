@@ -1,4 +1,5 @@
-import { Expression, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
+import { Expression, Node, SyntaxKind, Type } from 'ts-morph';
+import { SourceIndex } from '../../shared/source-index';
 import { unwrap } from '../../shared/wrappers';
 import { CalleeReach, calleeReach } from './escaping-callee';
 import { FamilyHolding, Holds } from './family-type';
@@ -41,34 +42,34 @@ const escapesThroughArraySpread = (expression: Expression, holds: Holds): boolea
 const escapesThroughCast = (cast: Expression, holding: FamilyHolding): boolean =>
   holding.holdsInstance(unwrap(cast).getType()) && !holding.holdsInstance(cast.getType());
 
-const escapesThroughInvocations = (file: SourceFile, holding: FamilyHolding): boolean =>
-  file
-    .getDescendantsOfKind(SyntaxKind.CallExpression)
+const escapesThroughInvocations = (production: SourceIndex, holding: FamilyHolding): boolean =>
+  production
+    .ofKind(SyntaxKind.CallExpression)
     .some((call) => escapesThroughInvocation(call.getExpression(), call.getArguments(), holding)) ||
-  file
-    .getDescendantsOfKind(SyntaxKind.NewExpression)
+  production
+    .ofKind(SyntaxKind.NewExpression)
     .some((expression) => escapesThroughInvocation(expression.getExpression(), expression.getArguments(), holding)) ||
-  file
-    .getDescendantsOfKind(SyntaxKind.TaggedTemplateExpression)
+  production
+    .ofKind(SyntaxKind.TaggedTemplateExpression)
     .some((tagged) => escapesThroughInvocation(tagged.getTag(), templateArguments(tagged.getTemplate()), holding));
 
-const escapesThroughSurfaceReads = (file: SourceFile, atSurface: Holds): boolean =>
-  file
-    .getDescendantsOfKind(SyntaxKind.ElementAccessExpression)
+const escapesThroughSurfaceReads = (production: SourceIndex, atSurface: Holds): boolean =>
+  production
+    .ofKind(SyntaxKind.ElementAccessExpression)
     .some((access) => !isLiteralKey(access.getArgumentExpression()) && atSurface(access.getExpression().getType())) ||
-  file.getDescendantsOfKind(SyntaxKind.SpreadAssignment).some((spread) => atSurface(spread.getExpression().getType())) ||
-  file.getDescendantsOfKind(SyntaxKind.ForInStatement).some((loop) => atSurface(loop.getExpression().getType()));
+  production.ofKind(SyntaxKind.SpreadAssignment).some((spread) => atSurface(spread.getExpression().getType())) ||
+  production.ofKind(SyntaxKind.ForInStatement).some((loop) => atSurface(loop.getExpression().getType()));
 
-const escapesThroughValues = (file: SourceFile, holding: FamilyHolding): boolean =>
-  escapesThroughInvocations(file, holding) ||
-  escapesThroughSurfaceReads(file, holding.holdsAtSurface) ||
-  file
-    .getDescendantsOfKind(SyntaxKind.SpreadElement)
+const escapesThroughValues = (production: SourceIndex, holding: FamilyHolding): boolean =>
+  escapesThroughInvocations(production, holding) ||
+  escapesThroughSurfaceReads(production, holding.holdsAtSurface) ||
+  production
+    .ofKind(SyntaxKind.SpreadElement)
     .some((spread) => escapesThroughArraySpread(spread.getExpression(), holding.holdsInstance));
 
-const escapesThroughCasts = (file: SourceFile, holding: FamilyHolding): boolean =>
-  file.getDescendantsOfKind(SyntaxKind.AsExpression).some((cast) => escapesThroughCast(cast, holding)) ||
-  file.getDescendantsOfKind(SyntaxKind.TypeAssertionExpression).some((cast) => escapesThroughCast(cast, holding));
+const escapesThroughCasts = (production: SourceIndex, holding: FamilyHolding): boolean =>
+  production.ofKind(SyntaxKind.AsExpression).some((cast) => escapesThroughCast(cast, holding)) ||
+  production.ofKind(SyntaxKind.TypeAssertionExpression).some((cast) => escapesThroughCast(cast, holding));
 
-export const hasEscapeRoute = (production: readonly SourceFile[], holding: FamilyHolding): boolean =>
-  production.some((file) => escapesThroughValues(file, holding) || escapesThroughCasts(file, holding));
+export const hasEscapeRoute = (production: SourceIndex, holding: FamilyHolding): boolean =>
+  escapesThroughValues(production, holding) || escapesThroughCasts(production, holding);

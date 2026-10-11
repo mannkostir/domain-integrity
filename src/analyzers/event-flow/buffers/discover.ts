@@ -2,6 +2,7 @@ import { ClassDeclaration, SourceFile } from 'ts-morph';
 import { ClassIdentity } from '../../../engine/class-identity';
 import { isPlainEventArray } from '../../shared/array-store';
 import { isLibraryNode } from '../../shared/library';
+import { SourceIndex } from '../../shared/source-index';
 import { hierarchyOf } from '../hierarchy';
 import { ProjectClasses } from '../keys';
 import { UndispatchedBuffer } from '../model';
@@ -26,13 +27,15 @@ export type BufferContext = {
 type Scope = {
   readonly projectFiles: readonly SourceFile[];
   readonly production: readonly SourceFile[];
+  readonly productionIndex: SourceIndex;
 };
 
 const isScannedFile = (file: SourceFile, context: BufferContext): boolean => file !== context.configFile && !isLibraryNode(file);
 
 const scopeOf = (context: BufferContext): Scope => {
   const projectFiles = (context.files[0]?.getProject().getSourceFiles() ?? []).filter((file) => isScannedFile(file, context));
-  return { projectFiles, production: projectFiles.filter((file) => !isTestFile(file, context.root)) };
+  const production = projectFiles.filter((file) => !isTestFile(file, context.root));
+  return { projectFiles, production, productionIndex: new SourceIndex(production) };
 };
 
 const isCandidateOpen = (candidate: BufferCandidate, owner: ClassDeclaration, context: BufferContext, scope: Scope): boolean =>
@@ -63,7 +66,7 @@ const undispatched = (candidate: BufferCandidate, context: BufferContext, scope:
   if (owner === undefined || !context.isProject(owner) || !isCandidateOpen(candidate, owner, context, scope)) return undefined;
   if (hasReassignedPusher(candidate, scope.production) || !isUndrained(candidate, scope.production)) return undefined;
   const raisers = raiserIds(candidate, context, scope);
-  const reported = raisers.length > 0 && !hasEscapeRoute(scope.production, familyHolding(candidate.family));
+  const reported = raisers.length > 0 && !hasEscapeRoute(scope.productionIndex, familyHolding(candidate.family));
   return reported ? bufferOf(candidate, owner, raisers, context) : undefined;
 };
 
