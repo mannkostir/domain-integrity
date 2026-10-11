@@ -245,7 +245,7 @@ Findings appear as code-scanning alerts on the pull request, and the job fails w
 | `baseline` | none | baseline file to apply |
 | `upload` | `true` | upload the SARIF report to code scanning; set `false` when code scanning is unavailable |
 
-The step exposes `exit-code`, the exit code of `check`, and `sarif-file`, the path to the SARIF report.
+The step exposes `exit-code`, the exit code of `check`, and `sarif-file`, the path to the SARIF report. The upload is skipped when `check` exits `2`, because a report from a failed run would make code scanning close the open alerts of the analyzer that failed.
 
 ## The declaration
 
