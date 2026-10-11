@@ -64,14 +64,14 @@ describe('suggestLifecycles', () => {
   });
 
   it('suggests no terminal value for a timestamp set only alongside a terminal status', () => {
-    const cancel = method('cancel', true, {
+    const close = method('close', true, {
       status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') },
       closedAt: setClosedAt,
     });
 
     expect(
       terminalLabels({
-        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, cancel] })],
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close] })],
         problems: [],
       }),
     ).toEqual([
@@ -95,7 +95,7 @@ describe('suggestLifecycles', () => {
   });
 
   it('keeps the terminal value of a timestamp when the status it is set with has no terminal value', () => {
-    const cancel = method('cancel', true, {
+    const close = method('close', true, {
       status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') },
       closedAt: setClosedAt,
     });
@@ -103,7 +103,7 @@ describe('suggestLifecycles', () => {
 
     expect(
       terminalLabels({
-        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, cancel, reopen] })],
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close, reopen] })],
         problems: [],
       }),
     ).toEqual([
@@ -193,7 +193,7 @@ describe('suggestLifecycles', () => {
   });
 
   it('keeps the terminal value of a timestamp also set by a method that leaves the status alone', () => {
-    const cancel = method('cancel', true, {
+    const close = method('close', true, {
       status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') },
       closedAt: setClosedAt,
     });
@@ -201,7 +201,7 @@ describe('suggestLifecycles', () => {
 
     expect(
       terminalLabels({
-        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, cancel, archive] })],
+        aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close, archive] })],
         problems: [],
       }),
     ).toEqual([
