@@ -18,4 +18,4 @@ export const initRetryCommand = (paths: Paths, cwd: string, yes: boolean): strin
   ].join(' ');
 
 export const noAggregatesForInitMessage = (declaration: DomainDeclaration, retryCommand: string): string =>
-  `${noAggregatesFound(declaration)} Run it again with the base class or interface your aggregates extend or implement, repeating --base-class for each one: ${retryCommand}`;
+  `${noAggregatesFound(declaration)} Run init again naming the base class or interface your aggregates extend or implement, repeating --base-class for each one: ${retryCommand}`;
