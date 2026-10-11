@@ -1,8 +1,8 @@
 import { ClassDeclaration, ts } from 'ts-morph';
-import { areComparable, hasLiteralType } from './comparable-types';
+import { Comparable, hasLiteralType, strictlyComparable, widelyComparable } from './comparable-types';
 import { BoundType } from './registrations/handler-bound';
 import { hasNominalMember } from './registrations/nominal-members';
-import { someReachable } from './registrations/reachable-types';
+import { someReachable } from './reachable-types';
 import { hasUnknownType } from './registrations/unknown-types';
 
 type EventFacts = { readonly event: ClassDeclaration; readonly open: boolean; readonly literal: boolean };
@@ -15,11 +15,14 @@ const isOpen = (event: ClassDeclaration): boolean => isGeneric(event) || hasNomi
 
 const factsOf = (event: ClassDeclaration): EventFacts => ({ event, open: isOpen(event), literal: hasLiteralType(event.getType(), event) });
 
+const comparableFor = (facts: EventFacts, { type, location }: BoundType): Comparable =>
+  facts.literal || hasLiteralType(type, location) ? widelyComparable : strictlyComparable;
+
 const receives =
   (checker: ts.TypeChecker, facts: EventFacts) =>
-  ({ type, location }: BoundType): boolean => {
-    const comparison = { checker, widening: facts.literal || hasLiteralType(type, location) };
-    return someReachable(type, location, (reached) => areComparable(comparison, reached, facts.event.getType()));
+  (bound: BoundType): boolean => {
+    const comparable = comparableFor(facts, bound);
+    return someReachable(bound.type, bound.location, (reached) => comparable(checker, reached, facts.event.getType()));
   };
 
 export const receivableEvents = (events: readonly ClassDeclaration[]): ReceiversOf => {

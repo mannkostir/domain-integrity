@@ -1,5 +1,5 @@
 import { HeritageClause, Node, Type } from 'ts-morph';
-import { someReachable } from './reachable-types';
+import { someReachable } from '../reachable-types';
 
 const MAX_HERITAGE_DEPTH = 8;
 

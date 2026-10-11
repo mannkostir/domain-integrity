@@ -122,6 +122,16 @@ const SHIPPED_MESSAGE = 'export interface ShippedMessage { topic: string; payloa
 
 const ISSUE_CREATED = 'export class OrderCreated { constructor(readonly orderId: string, readonly customerId: string) {} }\n';
 
+const BOOLEAN_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped { readonly ok = true; constructor(readonly orderId: string) {} }
+`;
+
+const TEMPLATE_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped { readonly type: \`shipped.\${string}\` = 'shipped.ok'; constructor(readonly orderId: string) {} }
+`;
+
 describe('unhandledEvent with unresolved registrations', () => {
   it('stays silent for a structurally identical consumer-owned class', () => {
     expect(
@@ -472,5 +482,19 @@ describe('unhandledEvent with unresolved registrations', () => {
     expect(
       findingsFor('listener.ts', "export interface ShippedDto { type: string; id: string; toJSON(): object }\nexport class Listener { @OnEvent('order.shipped') on(dto: ShippedDto) {} }", LITERAL_EVENTS),
     ).toEqual(['Shipped']);
+  });
+
+  it('reports an event incomparable with a parameter type that has a boolean property', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('payment.paid') on(e: { total: number; paid: boolean }) {} }")).toEqual(['Shipped']);
+  });
+
+  it('reports an event with a boolean literal property incomparable with a parameter type of other fields', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { ok: boolean; customerId: string }) {} }", BOOLEAN_EVENTS)).toEqual(['Shipped']);
+  });
+
+  it('stays silent for a parameter type that differs only in a template literal discriminant', () => {
+    expect(
+      findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on(e: { type: `created.${string}`; orderId: string }) {} }", TEMPLATE_EVENTS),
+    ).toEqual([]);
   });
 });

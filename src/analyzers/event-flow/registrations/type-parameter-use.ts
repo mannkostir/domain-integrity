@@ -1,5 +1,5 @@
 import { Node, TypeNode } from 'ts-morph';
-import { someReachable } from './reachable-types';
+import { someReachable } from '../reachable-types';
 
 const declaresTypeParameter = (reference: Node): boolean =>
   Node.isTypeReference(reference) && (reference.getTypeName().getSymbol()?.getDeclarations() ?? []).some(Node.isTypeParameterDeclaration);

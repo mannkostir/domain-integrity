@@ -1,5 +1,5 @@
 import { Node, Symbol as MorphSymbol, SyntaxKind, Type } from 'ts-morph';
-import { someReachable } from './reachable-types';
+import { someReachable } from '../reachable-types';
 
 const hasRestrictedScope = (declaration: Node): boolean =>
   Node.isModifierable(declaration) && (declaration.hasModifier(SyntaxKind.PrivateKeyword) || declaration.hasModifier(SyntaxKind.ProtectedKeyword));
