@@ -1,4 +1,5 @@
 import { ClassDeclaration, ClassExpression, ElementAccessExpression, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
+import { SourceIndex } from './source-index';
 import { outermostWrapper, unwrap } from './wrappers';
 
 const isAssignmentOperator = (kind: SyntaxKind): boolean =>
@@ -89,5 +90,27 @@ const writtenBracketAccess =
     return isWritten(target) && isKeyFor(access.getArgumentExpression(), name) ? [target] : [];
   };
 
+export class BracketWrites {
+  private writtenAccesses: readonly ElementAccessExpression[] | undefined;
+  private readonly byName = new Map<string, readonly Node[]>();
+
+  constructor(private readonly sources: SourceIndex) {}
+
+  of(name: string): readonly Node[] {
+    const known = this.byName.get(name);
+    if (known !== undefined) return known;
+    const writes = this.written().flatMap(writtenBracketAccess(name));
+    this.byName.set(name, writes);
+    return writes;
+  }
+
+  private written(): readonly ElementAccessExpression[] {
+    this.writtenAccesses ??= this.sources
+      .ofKind(SyntaxKind.ElementAccessExpression)
+      .filter((access) => isWritten(outermostWrapper(access)));
+    return this.writtenAccesses;
+  }
+}
+
 export const bracketWritesOf = (name: string, files: readonly SourceFile[]): readonly Node[] =>
-  files.flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ElementAccessExpression).flatMap(writtenBracketAccess(name)));
+  new BracketWrites(new SourceIndex(files)).of(name);
