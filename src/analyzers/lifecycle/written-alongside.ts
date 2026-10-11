@@ -29,8 +29,10 @@ const tokensWrittenBy = (statement: Statement, field: StateField): ReadonlySet<s
   return value.unresolved ? NOTHING : value.tokens;
 };
 
-const mayLeave = (statement: Statement): boolean =>
-  [statement, ...statement.getDescendants()].some((node) => INTERRUPTIONS.includes(node.getKind()));
+const interrupts = (node: Node): boolean =>
+  INTERRUPTIONS.includes(node.getKind()) || (Node.isForOfStatement(node) && node.isAwaited());
+
+const mayLeave = (statement: Statement): boolean => [statement, ...statement.getDescendants()].some(interrupts);
 
 const enclosingBlocks = (statement: Statement): Block[] => {
   const ancestors = statement.getAncestors();

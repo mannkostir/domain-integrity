@@ -356,3 +356,52 @@ describe('terminal suggestion for a timestamp written where the status cannot be
     expect(terminals.get('closedAt')).toEqual([]);
   });
 });
+
+describe('terminal suggestion for a timestamp written by forms other than an assignment expression', () => {
+  it('is kept when a subclass writes the timestamp', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': ticketSource('protected closedAt: Date | null = null;', ''),
+      '/src/urgent-ticket.ts': `
+import { Ticket } from './ticket';
+export class UrgentTicket extends Ticket {
+  stamp(): void { this.closedAt = new Date(); }
+}
+`,
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a for-of loop assigns the timestamp', () => {
+    const terminals = suggestedTerminals(coveredTicket('restamp(dates: Date[]): void { for (this.closedAt of dates) { } }'));
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a for-in loop assigns the timestamp', () => {
+    const terminals = suggestedTerminals(coveredTicket('restamp(keys: object): void { for (this.closedAt in keys) { } }'));
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when the timestamp is deleted', () => {
+    const terminals = suggestedTerminals(
+      coveredTicket('clear(): void { delete (this as { closedAt?: Date | null }).closedAt; }'),
+    );
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+
+  it('is kept when a for-await loop separates the timestamp from a later status write', () => {
+    const terminals = suggestedTerminals({
+      '/src/ticket.ts': closingTicket(`async close(ticks: AsyncIterable<number>): Promise<void> {
+    ${STATUS_GUARD}
+    this.closedAt = new Date();
+    for await (const tick of ticks) { this.title = String(tick); }
+    this.status = Status.Closed;
+  }`),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+});

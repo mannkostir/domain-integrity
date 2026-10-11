@@ -37,6 +37,15 @@ const assignmentsIn = (classes: readonly ClassDeclaration[]): readonly Assignmen
     .filter(isAssignment)
     .flatMap((binary) => targetsOf(binary).map((target) => ({ binary, target })));
 
+const loopTargets = (classes: readonly ClassDeclaration[]): readonly Node[] =>
+  classes
+    .flatMap((cls) => [...cls.getDescendantsOfKind(SyntaxKind.ForOfStatement), ...cls.getDescendantsOfKind(SyntaxKind.ForInStatement)])
+    .map((loop) => unwrap(loop.getInitializer()))
+    .flatMap((initializer) => (isDestructuring(initializer) ? initializer.getDescendants().filter(isMemberAccess) : [initializer]));
+
+const deletedTargets = (classes: readonly ClassDeclaration[]): readonly Node[] =>
+  classes.flatMap((cls) => cls.getDescendantsOfKind(SyntaxKind.DeleteExpression)).map((deletion) => unwrap(deletion.getExpression()));
+
 const isScopeBoundary = (node: Node): boolean =>
   Node.isFunctionLikeDeclaration(node) ||
   Node.isFunctionExpression(node) ||
@@ -67,13 +76,16 @@ const uncertainlyAssigned = (assignments: readonly Assignment[], writers: Readon
       .flatMap(({ target }) => memberName(target) ?? []),
   );
 
-const writesThroughComputedKey = (assignments: readonly Assignment[]): boolean =>
-  assignments.some(({ target }) => isComputedStateAccess(target));
-
 const uncertainInClass = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ((field: StateField) => boolean) => {
-  const assignments = assignmentsIn(projectHierarchy(cls, aggregateBaseClasses));
-  if (writesThroughComputedKey(assignments)) return () => true;
-  const names = uncertainlyAssigned(assignments, certainWriters(cls, aggregateBaseClasses));
+  const classes = [...projectHierarchy(cls, aggregateBaseClasses), ...cls.getDerivedClasses()];
+  const assignments = assignmentsIn(classes);
+  const otherTargets = [...loopTargets(classes), ...deletedTargets(classes)].filter(isMemberAccess);
+  const targets = [...assignments.map(({ target }) => target), ...otherTargets];
+  if (targets.some(isComputedStateAccess)) return () => true;
+  const names = new Set([
+    ...uncertainlyAssigned(assignments, certainWriters(cls, aggregateBaseClasses)),
+    ...otherTargets.flatMap((target) => memberName(target) ?? []),
+  ]);
   return (field) => names.has(field.name);
 };
 
