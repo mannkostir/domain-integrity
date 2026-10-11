@@ -67,9 +67,9 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
     throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
   }
   const project = loadProject(paths.tsconfig);
-  const existing = startingConfig(project, paths.config, options.baseClass);
-  const declaration = existing ? readDeclaration(existing) : DEFAULT_DECLARATION;
-  const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, paths.root, existing), root: paths.root, configFile: existing });
+  const config = startingConfig(project, paths.config, options.baseClass);
+  const declaration = config ? readDeclaration(config) : DEFAULT_DECLARATION;
+  const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, paths.root, config), root: paths.root, configFile: config });
   if (lifecycleAnalyzer.isEmpty(model)) {
     throw new ProjectError(noAggregatesForInitMessage(declaration, initRetryCommand(paths, io.cwd, options.yes === true)));
   }
@@ -89,7 +89,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
     return 0;
   }
   try {
-    await writeLifecycles(project, existing ?? openConfig(project, paths.config), accepted);
+    await writeLifecycles(project, config ?? openConfig(project, paths.config), accepted);
   } catch (error) {
     throw new UsageError(`Cannot write ${paths.config}: ${error instanceof Error ? error.message : String(error)}`);
   }
