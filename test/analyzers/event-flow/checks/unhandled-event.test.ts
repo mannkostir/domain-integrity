@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { unhandledEvent } from '../../../../src/analyzers/event-flow/checks/unhandled-event';
-import { eventClass, flowModel, registration } from '../../../helpers/event-flow-model';
+import { eventClass, flowModel, registration, unresolvedSite } from '../../../helpers/event-flow-model';
 
 const declared = (overrides: Parameters<typeof eventClass>[1] = {}, rest: Parameters<typeof flowModel>[0] = {}) =>
   flowModel({ events: new Map([['Failed', eventClass('Failed', { ancestors: ['Base'], ...overrides })]]), registrations: [], inProcess: ['Failed'], ...rest });
@@ -34,13 +34,28 @@ describe('unhandledEvent', () => {
 
   it('stays silent when anything could hide a handler or the event is never constructed', () => {
     expect([
-      unhandledEvent(declared({}, { unresolved: [{ owner: undefined, inTest: false, payload: { kind: 'unreadable' }, file: '/app/src/x.ts', line: 1 }] })),
       unhandledEvent(declared({ constructions: [] })),
       unhandledEvent(declared({ escaped: true })),
       unhandledEvent(declared({ instanceofChecked: true })),
       unhandledEvent(declared({ namedInString: true })),
       unhandledEvent(declared({ typedHandling: true })),
-    ]).toEqual([[], [], [], [], [], []]);
+    ]).toEqual([[], [], [], [], []]);
+  });
+
+  it('stays silent when an unresolved site outside tests might receive the event', () => {
+    expect([
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ payload: { kind: 'unreadable' } })] })),
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ payload: { kind: 'classes', classes: ['Failed'], file: '/app/src/x.ts', line: 1 } })] })),
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ payload: { kind: 'classes', classes: ['Base'], file: '/app/src/x.ts', line: 1 } })] })),
+    ]).toEqual([[], [], []]);
+  });
+
+  it('still reports when unresolved sites cannot receive the event', () => {
+    expect([
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ payload: { kind: 'classes', classes: ['Paid'], file: '/app/src/x.ts', line: 1 } })] })).length,
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ inTest: true })] })).length,
+      unhandledEvent(declared({}, { unresolved: [unresolvedSite({ inTest: true, payload: { kind: 'classes', classes: ['Failed'], file: '/app/src/x.ts', line: 1 } })] })).length,
+    ]).toEqual([1, 1, 1]);
   });
 
   it('stays silent for an opaque event, or a library-based one when a handler is keyed on a library class', () => {

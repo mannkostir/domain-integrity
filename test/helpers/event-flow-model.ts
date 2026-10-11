@@ -1,4 +1,4 @@
-import { ClassRef, EventClassModel, EventFlowModel, Registration } from '../../src/analyzers/event-flow/model';
+import { ClassRef, EventClassModel, EventFlowModel, Registration, UnresolvedSite } from '../../src/analyzers/event-flow/model';
 
 export const classRef = (id: string): ClassRef => ({ id, name: id, qualifiedName: `src/${id}.ts:${id}`, file: `/app/src/${id}.ts`, line: 1 });
 
@@ -25,6 +25,15 @@ export const registration = (overrides: Partial<Registration> = {}): Registratio
   inTest: false,
   file: '/app/src/handlers.ts',
   line: 4,
+  ...overrides,
+});
+
+export const unresolvedSite = (overrides: Partial<UnresolvedSite> = {}): UnresolvedSite => ({
+  owner: undefined,
+  inTest: false,
+  payload: { kind: 'unreadable' },
+  file: '/app/src/x.ts',
+  line: 1,
   ...overrides,
 });
 
