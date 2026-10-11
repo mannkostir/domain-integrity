@@ -38,8 +38,13 @@ const assertIdentifiers = (names: readonly string[]): void => {
 const existingConfig = (project: Project, configPath: string): SourceFile | undefined =>
   project.getFileSystem().fileExistsSync(configPath) ? configSourceFile(project, configPath) : undefined;
 
+const validated = (config: SourceFile | undefined): SourceFile | undefined => {
+  if (config !== undefined) readDeclaration(config);
+  return config;
+};
+
 const configWithBaseClasses = (project: Project, configPath: string, names: readonly string[]): SourceFile => {
-  const config = openConfig(project, configPath);
+  const config = validated(existingConfig(project, configPath)) ?? openConfig(project, configPath);
   recordBaseClasses(config, names);
   return config;
 };

@@ -65,6 +65,14 @@ export default defineDomain({
 });
 `;
 
+const CONFIG_WITH_TYPE_ERROR_ON_LINE_6 = `import { defineDomain } from 'domain-integrity';
+
+export default defineDomain({
+  lifecycles: [],
+});
+export const broken: number = 'text';
+`;
+
 const declaredBaseClasses = (dir: string): readonly string[] =>
   readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json')), join(dir, 'domain.config.ts'))).aggregateBaseClasses;
 
@@ -135,6 +143,19 @@ describe('init --base-class', () => {
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
     expect(readConfig(dir)).toContain("\n    aggregateBaseClasses: ['Model'],\n    lifecycles: [");
+  });
+
+  it('reports a type error of an existing config at the line the user wrote', async () => {
+    const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': CONFIG_WITH_TYPE_ERROR_ON_LINE_6 });
+    const withoutFlag = captureIo(dir);
+    const withFlag = captureIo(dir);
+    await run(['init', '--yes'], withoutFlag.io);
+    await run(['init', '--yes', '--base-class', 'Model'], withFlag.io);
+
+    expect({
+      withoutFlag: withoutFlag.stderr().includes('domain.config.ts:6 '),
+      withFlag: withFlag.stderr().includes('domain.config.ts:6 '),
+    }).toEqual({ withoutFlag: true, withFlag: true });
   });
 
   it('exits 2 and writes nothing for a base class that is not an identifier', async () => {
