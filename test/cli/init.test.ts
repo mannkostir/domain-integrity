@@ -196,4 +196,98 @@ describe('init', () => {
 
     expect(readConfig(dir)).toContain("import { defineDomain, lifecycle } from 'domain-integrity';");
   });
+
+  it('writes runtime extensions when the project resolves modules as NodeNext', async () => {
+    const dir = writeProject(TICKET_SOURCES, { module: 'NodeNext', moduleResolution: 'NodeNext' });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket.js';");
+  });
+
+  it('writes runtime extensions when the project resolves modules as Node16', async () => {
+    const dir = writeProject(TICKET_SOURCES, { module: 'Node16', moduleResolution: 'Node16' });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket.js';");
+  });
+
+  it('writes runtime extensions when NodeNext resolution is implied by the module setting', async () => {
+    const dir = writeProject(TICKET_SOURCES, { module: 'NodeNext', moduleResolution: undefined });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket.js';");
+  });
+
+  it('writes the mjs extension for an aggregate in an mts file under NodeNext', async () => {
+    const dir = writeProject(
+      { 'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'], 'src/ticket.mts': TICKET_SOURCES['src/ticket.ts'] },
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket.mjs';");
+  });
+
+  it('keeps the index file name for an aggregate in a directory index under NodeNext', async () => {
+    const dir = writeProject(
+      {
+        'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'],
+        'src/ticket/index.ts': TICKET_SOURCES['src/ticket.ts'].replace("'./aggregate-root'", "'../aggregate-root'"),
+      },
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket/index.js';");
+  });
+
+  it('imports an enum declared in a declaration file from its runtime path under NodeNext', async () => {
+    const dir = writeProject(
+      {
+        'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'],
+        'src/ticket-status.d.ts': "export declare enum TicketStatus { open = 'OPEN', closed = 'CLOSED' }\n",
+        'src/ticket.ts': TICKET_SOURCES['src/ticket.ts'].replace(
+          "export enum TicketStatus { open = 'OPEN', closed = 'CLOSED' }",
+          "import { TicketStatus } from './ticket-status.js';",
+        ),
+      },
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { TicketStatus } from './src/ticket-status.js';");
+  });
+
+  it('writes the cjs extension for an aggregate in a cts file under NodeNext', async () => {
+    const dir = writeProject(
+      { 'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'], 'src/ticket.cts': TICKET_SOURCES['src/ticket.ts'] },
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket.cjs';");
+  });
+
+  it('writes a parent-relative runtime path for a config outside the project root under NodeNext', async () => {
+    const dir = writeProject(TICKET_SOURCES, { module: 'NodeNext', moduleResolution: 'NodeNext' });
+    await run(['init', '--yes', '-c', 'config/domain.config.ts'], captureIo(dir).io);
+
+    expect(readFileSync(join(dir, 'config/domain.config.ts'), 'utf8')).toContain(
+      "import { Ticket, TicketStatus } from '../src/ticket.js';",
+    );
+  });
+
+  it('extends an existing runtime-extension import under NodeNext instead of adding another', async () => {
+    const dir = writeProject(
+      {
+        ...TICKET_SOURCES,
+        'domain.config.ts':
+          "import { defineDomain, lifecycle } from 'domain-integrity';\nimport { Ticket } from './src/ticket.js';\nexport default defineDomain({ lifecycles: [] });\n",
+      },
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket.js';");
+  });
 });

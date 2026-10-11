@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": { "domain-integrity": ["../../../src/index.ts"] }
+  },
+  "include": ["src"]
+}
