@@ -1,10 +1,7 @@
 import { relative, resolve } from 'node:path';
 import { DomainDeclaration } from '../engine/declaration';
-import { Paths } from './io';
+import { DEFAULT_CONFIG, DEFAULT_TSCONFIG, Paths } from './io';
 import { noAggregatesFound } from './session';
-
-const DEFAULT_TSCONFIG = 'tsconfig.json';
-const DEFAULT_CONFIG = 'domain.config.ts';
 
 const SHELL_SAFE = /^[\w@%+=:,./-]+$/;
 

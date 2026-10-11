@@ -4,7 +4,7 @@ import { DomainIntegrityError } from '../engine/errors';
 import { CheckOptions, checkCommand } from './check';
 import { contextCommand } from './context';
 import { InitOptions, initCommand } from './init';
-import { Io, Paths } from './io';
+import { DEFAULT_CONFIG, DEFAULT_TSCONFIG, Io, Paths } from './io';
 import { showCommand } from './show';
 
 type CommonOptions = { readonly project: string; readonly config: string };
@@ -18,8 +18,8 @@ const pathsFrom = (options: CommonOptions, io: Io): Paths => {
 
 const withCommonOptions = (command: Command): Command =>
   command
-    .option('-p, --project <path>', 'path to tsconfig.json', 'tsconfig.json')
-    .option('-c, --config <path>', 'path to domain.config.ts', 'domain.config.ts');
+    .option('-p, --project <path>', 'path to tsconfig.json', DEFAULT_TSCONFIG)
+    .option('-c, --config <path>', 'path to domain.config.ts', DEFAULT_CONFIG);
 
 const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
   const program = new Command('domain-integrity')
