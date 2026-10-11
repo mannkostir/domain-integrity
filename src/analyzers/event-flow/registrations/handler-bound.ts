@@ -1,4 +1,6 @@
-import { ArrowFunction, FunctionExpression, MethodDeclaration, Node, ParameterDeclaration, Type } from 'ts-morph';
+import { ArrowFunction, FunctionExpression, MethodDeclaration, Node, ParameterDeclaration, Type, TypeNode } from 'ts-morph';
+import { hasNominalMember } from './nominal-members';
+import { mentionsTypeParameter } from './type-parameter-use';
 
 export type HandlerBound = { readonly kind: 'unbounded' } | { readonly kind: 'types'; readonly types: readonly Type[] };
 
@@ -21,11 +23,19 @@ const soleParameter = (signature: HandlerSignature): ParameterDeclaration | unde
   return parameters.length === 1 && parameter !== undefined && !parameter.isRestParameter() ? parameter : undefined;
 };
 
+const isComparableBound = (annotation: TypeNode, type: Type): boolean =>
+  !mentionsTypeParameter(annotation) && !hasNominalMember(type) && membersOf(type).every(isConstraining);
+
+const boundOfParameter = (parameter: ParameterDeclaration): HandlerBound => {
+  const annotation = parameter.getTypeNode();
+  if (annotation === undefined) return UNBOUNDED;
+  const type = parameter.getType().getNonNullableType();
+  return isComparableBound(annotation, type) ? { kind: 'types', types: [type] } : UNBOUNDED;
+};
+
 const boundOfSignature = (signature: HandlerSignature): HandlerBound => {
   const parameter = soleParameter(signature);
-  if (parameter === undefined) return UNBOUNDED;
-  const type = parameter.getType().getNonNullableType();
-  return membersOf(type).every(isConstraining) ? { kind: 'types', types: [type] } : UNBOUNDED;
+  return parameter === undefined ? UNBOUNDED : boundOfParameter(parameter);
 };
 
 type TypesBound = Extract<HandlerBound, { readonly kind: 'types' }>;

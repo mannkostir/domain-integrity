@@ -42,8 +42,9 @@ export default defineDomain({ events: { inProcess: [Shipped] } });
 
 const HANDLER_IMPORTS = "import { OnEvent, DomainEvents } from './infra';\nimport { DomainEvent, Shipped } from './events';\n";
 
-const findingsFor = (handlerFile: string, handler: string, events: string = SHIPPED_EVENTS) => {
+const findingsFor = (handlerFile: string, handler: string, events: string = SHIPPED_EVENTS, extraFiles: Readonly<Record<string, string>> = {}) => {
   const project = inMemoryProject({
+    ...extraFiles,
     '/app/src/events.ts': events,
     '/app/src/infra.ts': INFRA,
     '/app/src/service.ts': SERVICE,
@@ -54,6 +55,24 @@ const findingsFor = (handlerFile: string, handler: string, events: string = SHIP
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
   return unhandledEvent(extractEventFlows({ declaration: readDeclaration(config), files, root: '/app' })).map((finding) => finding.event);
 };
+
+const ENVELOPE_EVENTS = `
+export class Envelope<T> { constructor(readonly body: T, readonly occurredAt: Date) {} }
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped extends Envelope<{ id: string }> {}
+`;
+
+const MARKED_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped extends DomainEvent { private readonly marker = 1; constructor(readonly orderId: string) { super(); } }
+`;
+
+const PRIVATE_NAME_EVENTS = `
+export class DomainEvent { readonly occurredAt = new Date(); }
+export class Shipped extends DomainEvent { #marker = 1; constructor(readonly orderId: string) { super(); } }
+`;
+
+const DECLARED_CONTRACTS = 'export declare class Shipped { private readonly marker; readonly orderId: string; readonly occurredAt: Date; }\n';
 
 const INCOMPATIBLE_CREATED = 'export class OrderCreated extends DomainEvent { constructor(readonly orderId: string, readonly total: number) { super(); } }\n';
 
@@ -150,6 +169,88 @@ describe('unhandledEvent with unresolved registrations', () => {
       findingsFor(
         'listener.ts',
         "export class OrderShippedEvent { constructor(readonly orderId: string, readonly occurredAt: Date) {} }\nDomainEvents.register((event: OrderShippedEvent) => undefined, 'order.created');",
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a generic base handler typed with a readonly type parameter', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "export abstract class Base<E extends DomainEvent> { @OnEvent('order.*') on(event: Readonly<E>): void {} }\nexport class ShippedListener extends Base<Shipped> {}",
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a generic base handler typed with an envelope of a type parameter', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "import { Envelope } from './events';\nexport abstract class Base<T> { @OnEvent('order.shipped') on(event: Envelope<T>): void {} }\nexport class ShippedListener extends Base<{ id: string }> {}",
+        ENVELOPE_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a generic base handler typed with an intersection over a type parameter', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "export abstract class Base<T> { @OnEvent('order.shipped') on(event: Partial<T> & { orderId: string }): void {} }\nexport class ShippedListener extends Base<Shipped> {}",
+        CARRIER_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a same-shape class with a private member', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "export class OrderShipped { private readonly marker = 1; constructor(readonly orderId: string, readonly occurredAt: Date) {} }\nexport class Listener { @OnEvent('order.shipped') on(event: OrderShipped) {} }",
+        MARKED_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a same-shape class with a private member declared in a declaration file', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "import { Shipped as ContractShipped } from './contracts';\nexport class Listener { @OnEvent('order.shipped') on(event: ContractShipped) {} }",
+        MARKED_EVENTS,
+        { '/app/src/contracts.d.ts': DECLARED_CONTRACTS },
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a same-shape class with a private name', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "export class OrderShipped { #marker = 1; constructor(readonly orderId: string, readonly occurredAt: Date) {} }\nexport class Listener { @OnEvent('order.shipped') on(event: OrderShipped) {} }",
+        PRIVATE_NAME_EVENTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for a registered callback whose parameter type is only inferred', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "interface Named { name: string }\ndeclare const Bus: { register: (h: (e: Named) => void, key: string) => void };\nBus.register((event) => undefined, 'order.shipped');",
+      ),
+    ).toEqual([]);
+  });
+
+  it('stays silent for an untyped destructured parameter', () => {
+    expect(findingsFor('listener.ts', "export class Listener { @OnEvent('order.shipped') on({ id }) {} }")).toEqual([]);
+  });
+
+  it('stays silent for a parameter typed only by its default value', () => {
+    expect(
+      findingsFor(
+        'listener.ts',
+        "export class Other { constructor(readonly code: number) {} }\nexport class Listener { @OnEvent('order.shipped') on(event = new Other(1)) {} }",
       ),
     ).toEqual([]);
   });
