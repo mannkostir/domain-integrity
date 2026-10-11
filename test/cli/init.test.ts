@@ -241,6 +241,42 @@ describe('init', () => {
     expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket/index.js';");
   });
 
+  it('imports an enum declared in a declaration file from its runtime path under NodeNext', async () => {
+    const dir = writeProject(
+      {
+        'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'],
+        'src/ticket-status.d.ts': "export declare enum TicketStatus { open = 'OPEN', closed = 'CLOSED' }\n",
+        'src/ticket.ts': TICKET_SOURCES['src/ticket.ts'].replace(
+          "export enum TicketStatus { open = 'OPEN', closed = 'CLOSED' }",
+          "import { TicketStatus } from './ticket-status.js';",
+        ),
+      },
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { TicketStatus } from './src/ticket-status.js';");
+  });
+
+  it('writes the cjs extension for an aggregate in a cts file under NodeNext', async () => {
+    const dir = writeProject(
+      { 'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'], 'src/ticket.cts': TICKET_SOURCES['src/ticket.ts'] },
+      { module: 'NodeNext', moduleResolution: 'NodeNext' },
+    );
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("import { Ticket, TicketStatus } from './src/ticket.cjs';");
+  });
+
+  it('writes a parent-relative runtime path for a config outside the project root under NodeNext', async () => {
+    const dir = writeProject(TICKET_SOURCES, { module: 'NodeNext', moduleResolution: 'NodeNext' });
+    await run(['init', '--yes', '-c', 'config/domain.config.ts'], captureIo(dir).io);
+
+    expect(readFileSync(join(dir, 'config/domain.config.ts'), 'utf8')).toContain(
+      "import { Ticket, TicketStatus } from '../src/ticket.js';",
+    );
+  });
+
   it('extends an existing runtime-extension import under NodeNext instead of adding another', async () => {
     const dir = writeProject(
       {

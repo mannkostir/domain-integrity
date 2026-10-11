@@ -7,10 +7,10 @@ const RUNTIME_EXTENSION_RESOLUTIONS: readonly ModuleResolutionKind[] = [
   ModuleResolutionKind.NodeNext,
 ];
 
-const SOURCE_EXTENSION = /(?:\.d)?\.([mc]?)[jt]sx?$/i;
+const SOURCE_EXTENSION = /(?:\.d)?\.([mc]?)[jt]sx?$/;
 
 const withRuntimeExtension = (path: string): string =>
-  path.replace(SOURCE_EXTENSION, (_extension, kind: string) => `.${kind.toLowerCase()}js`);
+  path.replace(SOURCE_EXTENSION, (_extension, kind: string) => `.${kind}js`);
 
 const asRelativeSpecifier = (path: string): string => (path.startsWith('../') ? path : `./${path}`);
 
