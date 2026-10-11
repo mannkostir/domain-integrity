@@ -1,5 +1,5 @@
 import { relative } from 'node:path';
-import { Project, SourceFile } from 'ts-morph';
+import { Project, SourceFile, ts } from 'ts-morph';
 import { lifecycleAnalyzer } from '../analyzers/lifecycle/analyzer';
 import { LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
 import { DEFAULT_DECLARATION, DomainDeclaration } from '../engine/declaration';
@@ -26,10 +26,19 @@ const confirmEach = (suggestions: readonly LifecycleSuggestion[], io: Io, root: 
 
 export type InitOptions = { readonly yes?: boolean; readonly baseClass?: readonly string[] };
 
-const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+const codePoints = (text: string): readonly number[] => Array.from(text, (character) => character.codePointAt(0) ?? Number.NaN);
+
+const isIdentifierText = (name: string): boolean => {
+  const [first, ...rest] = codePoints(name);
+  return (
+    first !== undefined &&
+    ts.isIdentifierStart(first, ts.ScriptTarget.Latest) &&
+    rest.every((codePoint) => ts.isIdentifierPart(codePoint, ts.ScriptTarget.Latest))
+  );
+};
 
 const assertIdentifiers = (names: readonly string[]): void => {
-  const invalid = names.find((name) => !IDENTIFIER.test(name));
+  const invalid = names.find((name) => !isIdentifierText(name));
   if (invalid !== undefined) {
     throw new UsageError(`--base-class "${invalid}" is not a valid class or interface name.`);
   }

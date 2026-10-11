@@ -208,6 +208,16 @@ describe('init --base-class', () => {
     expect({ exitCode, written: existsSync(join(dir, 'domain.config.ts')) }).toEqual({ exitCode: 2, written: false });
   });
 
+  it('declares an aggregate extending a base class with a non-ASCII name', async () => {
+    const dir = writeProject({
+      'src/modell.ts': baseClassSource('Модель'),
+      'src/invoice.ts': invoiceExtending('Модель', 'modell'),
+    });
+    await run(['init', '--yes', '--base-class', 'Модель'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain('lifecycle(Invoice, ');
+  });
+
   it('names the rejected base class in the error', async () => {
     const dir = writeProject(MODEL_SOURCES);
     const { io, stderr } = captureIo(dir);
