@@ -5,6 +5,7 @@ import { AnalyzerRun } from '../../src/analysis';
 import { AnalysisInput, Analyzer, analyse } from '../../src/analyzer';
 import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
+import { UsageError } from '../../src/engine/errors';
 import { packageVersion } from '../../src/cli/version';
 import { TICKET_PROJECT, captureIo, writeProject } from '../helpers/disk';
 
@@ -125,6 +126,12 @@ describe('an analyzer that throws', () => {
     expect({ code: await run(['show'], io, [failingRun]), report: stderr().includes(REPORT) }).toEqual({ code: 2, report: true });
   });
 
+  it('keeps the clean message of a typed user-facing error', async () => {
+    const { code, stderr } = await runBroken(['check'], [throwing(new UsageError('bad usage'))]);
+
+    expect({ code, stderr }).toEqual({ code: 2, stderr: 'bad usage\n' });
+  });
+
   it('shortens the trace to the message and five frames', async () => {
     const { stderr } = await runBroken(['check'], [throwing(Object.assign(new Error('deep'), { stack: DEEP_STACK }))]);
 
@@ -132,9 +139,11 @@ describe('an analyzer that throws', () => {
   });
 
   it('reports a thrown value that cannot be converted to a string', async () => {
-    const { code, stderr } = await runBroken(['check'], [throwing(Object.create(null))]);
+    const circular: { self?: unknown } = Object.create(null);
+    circular.self = circular;
+    const { code, stderr } = await runBroken(['check'], [throwing(circular)]);
 
-    expect({ code, reported: stderr.includes(`${REPORT}\n{}`) }).toEqual({ code: 2, reported: true });
+    expect({ code, reported: stderr.includes(`${REPORT}\n[object Object]`) }).toEqual({ code: 2, reported: true });
   });
 });
 

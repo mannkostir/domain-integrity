@@ -1,5 +1,6 @@
 import { SourceFile } from 'ts-morph';
 import { DomainDeclaration } from './engine/declaration';
+import { DomainIntegrityError } from './engine/errors';
 
 export type AnalysisInput = {
   readonly declaration: DomainDeclaration;
@@ -100,6 +101,7 @@ const guarded = <T>(analyzer: string, compute: () => T): T | AnalyzerFailure => 
   try {
     return compute();
   } catch (error) {
+    if (error instanceof DomainIntegrityError) throw error;
     return { kind: 'failed', analyzer, error };
   }
 };

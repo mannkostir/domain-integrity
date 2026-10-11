@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AnalysisInput, Analyzer, analyse } from '../src/analyzer';
 import { DEFAULT_DECLARATION } from '../src/engine/declaration';
+import { ConfigError } from '../src/engine/errors';
 
 const INPUT: AnalysisInput = { declaration: DEFAULT_DECLARATION, files: [], root: '/' };
 
@@ -25,6 +26,17 @@ const healthy: Analyzer<string, never> = {
 const FAILURE = { kind: 'failed', analyzer: 'fake', error: BOOM };
 
 describe('analyse', () => {
+  it('lets a typed user-facing error through', () => {
+    const misconfigured: Analyzer<string, never> = {
+      ...healthy,
+      extract: () => {
+        throw new ConfigError('bad config');
+      },
+    };
+
+    expect(() => analyse(misconfigured, INPUT)).toThrow(ConfigError);
+  });
+
   it('keeps the results of a healthy analyzer', () => {
     const result = analyse(healthy, INPUT);
 
