@@ -48,7 +48,7 @@ const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
 
   withCommonOptions(program.command('init').description('suggest and write lifecycle declarations'))
     .option('-y, --yes', 'accept every suggestion without prompting')
-    .option('--base-class <name>', 'discover aggregates extending or implementing this class or interface (repeatable)', collect)
+    .option('--base-class <name>', 'discover aggregates extending or implementing this class or interface instead of AggregateRoot and Entity (repeatable)', collect)
     .action(async (options: CommonOptions & InitOptions) => {
       outcome.exitCode = await initCommand(pathsFrom(options, io), options, io);
     });

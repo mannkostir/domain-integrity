@@ -127,10 +127,10 @@ npx domain-integrity check
 
 `init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. When your tsconfig resolves modules as `node16` or `nodenext`, the imports carry runtime extensions: `.js`, or `.mjs` and `.cjs` for `.mts` and `.cts` files. You review the suggestions once; after that, `check` runs on every commit.
 
-`init` discovers aggregates as classes extending or implementing `AggregateRoot` or `Entity`. If yours use another base class or interface, pass it with `--base-class`, once for each name:
+`init` discovers aggregates as classes extending or implementing `AggregateRoot` or `Entity`. If yours use another base class or interface, pass it with `--base-class`, once for each name. The names you pass replace `AggregateRoot` and `Entity`; to keep one of them, pass it too:
 
 ```bash
-npx domain-integrity init --base-class MyAggregateBase
+npx domain-integrity init --base-class AggregateRoot --base-class MyAggregateBase
 ```
 
 `init` records the names in `aggregateBaseClasses`, so `check` finds the same aggregates. When it finds none, it prints the exact command to run.
@@ -185,7 +185,7 @@ npx domain-integrity check -p tsconfig.domain.json
 
 | Command | What it does |
 |---|---|
-| `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. `--base-class` is repeatable and records each name in `aggregateBaseClasses`. |
+| `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. `--base-class` is repeatable, replaces the default `AggregateRoot` and `Entity`, and records each name in `aggregateBaseClasses`; to keep a default, pass it too, as in `--base-class AggregateRoot --base-class MyAggregateBase`. |
 | `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error. |
 | `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents. |

@@ -120,6 +120,13 @@ describe('init --base-class', () => {
     expect(declaredBaseClasses(dir)).toEqual(['Legacy', 'Model']);
   });
 
+  it('replaces the default base classes in an existing config that lists none', async () => {
+    const dir = writeProject({ ...MODEL_SOURCES, 'domain.config.ts': FOUR_SPACE_CONFIG });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(declaredBaseClasses(dir)).toEqual(['Model']);
+  });
+
   it('keeps the four-space indentation of an existing config when recording the base class', async () => {
     const dir = writeProject({
       ...MODEL_SOURCES,
