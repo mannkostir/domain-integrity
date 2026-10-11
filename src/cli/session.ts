@@ -1,4 +1,4 @@
-import { runAnalyzers } from '../analysis';
+import { DEFAULT_ANALYZERS, runAnalyzers } from '../analysis';
 import { AnalysisResult } from '../analyzer';
 import { DomainDeclaration } from '../engine/declaration';
 import { ProjectError } from '../engine/errors';
@@ -18,7 +18,7 @@ export const openSession = (paths: Paths): Session => {
   const project = loadProject(paths.tsconfig);
   const configFile = configSourceFile(project, paths.config);
   const declaration = readDeclaration(configFile);
-  const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, paths.root, configFile), root: paths.root, configFile });
+  const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, paths.root, configFile), root: paths.root, configFile }, DEFAULT_ANALYZERS);
   if (results.every((result) => result.isEmpty)) throw new ProjectError(nothingToAnalyseMessage(declaration));
   return { results };
 };

@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import { AmbiguousReference, DiagramOutcome } from '../../analyzer';
+import { AmbiguousReference, AnalyzerDiagram } from '../../analyzer';
 import { escapeLabel } from '../mermaid-label';
 import { leakedTerminalTokens } from './checks/terminal-state-leak';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField } from './model';
@@ -92,7 +92,7 @@ const aggregateSections = (aggregate: AggregateModel): string[] =>
     .filter((field) => aggregate.declarations.has(field.name))
     .map((field) => `## ${aggregate.id}.${field.name}\n\n\`\`\`mermaid\n${fieldDiagram(aggregate, field)}\n\`\`\``);
 
-export const lifecycleDiagrams = (model: LifecycleModel, only: string | undefined): DiagramOutcome => {
+export const lifecycleDiagrams = (model: LifecycleModel, only: string | undefined): AnalyzerDiagram => {
   const selection = selectDeclared(model.aggregates, only);
   return selection.kind === 'ambiguous'
     ? selection
