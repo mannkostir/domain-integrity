@@ -1,5 +1,6 @@
 import { dirname, resolve } from 'node:path';
 import { Command, CommanderError } from 'commander';
+import { AnalyzerRun, DEFAULT_ANALYZERS } from '../analysis';
 import { DomainIntegrityError } from '../engine/errors';
 import { CheckOptions, checkCommand } from './check';
 import { contextCommand } from './context';
@@ -19,7 +20,7 @@ const withCommonOptions = (command: Command): Command =>
     .option('-p, --project <path>', 'path to tsconfig.json', 'tsconfig.json')
     .option('-c, --config <path>', 'path to domain.config.ts', 'domain.config.ts');
 
-const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
+const buildProgram = (io: Io, outcome: { exitCode: number }, analyzers: readonly AnalyzerRun[]): Command => {
   const program = new Command('domain-integrity')
     .description('Check aggregate lifecycles and in-process event flows against their declared intent.')
     .exitOverride()
@@ -30,18 +31,18 @@ const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
     .option('--baseline <path>', 'treat findings in this baseline file as known')
     .option('--update-baseline', 'write the current findings to the baseline file')
     .action((options: CheckOptions & CommonOptions) => {
-      outcome.exitCode = checkCommand(pathsFrom(options, io), options, io);
+      outcome.exitCode = checkCommand(pathsFrom(options, io), options, io, analyzers);
     });
 
   withCommonOptions(program.command('show').description('print Mermaid state and event-flow diagrams').argument('[name]'))
     .action((name: string | undefined, options: CommonOptions) => {
-      outcome.exitCode = showCommand(pathsFrom(options, io), name, io);
+      outcome.exitCode = showCommand(pathsFrom(options, io), name, io, analyzers);
     });
 
   withCommonOptions(program.command('context').description('print or write the domain summary for agents'))
     .option('--write <file>', 'replace the domain-integrity section in this file')
     .action((options: CommonOptions & { readonly write?: string }) => {
-      outcome.exitCode = contextCommand(pathsFrom(options, io), options.write, io);
+      outcome.exitCode = contextCommand(pathsFrom(options, io), options.write, io, analyzers);
     });
 
   withCommonOptions(program.command('init').description('suggest and write lifecycle declarations'))
@@ -53,10 +54,14 @@ const buildProgram = (io: Io, outcome: { exitCode: number }): Command => {
   return program;
 };
 
-export const run = async (argv: readonly string[], io: Io): Promise<number> => {
+export const run = async (
+  argv: readonly string[],
+  io: Io,
+  analyzers: readonly AnalyzerRun[] = DEFAULT_ANALYZERS,
+): Promise<number> => {
   const outcome = { exitCode: 0 };
   try {
-    await buildProgram(io, outcome).parseAsync([...argv], { from: 'user' });
+    await buildProgram(io, outcome, analyzers).parseAsync([...argv], { from: 'user' });
     return outcome.exitCode;
   } catch (error) {
     if (error instanceof DomainIntegrityError) {
