@@ -8,6 +8,8 @@ const LINEAR_EVENTS =
   'export abstract class BaseEvent {}\nexport class Paid extends BaseEvent {}\nexport class Failed extends BaseEvent {}\nexport class Refunded extends BaseEvent {}';
 const LOOPING_EVENTS =
   'export class Echo extends Paid {}\nexport class Paid extends Echo {}\nexport class Failed extends Echo {}\nexport class Refunded extends Echo {}';
+const SELF_IMPORTED_LOOPING_EVENTS =
+  "import * as self from './events';\nexport class Echo extends self.Paid {}\nexport class Paid extends self.Echo {}\nexport class Failed extends self.Echo {}\nexport class Refunded extends self.Echo {}";
 
 const checkIds = (events: string): readonly string[] => {
   const project = inMemoryProject({
@@ -32,6 +34,12 @@ describe('event-flow on looping event heritage', () => {
 
   it('reports neither when the event heritage loops', () => {
     const found = checkIds(LOOPING_EVENTS);
+
+    expect(found).toEqual([]);
+  });
+
+  it('reports neither when the event heritage loops through a namespace self-import', () => {
+    const found = checkIds(SELF_IMPORTED_LOOPING_EVENTS);
 
     expect(found).toEqual([]);
   });
