@@ -537,3 +537,31 @@ describe('terminal suggestion for a timestamp on an aggregate whose own base cla
     expect(terminals.get('closedAt')).toEqual([]);
   });
 });
+
+describe('terminal suggestion for a timestamp on an aggregate whose base class uses this without letting it escape', () => {
+  it('is dropped when a base method only compares this with another instance', () => {
+    const terminals = suggestedTerminals({
+      '/src/aggregate-root.ts': rootWith('equals(other: object): boolean { return this === other; }'),
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, ''),
+    });
+
+    expect(terminals.get('closedAt')).toEqual([]);
+  });
+
+  it('is kept when the base constructor passes this to a function', () => {
+    const terminals = suggestedTerminals({
+      '/src/aggregate-root.ts': `declare function register(root: object): void;
+export abstract class AggregateRoot<P extends object = object> {
+  protected props: P;
+  constructor(props: P) {
+    this.props = props;
+    register(this);
+  }
+}
+`,
+      '/src/ticket.ts': ticketSource(PRIVATE_CLOSED_AT, ''),
+    });
+
+    expect(terminals.get('closedAt')).toEqual(['set']);
+  });
+});

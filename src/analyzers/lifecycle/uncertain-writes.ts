@@ -86,10 +86,25 @@ const isModelledEscape = (node: Node, methods: ReadonlySet<Node>): boolean => {
   return scope !== undefined && (methods.has(scope) || (Node.isConstructorDeclaration(scope) && isObjectAssignTarget(node)));
 };
 
+const EQUALITY_OPERATORS: readonly SyntaxKind[] = [
+  SyntaxKind.EqualsEqualsEqualsToken,
+  SyntaxKind.ExclamationEqualsEqualsToken,
+  SyntaxKind.EqualsEqualsToken,
+  SyntaxKind.ExclamationEqualsToken,
+];
+
+const isComparedOnly = (node: Node): boolean => {
+  const comparison = node.getParent();
+  return Node.isBinaryExpression(comparison) && EQUALITY_OPERATORS.includes(comparison.getOperatorToken().getKind());
+};
+
 const escapesOutsideMethods = (classes: readonly ClassDeclaration[], methods: ReadonlySet<Node>): boolean =>
   classes
     .flatMap((candidate) => candidate.getDescendants())
-    .some((node) => escapesStateHolder(node) && !isAssignmentTarget(node) && !isModelledEscape(node, methods));
+    .some(
+      (node) =>
+        escapesStateHolder(node) && !isAssignmentTarget(node) && !isComparedOnly(node) && !isModelledEscape(node, methods),
+    );
 
 const uncertainInClass = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ((field: StateField) => boolean) => {
   const classes = [...projectAncestry(cls), ...cls.getDerivedClasses()];
