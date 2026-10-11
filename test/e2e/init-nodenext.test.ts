@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { Finding } from '../../src/analyzer';
+import { LifecycleFinding } from '../../src/analyzer';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
 
@@ -29,28 +29,27 @@ const initialisedCopy = async (): Promise<string> => {
 
 const configDiagnostics = (dir: string): readonly string[] => {
   const configPath = join(dir, 'domain.config.ts');
-  const parsed = ts.getParsedCommandLineOfConfigFile(join(dir, 'tsconfig.json'), {}, {
-    ...ts.sys,
-    onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
-      throw new Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
-    },
-  });
-  if (parsed === undefined) throw new Error(`Cannot parse ${dir}/tsconfig.json`);
+  const { config } = ts.readConfigFile(join(dir, 'tsconfig.json'), ts.sys.readFile);
+  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, dir);
   const program = ts.createProgram({ rootNames: [...parsed.fileNames, configPath], options: parsed.options });
   return ts
     .getPreEmitDiagnostics(program, program.getSourceFile(configPath))
     .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
 };
 
-const describeFinding = (finding: Finding): string =>
-  finding.analyzer === 'lifecycle'
-    ? `${finding.severity} ${finding.checkId} ${finding.aggregate}.${finding.method ?? '-'} ${finding.field} ${finding.subject}`
-    : `${finding.severity} ${finding.checkId}`;
+const describeFinding = ({ severity, checkId, aggregate, method, field, subject }: LifecycleFinding) => ({
+  severity,
+  checkId,
+  aggregate,
+  method,
+  field,
+  subject,
+});
 
 const checkJson = async (dir: string) => {
   const { io, stdout } = captureIo(dir);
   const code = await run(['check', '--format', 'json'], io);
-  const findings = (JSON.parse(stdout()) as { findings: Finding[] }).findings;
+  const findings = (JSON.parse(stdout()) as { findings: LifecycleFinding[] }).findings;
   return { code, findings: findings.map(describeFinding) };
 };
 
@@ -62,7 +61,16 @@ describe('init in a NodeNext ESM project', () => {
 
     expect(result).toEqual({
       code: 1,
-      findings: ['error terminal-state-leak Shipment.redirect status DELIVERED'],
+      findings: [
+        {
+          severity: 'error',
+          checkId: 'terminal-state-leak',
+          aggregate: 'Shipment',
+          method: 'redirect',
+          field: 'status',
+          subject: 'DELIVERED',
+        },
+      ],
     });
   });
 
