@@ -28,3 +28,14 @@ describe('hierarchyOf', () => {
     ]);
   });
 });
+
+describe('hierarchyOf on looping heritage', () => {
+  it('treats a class whose heritage loops back to itself as extending something foreign', () => {
+    const project = inMemoryProject({ '/src/loop.ts': 'export class Upper extends Lower {}\nexport class Lower extends Upper {}' });
+    const lower = project.getSourceFileOrThrow('/src/loop.ts').getClassOrThrow('Lower');
+
+    const hierarchy = hierarchyOf(lower, () => true);
+
+    expect(hierarchy.extendsForeign).toBe(true);
+  });
+});

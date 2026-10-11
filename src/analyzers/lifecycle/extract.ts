@@ -5,7 +5,7 @@ import { ClassIdentity, classIdentities } from '../../engine/class-identity';
 import { setsOf } from './assigned';
 import { candidateFields } from './candidates';
 import { aggregateName, discoverAggregates } from './discover';
-import { AggregateScope } from './field-ref';
+import { AggregateScope, hasCyclicInheritance } from './field-ref';
 import { methodSources } from './guards';
 import { initialValues } from './initial';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
@@ -71,6 +71,21 @@ const resolveDeclared = (
   };
 };
 
+const unknownFields: ResolvedFields = { fields: [], declarations: new Map(), problems: [] };
+
+const resolveFields = (
+  cls: ClassDeclaration,
+  declared: DeclaredLifecycle | undefined,
+  methods: readonly MethodDeclaration[],
+  scope: AggregateScope,
+  auditFields: readonly string[],
+): ResolvedFields => {
+  if (hasCyclicInheritance(cls)) return unknownFields;
+  return declared
+    ? resolveDeclared(cls, declared, methods)
+    : { fields: candidateFields(scope, auditFields), declarations: new Map(), problems: [] };
+};
+
 const visibilityOf = (method: MethodDeclaration): Visibility => {
   if (Node.isPrivateIdentifier(method.getNameNode())) return 'private';
   const scope = method.getScope();
@@ -111,9 +126,7 @@ const extractAggregate = (
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
   const methods = instanceMethods(cls, declaration.aggregateBaseClasses);
   const scope = aggregateScope(cls, declaration, files);
-  const resolved: ResolvedFields = declared
-    ? resolveDeclared(cls, declared, methods)
-    : { fields: candidateFields(scope, declaration.auditFields), declarations: new Map(), problems: [] };
+  const resolved = resolveFields(cls, declared, methods, scope, declaration.auditFields);
   return {
     problems: resolved.problems,
     aggregate: {

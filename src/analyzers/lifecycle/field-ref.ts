@@ -12,7 +12,8 @@ import {
 import { isPlainArrayPush, isPushOnlyMethod } from '../shared/array-store';
 import { isDeclaredOnlyAsMethods } from './inert-event-method';
 import { isDefaultLibraryNode, isLibraryNode } from '../shared/library';
-import { namedClassChain } from './named-chain';
+import { classNamedBy, namedClassChain } from './named-chain';
+import { ancestry } from '../shared/ancestry';
 import { isTransparentConstruction } from './transparent-constructor';
 import { outermostWrapper, unwrap } from '../shared/wrappers';
 
@@ -66,10 +67,17 @@ type MemberLookup =
   | { readonly kind: 'body'; readonly body: Node }
   | { readonly kind: 'untraceable' };
 
-export const inheritanceChain = (cls: ClassDeclaration): readonly ClassDeclaration[] => {
-  const base = cls.getBaseClass();
-  return base === undefined ? [cls] : [cls, ...inheritanceChain(base)];
+const baseClassOf = (cls: ClassDeclaration): ClassDeclaration | undefined => cls.getBaseClass();
+
+const namedBaseOf = (cls: ClassDeclaration): ClassDeclaration | undefined => {
+  const heritage = cls.getExtends();
+  return heritage === undefined ? undefined : classNamedBy(heritage.getExpression());
 };
+
+export const inheritanceChain = (cls: ClassDeclaration): readonly ClassDeclaration[] => ancestry(cls, baseClassOf).chain;
+
+export const hasCyclicInheritance = (cls: ClassDeclaration): boolean =>
+  ancestry(cls, baseClassOf).cyclic || ancestry(cls, namedBaseOf).cyclic;
 
 const isSuperAccess = (node: Node): boolean =>
   (Node.isPropertyAccessExpression(node) || Node.isElementAccessExpression(node)) &&
