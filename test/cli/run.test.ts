@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
-import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
+import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeProject, writeTree } from '../helpers/disk';
 
 describe('check', () => {
   it('exits 1 and prints the leak for an unguarded mutating method', async () => {
@@ -24,6 +24,46 @@ describe('check', () => {
     const { io, stdout } = captureIo(dir);
 
     expect({ code: await run(['check', '--baseline', 'baseline.json'], io), known: stdout().includes('(baseline)') }).toEqual({ code: 0, known: true });
+  });
+
+  it('exits 2 and explains a tsconfig that includes no source files', async () => {
+    const dir = writeTree({ 'tsconfig.json': JSON.stringify({ files: [] }) });
+    const { io, stderr } = captureIo(dir);
+
+    expect({
+      code: await run(['check'], io),
+      explained: stderr().includes('includes no source files'),
+      misleading: stderr().includes('aggregateBaseClasses'),
+    }).toEqual({ code: 2, explained: true, misleading: false });
+  });
+
+  it('does not reject a config that a composite tsconfig include leaves out', async () => {
+    const { io } = captureIo(writeProject(TICKET_PROJECT, { composite: true }));
+
+    expect(await run(['check'], io)).toBe(1);
+  });
+
+  it('reports a type error of a config that a composite tsconfig include leaves out', async () => {
+    const config = TICKET_PROJECT['domain.config.ts'].replace('TicketStatus.closed]', 'TicketStatus.missing]');
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_PROJECT, 'domain.config.ts': config }, { composite: true }));
+
+    expect({ code: await run(['check'], io), reported: stderr().includes('Type errors in domain.config.ts') }).toEqual({ code: 2, reported: true });
+  });
+
+  it('analyses a solution whose reference includes JavaScript the solution options do not allow', async () => {
+    const dir = writeProject({
+      ...TICKET_PROJECT,
+      'src/legacy.js': "export class Legacy { status = 'open'; }\n",
+      'sol/tsconfig.json': JSON.stringify({
+        extends: '../tsconfig.json',
+        compilerOptions: { allowJs: false },
+        files: [],
+        references: [{ path: '..' }],
+      }),
+    }, { allowJs: true });
+    const { io } = captureIo(dir);
+
+    expect(await run(['check', '-p', 'sol/tsconfig.json', '-c', 'domain.config.ts'], io)).toBe(1);
   });
 
   it('exits 2 and suggests init when the config is missing', async () => {

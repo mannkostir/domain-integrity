@@ -77,3 +77,12 @@ export const captureIo = (cwd: string, answers: readonly boolean[] = []) => {
   };
   return { io, stdout: () => out.join(''), stderr: () => err.join('') };
 };
+
+export const writeTree = (files: Readonly<Record<string, string>>): string => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-references-')));
+  Object.entries(files).forEach(([path, text]) => {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  });
+  return dir;
+};

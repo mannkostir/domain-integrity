@@ -1,6 +1,7 @@
 import {
   CallExpression,
   ClassDeclaration,
+  Diagnostic,
   Expression,
   Node,
   ObjectLiteralExpression,
@@ -24,14 +25,15 @@ const unsupported = (node: Node, what: string): ConfigError =>
     `domain.config.ts:${node.getStartLineNumber()} ${what}. Use literal objects, arrays and direct references.`,
   );
 
+const FILE_NOT_LISTED_IN_PROJECT_CODE = 6307;
+
+const isConfigTypeError = (diagnostic: Diagnostic, file: SourceFile): boolean =>
+  diagnostic.getCategory() === ts.DiagnosticCategory.Error &&
+  diagnostic.getCode() !== FILE_NOT_LISTED_IN_PROJECT_CODE &&
+  diagnostic.getSourceFile()?.getFilePath() === file.getFilePath();
+
 const assertNoTypeErrors = (file: SourceFile): void => {
-  const errors = file
-    .getPreEmitDiagnostics()
-    .filter(
-      (diagnostic) =>
-        diagnostic.getCategory() === ts.DiagnosticCategory.Error &&
-        diagnostic.getSourceFile()?.getFilePath() === file.getFilePath(),
-    );
+  const errors = file.getPreEmitDiagnostics().filter((diagnostic) => isConfigTypeError(diagnostic, file));
   if (errors.length === 0) return;
   const lines = errors.map(
     (diagnostic) =>

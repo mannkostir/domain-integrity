@@ -166,7 +166,7 @@ These shapes are recognised as handlers:
 - `subscribedTo()` returning an array literal, such as `[X, Y]`;
 - a `@Saga()` property that uses `ofType(X, …)`.
 
-A project with event handlers and no aggregates is accepted. When it has neither aggregates nor event flows, every command exits `2` with the "No aggregates found" message.
+A project with event handlers and no aggregates is accepted. When it has neither aggregates nor event flows, every command exits `2` with the "No aggregates found" message. When the tsconfig includes no source files, and neither do the tsconfigs it references, every command exits `2` with a message saying so and pointing you to `-p` or `references`.
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
 
@@ -183,13 +183,15 @@ Every file your tsconfig includes is scanned, tests too, so an assignment in a t
 npx domain-integrity check -p tsconfig.domain.json
 ```
 
+In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.spec.json`, which brings its tests in. Pass a tsconfig that references only the `tsconfig.lib.json` and `tsconfig.app.json` files to leave them out.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. `--base-class` is repeatable and records each name in `aggregateBaseClasses`. In a new config the names replace `AggregateRoot` and `Entity`; to keep one, pass it too. In an existing config they are added to the defaults when it lists no base classes yet, to its list otherwise. |
 | `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error, or an internal error. |
-| `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
+| `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents. |
 
 Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. The config is read statically and never executed.
@@ -217,7 +219,7 @@ npx domain-integrity check --baseline domain-integrity.baseline.json
 
 Baseline entries for lifecycle findings are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
 
-Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
+Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
 
 Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|` and carry `owner`, `ownerId`, `buffer`, `method` and `raisers` instead.
 
@@ -254,6 +256,8 @@ Findings appear as code-scanning alerts on the pull request, and the job fails w
 | `config` | `domain.config.ts` | path to the declaration |
 | `baseline` | none | baseline file to apply |
 | `upload` | `true` | upload the SARIF report to code scanning; set `false` when code scanning is unavailable |
+
+In a monorepo, point `project` at the root solution tsconfig: reported paths are relative to that tsconfig's folder, and code scanning cannot place the `../` paths a per-app tsconfig yields.
 
 The step exposes `exit-code`, the exit code of `check`, and `sarif-file`, the path to the SARIF report. The upload is skipped when `check` exits `2`, because a report from a failed run would make code scanning close the open alerts of the analyzer that failed.
 
@@ -342,7 +346,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 - **Circular inheritance.** A class whose `extends` chain loops, which TypeScript rejects, is not analysed, for aggregates and event classes alike.
 
-Every analysis sees only the files your tsconfig includes and the files they import. A file outside both is invisible to every rule: it produces no findings and cannot keep one silent. A subclass with an unknown class decorator loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
+Every analysis sees the files your tsconfig includes, the files of every tsconfig it lists in `references`, followed recursively, and the files they import, wherever they sit, except declaration files and anything under `node_modules`. A workspace package linked into `node_modules` counts by its real path, unless `preserveSymlinks` is set; then its files stay under `node_modules` and are left out. All of them are read with the compiler options of the tsconfig you pass to `-p`, and a referenced file of a kind those options do not support, such as `.js` without `allowJs`, is left out. An import only another tsconfig's options resolve stays unresolved: the code that depends on it stays silent, or, when the import types a declared state field, the run exits `2`. A file outside all of them is invisible to every rule: it produces no findings and cannot keep one silent. A subclass with an unknown class decorator loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
 
 A class decorator keeps the event-array and asserted-event-method rules silent unless it is inert. The built-in inert decorators are `Entity`, `ChildEntity`, `TableInheritance`, `Index`, `Unique`, `Check`, `Exclusion` and `Tree` from `typeorm`, and `Entity`, `Embeddable`, `Index`, `Unique` and `Filter` from any `@mikro-orm/*` package. A built-in counts only when its import resolves, through aliases and re-exports, to the installed `typeorm` or `@mikro-orm/*` package under `node_modules`. A project decorator with the same name, an import that does not resolve because the package is not installed, or any other class decorator still keeps the analysis silent; list your own decorators in `inertDecorators` to change that.
 
