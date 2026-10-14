@@ -9,7 +9,10 @@ import { captureIo } from '../helpers/disk';
 import { pointHelpersAtRepo } from '../helpers/init-project';
 
 const FIXTURE = fileURLToPath(new URL('../fixtures/nx-monorepo', import.meta.url));
-const BASELINE_KEY = 'outside-mutation|../../libs/orders/src/order.ts:Order||status|CancelOrder.execute';
+const BASELINE_KEYS = [
+  'outside-mutation|../../libs/orders/src/order.ts:Order||status|CancelOrder.execute',
+  'outside-mutation|../../libs/orders/src/order.ts:Order||status|OrderMapper.reopen',
+];
 
 const located = (finding: Finding) => ({
   checkId: finding.checkId,
@@ -51,6 +54,12 @@ describe('Nx-style monorepo', () => {
           aggregateId: 'libs/orders/src/order.ts:Order',
           subject: 'CancelOrder.execute',
         },
+        {
+          checkId: 'outside-mutation',
+          file: 'libs/orders/src/order-mapper.ts',
+          aggregateId: 'libs/orders/src/order.ts:Order',
+          subject: 'OrderMapper.reopen',
+        },
       ],
     });
   });
@@ -65,6 +74,12 @@ describe('Nx-style monorepo', () => {
           aggregateId: '../../libs/orders/src/order.ts:Order',
           subject: 'CancelOrder.execute',
         },
+        {
+          checkId: 'outside-mutation',
+          file: '../../libs/orders/src/order-mapper.ts',
+          aggregateId: '../../libs/orders/src/order.ts:Order',
+          subject: 'OrderMapper.reopen',
+        },
       ],
     });
   });
@@ -74,8 +89,8 @@ describe('Nx-style monorepo', () => {
     const second = await baselineFrom(FIXTURE, 'apps/api/tsconfig.json');
 
     expect([first, second]).toEqual([
-      { version: 1, findings: [BASELINE_KEY] },
-      { version: 1, findings: [BASELINE_KEY] },
+      { version: 1, findings: BASELINE_KEYS },
+      { version: 1, findings: BASELINE_KEYS },
     ]);
   });
 
