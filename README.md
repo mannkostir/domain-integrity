@@ -183,13 +183,15 @@ Every file your tsconfig includes is scanned, tests too, so an assignment in a t
 npx domain-integrity check -p tsconfig.domain.json
 ```
 
+In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.spec.json`, which brings its tests in. Pass a tsconfig that references only the `tsconfig.lib.json` and `tsconfig.app.json` files to leave them out.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. `--base-class` is repeatable and records each name in `aggregateBaseClasses`. In a new config the names replace `AggregateRoot` and `Entity`; to keep one, pass it too. In an existing config they are added to the defaults when it lists no base classes yet, to its list otherwise. |
 | `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error, or an internal error. |
-| `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
+| `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents. |
 
 Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. The config is read statically and never executed.
@@ -217,7 +219,7 @@ npx domain-integrity check --baseline domain-integrity.baseline.json
 
 Baseline entries for lifecycle findings are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
 
-Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
+Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
 
 Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|` and carry `owner`, `ownerId`, `buffer`, `method` and `raisers` instead.
 
@@ -341,7 +343,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 - **Circular inheritance.** A class whose `extends` chain loops, which TypeScript rejects, is not analysed, for aggregates and event classes alike.
 
-Every analysis sees only the files your tsconfig includes and the files they import. A file outside both is invisible to every rule: it produces no findings and cannot keep one silent. A decorated ORM subclass loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
+Every analysis sees the files your tsconfig includes, the files of every tsconfig it lists in `references`, followed recursively, and the files they import, wherever they sit, except declaration files and anything under `node_modules`. A workspace package linked into `node_modules` counts by its real path. All of them are read with the compiler options of the tsconfig you pass to `-p`; an import only another tsconfig's options resolve stays unresolved and keeps the code that depends on it silent. A file outside all of them is invisible to every rule: it produces no findings and cannot keep one silent. A decorated ORM subclass loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
 
 The analysis also trusts that nothing tampers with a plain event array from outside the aggregate's family. It does not see:
 
