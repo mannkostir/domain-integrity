@@ -43,6 +43,13 @@ describe('check', () => {
     expect(await run(['check'], io)).toBe(1);
   });
 
+  it('reports a type error of a config that a composite tsconfig include leaves out', async () => {
+    const config = TICKET_PROJECT['domain.config.ts'].replace('TicketStatus.closed]', 'TicketStatus.missing]');
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_PROJECT, 'domain.config.ts': config }, { composite: true }));
+
+    expect({ code: await run(['check'], io), reported: stderr().includes('Type errors in domain.config.ts') }).toEqual({ code: 2, reported: true });
+  });
+
   it('analyses a solution whose reference includes JavaScript the solution options do not allow', async () => {
     const dir = writeProject({
       ...TICKET_PROJECT,
