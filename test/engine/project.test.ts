@@ -44,14 +44,38 @@ describe('configSourceFile', () => {
 });
 
 describe('analysedSourceFiles', () => {
-  it('keeps only project files under the root and leaves out the config', () => {
-    const project = inMemoryProject({
-      '/app/src/a.ts': 'export const a = 1;',
-      '/app/domain.config.ts': 'export default {};',
-      '/other/b.ts': 'export const b = 2;',
-    });
-    const config = project.getSourceFileOrThrow('/app/domain.config.ts');
+  const paths = (files: readonly { getFilePath(): string }[]): string[] => files.map((file) => file.getFilePath());
 
-    expect(analysedSourceFiles(project, '/app', config).map((file) => file.getFilePath())).toEqual(['/app/src/a.ts']);
+  it('keeps project files outside the tsconfig folder', () => {
+    const project = inMemoryProject({
+      '/repo/apps/api/src/a.ts': 'export const a = 1;',
+      '/repo/libs/orders/src/b.ts': 'export const b = 2;',
+    });
+
+    expect(paths(analysedSourceFiles(project))).toEqual(
+      expect.arrayContaining(['/repo/apps/api/src/a.ts', '/repo/libs/orders/src/b.ts']),
+    );
+  });
+
+  it('leaves out the config file', () => {
+    const project = inMemoryProject({
+      '/repo/apps/api/src/a.ts': 'export const a = 1;',
+      '/repo/apps/api/domain.config.ts': 'export default {};',
+    });
+    const config = project.getSourceFileOrThrow('/repo/apps/api/domain.config.ts');
+
+    expect(paths(analysedSourceFiles(project, config))).not.toContain('/repo/apps/api/domain.config.ts');
+  });
+
+  it('leaves out declaration files', () => {
+    const project = inMemoryProject({ '/repo/src/types.d.ts': 'export declare const t: number;' });
+
+    expect(paths(analysedSourceFiles(project))).not.toContain('/repo/src/types.d.ts');
+  });
+
+  it('leaves out node_modules', () => {
+    const project = inMemoryProject({ '/repo/node_modules/lib/index.ts': 'export const l = 1;' });
+
+    expect(paths(analysedSourceFiles(project))).not.toContain('/repo/node_modules/lib/index.ts');
   });
 });

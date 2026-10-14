@@ -21,7 +21,7 @@ export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[]): Se
   const project = loadProject(paths.tsconfig);
   const configFile = configSourceFile(project, paths.config);
   const declaration = readDeclaration(configFile);
-  const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, paths.root, configFile), root: paths.root, configFile }, analyzers);
+  const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, configFile), root: paths.root, configFile }, analyzers);
   if (results.every((result) => result.isEmpty)) throw new ProjectError(nothingToAnalyseMessage(declaration));
   return { results };
 };

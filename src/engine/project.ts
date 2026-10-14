@@ -20,20 +20,7 @@ export const configSourceFile = (project: Project, configPath: string): SourceFi
   return project.addSourceFileAtPath(configPath);
 };
 
-const asDirectoryPrefix = (root: string): string => {
-  const normalised = root.replace(/\\/g, '/');
-  return normalised.endsWith('/') ? normalised : `${normalised}/`;
-};
+export const isProjectSource = (file: SourceFile): boolean => !file.isDeclarationFile() && !file.isInNodeModules();
 
-export const analysedSourceFiles = (project: Project, root: string, excluded?: SourceFile): SourceFile[] => {
-  const prefix = asDirectoryPrefix(root);
-  return project
-    .getSourceFiles()
-    .filter(
-      (file) =>
-        file !== excluded &&
-        !file.isDeclarationFile() &&
-        !file.isInNodeModules() &&
-        file.getFilePath().startsWith(prefix),
-    );
-};
+export const analysedSourceFiles = (project: Project, excluded?: SourceFile): SourceFile[] =>
+  project.getSourceFiles().filter((file) => file !== excluded && isProjectSource(file));
