@@ -1,5 +1,5 @@
 import { CallExpression, Decorator, Node, SourceFile, SyntaxKind } from 'ts-morph';
-import { decoratorName } from './decorator-name';
+import { decoratorName } from '../../shared/decorator-name';
 import { UNBOUNDED } from './handler-bound';
 import { RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass, resolveKeys } from './recogniser';
 

@@ -14,7 +14,7 @@ const productionFiles = (project: Project): readonly SourceFile[] =>
 const undrainedIn = (project: Project, cls: ClassDeclaration, family: readonly ClassDeclaration[]): boolean => {
   const files = productionFiles(project);
   return isUndrained(
-    { buffer: cls.getPropertyOrThrow('events'), pushers: [cls.getMethodOrThrow('addEvent')], family, arrays: plainEventArrays(family, new BracketWrites(new SourceIndex(files))) },
+    { buffer: cls.getPropertyOrThrow('events'), pushers: [cls.getMethodOrThrow('addEvent')], family, arrays: plainEventArrays(family, new BracketWrites(new SourceIndex(files)), []) },
     files,
   );
 };

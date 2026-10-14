@@ -19,8 +19,13 @@ export class Peeking { readonly label: string; constructor(source: { label(): st
 const DEFINE: CompilerOptions = { useDefineForClassFields: true };
 const ASSIGN: CompilerOptions = { useDefineForClassFields: false };
 
-const projectWith = (rootSource: string, paymentSource: string, options: CompilerOptions): Project =>
-  inMemoryProject({ '/src/registry.ts': REGISTRY, '/src/root.ts': rootSource, '/src/payment.ts': paymentSource }, options);
+const projectWith = (
+  rootSource: string,
+  paymentSource: string,
+  options: CompilerOptions,
+  libraries: Readonly<Record<string, string>> = {},
+): Project =>
+  inMemoryProject({ ...libraries, '/src/registry.ts': REGISTRY, '/src/root.ts': rootSource, '/src/payment.ts': paymentSource }, options);
 
 const REGISTERING_ROOT = `
 import { Registry } from './registry';
@@ -92,6 +97,19 @@ const DECORATED_ROOT = `
 import { Registry } from './registry';
 const sealed = <T>(target: T): T => target;
 @sealed
+export abstract class Root {
+  readonly id: string = 'id';
+  private events: object[] = [];
+  protected addDomainEvent(event: object): void { this.events.push(event); Registry.mark(this); }
+}
+`;
+
+const TYPEORM = { '/node_modules/typeorm/index.d.ts': 'export declare function Entity(name?: string): ClassDecorator;' };
+
+const TYPEORM_ROOT = `
+import { Entity } from 'typeorm';
+import { Registry } from './registry';
+@Entity()
 export abstract class Root {
   readonly id: string = 'id';
   private events: object[] = [];
@@ -243,6 +261,7 @@ const reassigned = projectWith(REASSIGNING_ROOT, PAYMENT, DEFINE);
 const bracket = projectWith(BRACKET_ROOT, PAYMENT, DEFINE);
 const assigning = projectWith(ASSIGNING_ROOT, PAYMENT, DEFINE);
 const decorated = projectWith(DECORATED_ROOT, PAYMENT, DEFINE);
+const typeormRoot = projectWith(TYPEORM_ROOT, PAYMENT, DEFINE, TYPEORM);
 const classExpression = projectWith(PLAIN_ROOT, PAYMENT + CLASS_EXPRESSION_SUBCLASS, DEFINE);
 const mixin = projectWith(PLAIN_ROOT, PAYMENT + MIXIN, DEFINE);
 const prototypeWrite = projectWith(PLAIN_ROOT, PAYMENT + PROTOTYPE_WRITE, DEFINE);
@@ -292,6 +311,10 @@ describe('event methods asserted inert', () => {
 
   it('judges the caller of a plain listed event method that nothing overrides', () => {
     expect(leaks(plain, ['addDomainEvent'])).toEqual(['pay']);
+  });
+
+  it('judges the caller when the family carries only a TypeORM entity decorator', () => {
+    expect(leaks(typeormRoot, ['addDomainEvent'])).toEqual(['pay']);
   });
 
   it('judges the caller when computed keys are a different literal, a number or a symbol', () => {

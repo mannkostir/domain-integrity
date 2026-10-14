@@ -36,6 +36,7 @@ export default defineDomain({});
       aggregateBaseClasses: ['AggregateRoot', 'Entity'],
       auditFields: ['createdAt', 'updatedAt', 'version'],
       eventMethods: ['addEvent', 'addDomainEvent', 'apply'],
+      inertDecorators: [],
       inertEventMethods: [],
       inertMembers: [],
       lifecycles: [],
@@ -197,6 +198,35 @@ const name = 'Base' as string;
 export default defineDomain({ aggregateBaseClasses: [name] });
 `),
     ).toThrow(ConfigError);
+  });
+
+  it('reads inertDecorators', () => {
+    const declaration = read(`
+import { defineDomain } from 'domain-integrity';
+export default defineDomain({ inertDecorators: ['Audited'] });
+`);
+
+    expect(declaration.inertDecorators).toEqual(['Audited']);
+  });
+
+  it('rejects a non-string entry in inertDecorators', () => {
+    expect(() =>
+      read(`
+import { defineDomain } from 'domain-integrity';
+const name = 'Audited' as string;
+export default defineDomain({ inertDecorators: [name] });
+`),
+    ).toThrow(/expected a string literal/);
+  });
+
+  it('rejects inertDecorators that is not an array literal, with the line', () => {
+    expect(() =>
+      read(`
+import { defineDomain } from 'domain-integrity';
+const names = ['Audited'];
+export default defineDomain({ inertDecorators: names });
+`),
+    ).toThrow(/domain.config.ts:4 expected an array literal/);
   });
 
   it('reads inertMembers', () => {

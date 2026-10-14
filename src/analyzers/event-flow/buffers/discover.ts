@@ -21,6 +21,7 @@ export type BufferContext = {
   readonly root: string;
   readonly configFile?: SourceFile;
   readonly eventMethods: readonly string[];
+  readonly inertDecorators: readonly string[];
   readonly isProject: ProjectClasses;
   readonly identity: (cls: ClassDeclaration) => ClassIdentity;
 };
@@ -49,7 +50,8 @@ const scopeOf = (context: BufferContext): Scope => {
 };
 
 const isCandidateOpen = (candidate: BufferCandidate, owner: ClassDeclaration, context: BufferContext, scope: Scope): boolean =>
-  isPlainEventArray(candidate.buffer, candidate.family, scope.projectWrites) && !hierarchyOf(owner, context.isProject).extendsForeign;
+  isPlainEventArray(candidate.buffer, candidate.family, scope.projectWrites, context.inertDecorators) &&
+  !hierarchyOf(owner, context.isProject).extendsForeign;
 
 const firstPusherName = (candidate: BufferCandidate): string =>
   candidate.pushers.map((pusher) => pusher.getName()).sort()[0] ?? '';
@@ -86,7 +88,7 @@ const byLocation = (left: UndispatchedBuffer, right: UndispatchedBuffer): number
 export const undispatchedBuffers = (context: BufferContext): readonly UndispatchedBuffer[] => {
   if (context.eventMethods.length === 0) return [];
   const scope = scopeOf(context);
-  return candidatesIn(context.files, context.eventMethods, context.isProject, scope.projectFiles, scope.projectWrites)
+  return candidatesIn(context.files, context.eventMethods, context.isProject, scope.projectFiles, scope.projectWrites, context.inertDecorators)
     .flatMap((candidate) => undispatched(candidate, context, scope) ?? [])
     .sort(byLocation);
 };

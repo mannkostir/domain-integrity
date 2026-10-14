@@ -121,7 +121,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
     libraryKeyed,
     inProcess: inProcess.map((cls) => identity(cls).id),
     sagas: sagaModels,
-    buffers: undispatchedBuffers({ files: input.files, root: input.root, configFile: input.configFile, eventMethods: input.declaration.eventMethods, isProject, identity }),
+    buffers: undispatchedBuffers({ files: input.files, root: input.root, configFile: input.configFile, eventMethods: input.declaration.eventMethods, inertDecorators: input.declaration.inertDecorators, isProject, identity }),
     problems: unique(outside).map((cls) => `"${cls.getName() ?? 'anonymous class'}" is declared in events but is not in the analysed files.`),
   };
 };
