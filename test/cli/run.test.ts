@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
-import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
+import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeProject, writeTree } from '../helpers/disk';
 
 describe('check', () => {
   it('exits 1 and prints the leak for an unguarded mutating method', async () => {
@@ -24,6 +24,17 @@ describe('check', () => {
     const { io, stdout } = captureIo(dir);
 
     expect({ code: await run(['check', '--baseline', 'baseline.json'], io), known: stdout().includes('(baseline)') }).toEqual({ code: 0, known: true });
+  });
+
+  it('exits 2 and explains a tsconfig that includes no source files', async () => {
+    const dir = writeTree({ 'tsconfig.json': JSON.stringify({ files: [] }) });
+    const { io, stderr } = captureIo(dir);
+
+    expect({
+      code: await run(['check'], io),
+      explained: stderr().includes('includes no source files'),
+      misleading: stderr().includes('aggregateBaseClasses'),
+    }).toEqual({ code: 2, explained: true, misleading: false });
   });
 
   it('exits 2 and suggests init when the config is missing', async () => {

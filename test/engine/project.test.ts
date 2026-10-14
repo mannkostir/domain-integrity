@@ -1,10 +1,15 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
+import type { Project } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, ProjectError } from '../../src/engine/errors';
 import { analysedSourceFiles, configSourceFile, loadProject } from '../../src/engine/project';
+import { writeTree } from '../helpers/disk';
 import { inMemoryProject } from '../helpers/in-memory';
+
+const fileNames = (project: Project, root: string): string[] =>
+  project.getSourceFiles().map((file) => relative(root, file.getFilePath())).sort();
 
 const projectWithRootConfig = (): string => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-')));
@@ -18,6 +23,48 @@ const projectWithRootConfig = (): string => {
 describe('loadProject', () => {
   it('fails with a ProjectError when the tsconfig does not exist', () => {
     expect(() => loadProject('/definitely/missing/tsconfig.json')).toThrow(ProjectError);
+  });
+
+  it('loads the files of every referenced tsconfig', () => {
+    const dir = writeTree({
+      'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './apps/api' }] }),
+      'apps/api/tsconfig.json': JSON.stringify({ include: ['src'], references: [{ path: '../../libs/orders' }] }),
+      'apps/api/src/main.ts': 'export const main = 1;\n',
+      'libs/orders/tsconfig.json': JSON.stringify({ files: [], references: [{ path: './tsconfig.lib.json' }] }),
+      'libs/orders/tsconfig.lib.json': JSON.stringify({ include: ['src'] }),
+      'libs/orders/src/order.ts': 'export class Order {}\n',
+    });
+
+    expect(fileNames(loadProject(join(dir, 'tsconfig.json')), dir)).toEqual(['apps/api/src/main.ts', 'libs/orders/src/order.ts']);
+  });
+
+  it('fails with a ProjectError naming the referrer of a missing reference', () => {
+    const dir = writeTree({ 'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './gone' }] }) });
+
+    expect(() => loadProject(join(dir, 'tsconfig.json'))).toThrow(
+      new ProjectError(`tsconfig not found: ${join(dir, 'gone/tsconfig.json')} (referenced from ${join(dir, 'tsconfig.json')})`),
+    );
+  });
+
+  it('says a tsconfig without references includes no source files', () => {
+    const dir = writeTree({ 'tsconfig.json': JSON.stringify({ files: [] }) });
+
+    expect(() => loadProject(join(dir, 'tsconfig.json'))).toThrow(
+      new ProjectError(
+        `${join(dir, 'tsconfig.json')} includes no source files. Pass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.`,
+      ),
+    );
+  });
+
+  it('says a tsconfig and its references include no source files', () => {
+    const dir = writeTree({
+      'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './a' }] }),
+      'a/tsconfig.json': JSON.stringify({ files: [] }),
+    });
+
+    expect(() => loadProject(join(dir, 'tsconfig.json'))).toThrow(
+      new ProjectError(`${join(dir, 'tsconfig.json')} and the tsconfigs it references include no source files.`),
+    );
   });
 });
 
