@@ -1,1 +1,1 @@
-{ "extends": "../../tsconfig.base.json", "include": ["src"], "references": [{ "path": "../../libs/orders" }] }
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "composite": true }, "include": ["src"], "references": [{ "path": "../../libs/orders" }] }

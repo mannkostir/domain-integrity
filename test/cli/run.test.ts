@@ -37,6 +37,12 @@ describe('check', () => {
     }).toEqual({ code: 2, explained: true, misleading: false });
   });
 
+  it('does not reject a config that a composite tsconfig include leaves out', async () => {
+    const { io } = captureIo(writeProject(TICKET_PROJECT, { composite: true }));
+
+    expect(await run(['check'], io)).toBe(1);
+  });
+
   it('exits 2 and suggests init when the config is missing', async () => {
     const { io, stderr } = captureIo(writeProject(TICKET_SOURCES));
 
