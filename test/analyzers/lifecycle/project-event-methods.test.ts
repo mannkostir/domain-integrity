@@ -5,6 +5,7 @@ import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
 import { inMemoryProject } from '../../helpers/in-memory';
 
 const project = inMemoryProject({
+  '/node_modules/typeorm/index.d.ts': 'export declare function Entity(name?: string): ClassDecorator;',
   '/src/root.ts': `
 export abstract class Root {
   private events: object[] = [];
@@ -86,7 +87,40 @@ export class OverridingPayment extends Root {
   pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
 }
 `,
+  '/src/entity-handoff.ts': `
+import { Entity } from 'typeorm';
+export type Status = 'open' | 'closed';
+export class Paid { constructor(readonly payment: object) {} }
+const Audited = () => <T>(target: T): T => target;
+export abstract class EntityRoot {
+  private events: object[] = [];
+  protected addDomainEvent(event: object): void { this.events.push(event); }
+}
+export abstract class AuditedRoot {
+  private events: object[] = [];
+  protected addDomainEvent(event: object): void { this.events.push(event); }
+}
+@Entity()
+export class EntityPayment extends EntityRoot {
+  private status: Status = 'open';
+  private note = '';
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
+  settle(n: string): void { this.note = n; super.addDomainEvent(new Paid(this)); }
+}
+@Audited()
+export class AuditedPayment extends AuditedRoot {
+  private status: Status = 'open';
+  private note = '';
+  close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
+  pay(n: string): void { this.note = n; this.addDomainEvent(new Paid(this)); }
+  settle(n: string): void { this.note = n; super.addDomainEvent(new Paid(this)); }
+}
+`,
 });
+
+const entityClass = (name: string): ClassDeclaration =>
+  project.getSourceFileOrThrow('/src/entity-handoff.ts').getClassOrThrow(name);
 
 const classNamed = (name: string): ClassDeclaration => project.getSourceFileOrThrow('/src/order.ts').getClassOrThrow(name);
 
@@ -127,6 +161,14 @@ describe('push onto a plain event array in an aggregate that leaks this', () => 
 describe('this handed to a push-only project event method', () => {
   it('judges methods that hand this to a transparent event through this or super', () => {
     expect(leaks(handoffClass('Payment'))).toEqual(['pay', 'settle']);
+  });
+
+  it('judges a TypeORM entity the same way as an undecorated aggregate', () => {
+    expect(leaks(entityClass('EntityPayment'))).toEqual(leaks(handoffClass('Payment')));
+  });
+
+  it('leaves methods unjudged when the aggregate carries an unknown class decorator', () => {
+    expect(leaks(entityClass('AuditedPayment'))).toEqual([]);
   });
 
   it('leaves methods unjudged when the event method is not configured', () => {

@@ -8,16 +8,16 @@ import { classFamily, leaksThis } from './this-leak';
 
 export const aggregateScope = (
   cls: ClassDeclaration,
-  declaration: Pick<DomainDeclaration, 'eventMethods' | 'inertEventMethods' | 'inertMembers'>,
+  declaration: Pick<DomainDeclaration, 'eventMethods' | 'inertDecorators' | 'inertEventMethods' | 'inertMembers'>,
   project: Pick<ProjectIndex, 'sources' | 'bracketWrites' | 'subclasses'>,
 ): AggregateScope => {
   const family = classFamily(cls, project.subclasses);
   return {
     cls,
     eventMethods: new Set(declaration.eventMethods),
-    inertEventMethods: assertedInertEventMethods(declaration.inertEventMethods, cls, family, project),
+    inertEventMethods: assertedInertEventMethods(declaration.inertEventMethods, cls, family, project, declaration.inertDecorators),
     inertMembers: new Set(declaration.inertMembers),
     leaksThis: leaksThis(family),
-    plainEventArrays: plainEventArrays(family, project.bracketWrites),
+    plainEventArrays: plainEventArrays(family, project.bracketWrites, declaration.inertDecorators),
   };
 };

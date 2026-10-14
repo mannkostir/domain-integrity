@@ -16,7 +16,7 @@ const plain = (
   const project = inMemoryProject({ '/types/library.d.ts': 'export declare class LibraryRoot { protected events: object[]; }', ...extraFiles, '/src/root.ts': source }, compilerOptions);
   const root = project.getSourceFileOrThrow('/src/root.ts').getClassOrThrow('Root');
   const files = project.getSourceFiles();
-  return isPlainEventArray(root.getPropertyOrThrow(field), classFamily(root, new Subclasses(new SourceIndex(files))), new BracketWrites(new SourceIndex(files)));
+  return isPlainEventArray(root.getPropertyOrThrow(field), classFamily(root, new Subclasses(new SourceIndex(files))), new BracketWrites(new SourceIndex(files)), []);
 };
 
 describe('plain event array', () => {
@@ -114,6 +114,18 @@ export class Root { private events: object[] = []; add(e: object): void { this.e
     ).toBe(false);
   });
 
+  it('accepts a field of a class decorated with a TypeORM entity decorator', () => {
+    expect(
+      plain(
+        `import { Entity } from 'typeorm';
+@Entity()
+export class Root { private events: object[] = []; add(e: object): void { this.events.push(e); } }`,
+        'events',
+        { '/node_modules/typeorm/index.d.ts': 'export declare function Entity(name?: string): ClassDecorator;' },
+      ),
+    ).toBe(true);
+  });
+
   it('rejects an accessor field', () => {
     expect(plain(`export class Root { private accessor events: object[] = []; }`)).toBe(false);
   });
@@ -127,7 +139,7 @@ describe('library declaration', () => {
   it('rejects a field declared in a library file', () => {
     const project = inMemoryProject({ '/types/library.d.ts': 'export declare class LibraryRoot { private events; }' });
     const library = project.getSourceFileOrThrow('/types/library.d.ts').getClassOrThrow('LibraryRoot');
-    expect(isPlainEventArray(library.getPropertyOrThrow('events'), [library], new BracketWrites(new SourceIndex(project.getSourceFiles())))).toBe(false);
+    expect(isPlainEventArray(library.getPropertyOrThrow('events'), [library], new BracketWrites(new SourceIndex(project.getSourceFiles())), [])).toBe(false);
   });
 });
 
@@ -274,7 +286,7 @@ const arraysAndClass = (source: string) => {
   const project = inMemoryProject({ '/src/root.ts': source });
   const root = project.getSourceFileOrThrow('/src/root.ts').getClassOrThrow('Root');
   const files = project.getSourceFiles();
-  return { root, arrays: plainEventArrays(classFamily(root, new Subclasses(new SourceIndex(files))), new BracketWrites(new SourceIndex(files))) };
+  return { root, arrays: plainEventArrays(classFamily(root, new Subclasses(new SourceIndex(files))), new BracketWrites(new SourceIndex(files)), []) };
 };
 
 const firstThisAccess = (root: ClassDeclaration, methodName: string): Node =>

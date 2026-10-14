@@ -8,9 +8,10 @@ import {
   ts,
   Type,
 } from 'ts-morph';
+import { hasUnknownClassDecorator } from '../shared/class-decorators';
 import { outermostWrapper } from '../shared/wrappers';
 import { SourceIndex } from '../shared/source-index';
-import { isDecorated, isWritten, writesUnknownMembers } from '../shared/writes';
+import { isWritten, writesUnknownMembers } from '../shared/writes';
 import { ProjectIndex } from './project-index';
 
 type InertSources = Pick<ProjectIndex, 'sources' | 'bracketWrites'>;
@@ -67,8 +68,10 @@ const isAssertable = (name: string, project: InertSources): boolean =>
   !isWrittenByName(name, project.sources) &&
   project.bracketWrites.of(name).length === 0;
 
-const installsUnknownMembers = (classes: readonly (ClassDeclaration | ClassExpression)[]): boolean =>
-  classes.some(isDecorated) || classes.some(writesUnknownMembers);
+const installsUnknownMembers = (
+  classes: readonly (ClassDeclaration | ClassExpression)[],
+  inertDecorators: readonly string[],
+): boolean => classes.some((cls) => hasUnknownClassDecorator(cls, inertDecorators)) || classes.some(writesUnknownMembers);
 
 const extendsClausesOf = (declaration: Node): readonly ExpressionWithTypeArguments[] => {
   if (Node.isInterfaceDeclaration(declaration)) return declaration.getExtends();
@@ -103,10 +106,11 @@ export const assertedInertEventMethods = (
   cls: ClassDeclaration,
   family: readonly ClassDeclaration[],
   project: InertSources,
+  inertDecorators: readonly string[],
 ): ReadonlySet<string> =>
   names.length === 0 ||
   !hasResolvedBases(cls) ||
-  installsUnknownMembers([...family, ...project.sources.ofKind(SyntaxKind.ClassExpression)])
+  installsUnknownMembers([...family, ...project.sources.ofKind(SyntaxKind.ClassExpression)], inertDecorators)
     ? new Set()
     : new Set(names.filter((name) => isAssertable(name, project)));
 

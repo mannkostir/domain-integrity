@@ -81,8 +81,6 @@ export const writesUnknownMembers = (cls: ClassDeclaration | ClassExpression): b
   cls.getDescendantsOfKind(SyntaxKind.CallExpression).some(isAssignOntoThis) ||
   cls.getDescendantsOfKind(SyntaxKind.ElementAccessExpression).some(isComputedWriteOnThis);
 
-export const isDecorated = (cls: ClassDeclaration | ClassExpression): boolean => cls.getDecorators().length > 0;
-
 const writtenBracketAccess =
   (name: string) =>
   (access: ElementAccessExpression): readonly Node[] => {

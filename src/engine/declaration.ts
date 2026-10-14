@@ -29,6 +29,7 @@ export type DomainDeclaration = {
   readonly aggregateBaseClasses: readonly string[];
   readonly auditFields: readonly string[];
   readonly eventMethods: readonly string[];
+  readonly inertDecorators: readonly string[];
   readonly inertEventMethods: readonly string[];
   readonly inertMembers: readonly string[];
   readonly lifecycles: readonly DeclaredLifecycle[];
@@ -39,6 +40,7 @@ export const DEFAULT_DECLARATION: DomainDeclaration = {
   aggregateBaseClasses: ['AggregateRoot', 'Entity'],
   auditFields: ['createdAt', 'updatedAt', 'version'],
   eventMethods: ['addEvent', 'addDomainEvent', 'apply'],
+  inertDecorators: [],
   inertEventMethods: [],
   inertMembers: [],
   lifecycles: [],

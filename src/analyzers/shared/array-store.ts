@@ -7,9 +7,10 @@ import {
   Symbol as MorphSymbol,
   SyntaxKind,
 } from 'ts-morph';
+import { hasUnknownClassDecorator } from './class-decorators';
 import { isLibraryNode } from './library';
 import { outermostWrapper, unwrap } from './wrappers';
-import { accessOf, BracketWrites, destructuringRoot, isDecorated, isWritten, writesUnknownMembers } from './writes';
+import { accessOf, BracketWrites, destructuringRoot, isWritten, writesUnknownMembers } from './writes';
 
 const isEmptyArrayLiteral = (node: Node | undefined): boolean => {
   const target = node === undefined ? undefined : unwrap(node);
@@ -65,9 +66,10 @@ export const isPlainEventArray = (
   property: PropertyDeclaration,
   family: readonly ClassDeclaration[],
   writes: BracketWrites,
+  inertDecorators: readonly string[],
 ): boolean =>
   isPlainDeclaration(property) &&
-  !family.some(isDecorated) &&
+  !family.some((cls) => hasUnknownClassDecorator(cls, inertDecorators)) &&
   !family.some(writesUnknownMembers) &&
   !isBracketWrittenIn(property, writes) &&
   property
@@ -75,8 +77,14 @@ export const isPlainEventArray = (
     .filter((reference) => reference !== property.getNameNode())
     .every(isSafeReference);
 
-export const plainEventArrays = (family: readonly ClassDeclaration[], writes: BracketWrites): ReadonlySet<Node> =>
-  new Set(family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArray(property, family, writes)));
+export const plainEventArrays = (
+  family: readonly ClassDeclaration[],
+  writes: BracketWrites,
+  inertDecorators: readonly string[],
+): ReadonlySet<Node> =>
+  new Set(
+    family.flatMap((cls) => cls.getProperties()).filter((property) => isPlainEventArray(property, family, writes, inertDecorators)),
+  );
 
 const declarationsAreIn = (node: Node, arrays: ReadonlySet<Node>): boolean => {
   const declarations = node.getSymbol()?.getDeclarations() ?? [];
