@@ -152,6 +152,48 @@ describe('undispatchedBuffers', () => {
     expect(buffersOf(booking({ '/app/src/entity.ts': entity, '/app/src/payment.ts': payment }))).toEqual([]);
   });
 
+  it('reports a subclass decorated with a TypeORM entity decorator', () => {
+    const typeorm = 'export declare function Entity(name?: string): ClassDecorator;';
+    const payment = `import { Entity } from 'typeorm';\n${PAYMENT.replace('export class Payment', '@Entity() export class Payment')}`;
+
+    expect(buffersOf(booking({ '/node_modules/typeorm/index.d.ts': typeorm, '/app/src/payment.ts': payment }))).toEqual([BOOKING_BUFFER]);
+  });
+
+  it('reports a subclass decorated with a MikroORM entity decorator', () => {
+    const mikro = 'export declare function Entity(): ClassDecorator;';
+    const payment = `import { Entity } from '@mikro-orm/core';\n${PAYMENT.replace('export class Payment', '@Entity() export class Payment')}`;
+
+    expect(buffersOf(booking({ '/node_modules/@mikro-orm/core/index.d.ts': mikro, '/app/src/payment.ts': payment }))).toEqual([BOOKING_BUFFER]);
+  });
+
+  it('stays silent when a TypeORM entity also carries an unknown decorator', () => {
+    const typeorm = 'export declare function Entity(name?: string): ClassDecorator;';
+    const audited = 'export const Audited = () => (target: unknown) => target;';
+    const payment = [
+      "import { Entity } from 'typeorm';",
+      "import { Audited } from './audited';",
+      PAYMENT.replace('export class Payment', '@Entity() @Audited() export class Payment'),
+    ].join('\n');
+    const sources = { '/node_modules/typeorm/index.d.ts': typeorm, '/app/src/audited.ts': audited, '/app/src/payment.ts': payment };
+
+    expect(buffersOf(booking(sources))).toEqual([]);
+  });
+
+  it('reports a subclass whose decorator is listed in inertDecorators', () => {
+    const entity = 'export const Entity = () => (target: unknown) => target;';
+    const payment = `import { Entity } from './entity';\n${PAYMENT.replace('export class Payment', '@Entity() export class Payment')}`;
+    const sources = { '/app/src/entity.ts': entity, '/app/src/payment.ts': payment };
+
+    expect(buffersOf(booking(sources), "defineDomain({ inertDecorators: ['Entity'] })")).toEqual([BOOKING_BUFFER]);
+  });
+
+  it('stays silent when the buffer field carries a TypeORM decorator', () => {
+    const typeorm = 'export declare function Column(): PropertyDecorator;';
+    const base = `import { Column } from 'typeorm';\n${BASE.replace('  private _domainEvents', '  @Column() private _domainEvents')}`;
+
+    expect(buffersOf(booking({ '/node_modules/typeorm/index.d.ts': typeorm }, base))).toEqual([]);
+  });
+
   it('stays silent when no event methods are configured', () => {
     expect(buffersOf(booking(), 'defineDomain({ eventMethods: [] })')).toEqual([]);
   });

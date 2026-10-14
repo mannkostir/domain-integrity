@@ -204,6 +204,7 @@ export const readDeclaration = (file: SourceFile): DomainDeclaration => {
     aggregateBaseClasses: stringList(valueOf(config, 'aggregateBaseClasses'), DEFAULT_DECLARATION.aggregateBaseClasses),
     auditFields: stringList(valueOf(config, 'auditFields'), DEFAULT_DECLARATION.auditFields),
     eventMethods,
+    inertDecorators: stringList(valueOf(config, 'inertDecorators'), DEFAULT_DECLARATION.inertDecorators),
     inertEventMethods: subsetOf(
       stringList(valueOf(config, 'inertEventMethods'), DEFAULT_DECLARATION.inertEventMethods),
       eventMethods,

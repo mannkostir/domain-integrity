@@ -40,6 +40,7 @@ export type DomainConfig = {
   readonly auditFields?: readonly string[];
   readonly eventMethods?: readonly string[];
   readonly events?: EventsConfig;
+  readonly inertDecorators?: readonly string[];
   readonly inertEventMethods?: readonly string[];
   readonly inertMembers?: readonly string[];
   readonly lifecycles?: readonly LifecycleDeclaration[];

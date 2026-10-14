@@ -1,6 +1,6 @@
 import { ClassDeclaration, Decorator, MethodDeclaration, Node, SourceFile, SyntaxKind } from 'ts-morph';
 import { readPayload } from '../payload';
-import { decoratorName } from './decorator-name';
+import { decoratorName } from '../../shared/decorator-name';
 import { UNBOUNDED, handlerBound } from './handler-bound';
 import { RawRegistration, RecognisedSite, RecogniserContext, RegistrationRecogniser, enclosingClass, resolveKeys } from './recogniser';
 
