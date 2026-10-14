@@ -3,7 +3,7 @@ import { Project, SourceFile, ts } from 'ts-morph';
 import { ConfigError, ProjectError } from './errors';
 import { readReferencesFromDisk, referencedTsconfigs } from './references';
 
-export const isProjectSource = (file: SourceFile): boolean => !file.isDeclarationFile() && !file.isInNodeModules();
+const isProjectSource = (file: SourceFile): boolean => !file.isDeclarationFile() && !file.isInNodeModules();
 
 const emptyProgramMessage = (tsconfigPath: string, references: readonly string[]): string =>
   references.length === 0
