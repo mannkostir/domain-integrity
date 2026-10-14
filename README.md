@@ -166,7 +166,7 @@ These shapes are recognised as handlers:
 - `subscribedTo()` returning an array literal, such as `[X, Y]`;
 - a `@Saga()` property that uses `ofType(X, …)`.
 
-A project with event handlers and no aggregates is accepted. When it has neither aggregates nor event flows, every command exits `2` with the "No aggregates found" message.
+A project with event handlers and no aggregates is accepted. When it has neither aggregates nor event flows, every command exits `2` with the "No aggregates found" message. When the tsconfig includes no source files, and neither do the tsconfigs it references, every command exits `2` with a message saying so and pointing you to `-p` or `references`.
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
 
@@ -257,6 +257,8 @@ Findings appear as code-scanning alerts on the pull request, and the job fails w
 | `baseline` | none | baseline file to apply |
 | `upload` | `true` | upload the SARIF report to code scanning; set `false` when code scanning is unavailable |
 
+In a monorepo, point `project` at the root solution tsconfig: reported paths are relative to that tsconfig's folder, and code scanning cannot place the `../` paths a per-app tsconfig yields.
+
 The step exposes `exit-code`, the exit code of `check`, and `sarif-file`, the path to the SARIF report. The upload is skipped when `check` exits `2`, because a report from a failed run would make code scanning close the open alerts of the analyzer that failed.
 
 ## The declaration
@@ -343,7 +345,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 - **Circular inheritance.** A class whose `extends` chain loops, which TypeScript rejects, is not analysed, for aggregates and event classes alike.
 
-Every analysis sees the files your tsconfig includes, the files of every tsconfig it lists in `references`, followed recursively, and the files they import, wherever they sit, except declaration files and anything under `node_modules`. A workspace package linked into `node_modules` counts by its real path. All of them are read with the compiler options of the tsconfig you pass to `-p`; an import only another tsconfig's options resolve stays unresolved and keeps the code that depends on it silent. A file outside all of them is invisible to every rule: it produces no findings and cannot keep one silent. A decorated ORM subclass loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
+Every analysis sees the files your tsconfig includes, the files of every tsconfig it lists in `references`, followed recursively, and the files they import, wherever they sit, except declaration files and anything under `node_modules`. A workspace package linked into `node_modules` counts by its real path, unless `preserveSymlinks` is set; then its files stay under `node_modules` and are left out. All of them are read with the compiler options of the tsconfig you pass to `-p`, and a referenced file of a kind those options do not support, such as `.js` without `allowJs`, is left out. An import only another tsconfig's options resolve stays unresolved: the code that depends on it stays silent, or, when the import types a declared state field, the run exits `2`. A file outside all of them is invisible to every rule: it produces no findings and cannot keep one silent. A decorated ORM subclass loaded only through a runtime glob, for example, is not seen, so it does not keep `undispatched-events` silent.
 
 The analysis also trusts that nothing tampers with a plain event array from outside the aggregate's family. It does not see:
 
