@@ -43,6 +43,22 @@ describe('check', () => {
     expect(await run(['check'], io)).toBe(1);
   });
 
+  it('analyses a solution whose reference includes JavaScript the solution options do not allow', async () => {
+    const dir = writeProject({
+      ...TICKET_PROJECT,
+      'src/legacy.js': "export class Legacy { status = 'open'; }\n",
+      'sol/tsconfig.json': JSON.stringify({
+        extends: '../tsconfig.json',
+        compilerOptions: { allowJs: false },
+        files: [],
+        references: [{ path: '..' }],
+      }),
+    }, { allowJs: true });
+    const { io } = captureIo(dir);
+
+    expect(await run(['check', '-p', 'sol/tsconfig.json', '-c', 'domain.config.ts'], io)).toBe(1);
+  });
+
   it('exits 2 and suggests init when the config is missing', async () => {
     const { io, stderr } = captureIo(writeProject(TICKET_SOURCES));
 

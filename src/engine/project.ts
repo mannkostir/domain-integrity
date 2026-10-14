@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { Project, SourceFile } from 'ts-morph';
+import { Project, SourceFile, ts } from 'ts-morph';
 import { ConfigError, ProjectError } from './errors';
 import { readReferencesFromDisk, referencedTsconfigs } from './references';
 
@@ -13,10 +13,30 @@ const emptyProgramMessage = (tsconfigPath: string, references: readonly string[]
 const loadFailure = (tsconfigPath: string, error: unknown): ProjectError =>
   new ProjectError(`Cannot load ${tsconfigPath}: ${error instanceof Error ? error.message : String(error)}`);
 
+const TYPESCRIPT_EXTENSIONS: readonly string[] = [ts.Extension.Ts, ts.Extension.Tsx, ts.Extension.Mts, ts.Extension.Cts];
+
+const JAVASCRIPT_EXTENSIONS: readonly string[] = [ts.Extension.Js, ts.Extension.Jsx, ts.Extension.Mjs, ts.Extension.Cjs];
+
+const allowsJavaScript = (options: ts.CompilerOptions): boolean => options.allowJs ?? options.checkJs ?? false;
+
+const supportedExtensions = (options: ts.CompilerOptions): readonly string[] =>
+  allowsJavaScript(options) ? [...TYPESCRIPT_EXTENSIONS, ...JAVASCRIPT_EXTENSIONS] : TYPESCRIPT_EXTENSIONS;
+
+const hasSupportedExtension = (path: string, extensions: readonly string[]): boolean =>
+  extensions.some((extension) => path.endsWith(extension));
+
+const addSupportedFilesOf = (project: Project, reference: string): void => {
+  const extensions = supportedExtensions(project.getCompilerOptions());
+  project
+    .addSourceFilesFromTsConfig(reference)
+    .filter((file) => !hasSupportedExtension(file.getFilePath(), extensions))
+    .forEach((file) => project.removeSourceFile(file));
+};
+
 const projectFrom = (tsconfigPath: string, references: readonly string[]): Project => {
   try {
     const project = new Project({ tsConfigFilePath: tsconfigPath });
-    references.forEach((reference) => project.addSourceFilesFromTsConfig(reference));
+    references.forEach((reference) => addSupportedFilesOf(project, reference));
     project.resolveSourceFileDependencies();
     return project;
   } catch (error) {

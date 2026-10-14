@@ -38,6 +38,17 @@ describe('loadProject', () => {
     expect(fileNames(loadProject(join(dir, 'tsconfig.json')), dir)).toEqual(['apps/api/src/main.ts', 'libs/orders/src/order.ts']);
   });
 
+  it('leaves out referenced files of a kind the entry compiler options do not support', () => {
+    const dir = writeTree({
+      'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './app' }] }),
+      'app/tsconfig.json': JSON.stringify({ compilerOptions: { allowJs: true }, include: ['src'] }),
+      'app/src/order.ts': 'export class Order {}\n',
+      'app/src/legacy.js': "export class Legacy { status = 'open'; }\n",
+    });
+
+    expect(fileNames(loadProject(join(dir, 'tsconfig.json')), dir)).toEqual(['app/src/order.ts']);
+  });
+
   it('fails with a ProjectError naming the referrer of a missing reference', () => {
     const dir = writeTree({ 'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './gone' }] }) });
 
