@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
 import { RuleId } from '../../src/finding';
 import { captureIo } from '../helpers/disk';
+import { JSON_FIXTURES } from '../helpers/fixtures';
 
 const DETAIL_KEYS: Readonly<Record<RuleId, readonly string[]>> = {
   'terminal-state-leak': ['aggregate', 'aggregateId', 'method', 'field', 'values'],
@@ -17,8 +18,6 @@ const DETAIL_KEYS: Readonly<Record<RuleId, readonly string[]>> = {
   'undispatched-events': ['owner', 'ownerId', 'buffer', 'method', 'raisers'],
 };
 
-const FIXTURES = ['enum-inline', 'boolean-rule', 'nullable-timestamp', 'event-flows', 'outside-spec', 'nx-monorepo'];
-
 type WireFinding = { readonly ruleId: RuleId; readonly details: Readonly<Record<string, unknown>> };
 
 const findingsOf = async (name: string): Promise<readonly WireFinding[]> => {
@@ -27,7 +26,7 @@ const findingsOf = async (name: string): Promise<readonly WireFinding[]> => {
   return (JSON.parse(stdout()) as { findings: WireFinding[] }).findings;
 };
 
-const fixtureFindings = async (): Promise<readonly WireFinding[]> => (await Promise.all(FIXTURES.map(findingsOf))).flat();
+const fixtureFindings = async (): Promise<readonly WireFinding[]> => (await Promise.all(JSON_FIXTURES.map(findingsOf))).flat();
 
 describe('JSON report details', () => {
   it('exercises every rule across the fixtures', async () => {

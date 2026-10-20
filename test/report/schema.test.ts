@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,12 +12,11 @@ import { run } from '../../src/cli/run';
 import { PROBLEM_ANALYZERS, Problem, RULE_ANALYZERS } from '../../src/finding';
 import { formatJson } from '../../src/report/json';
 import { captureIo } from '../helpers/disk';
-import { TOOL } from '../helpers/model';
+import { JSON_FIXTURES } from '../helpers/fixtures';
+import { TOOL, finding } from '../helpers/model';
 import { REPORT_SCHEMA, validateReport } from '../helpers/schema';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
-
-const FIXTURES = ['enum-inline', 'boolean-rule', 'nullable-timestamp', 'event-flows', 'outside-spec', 'nx-monorepo'];
 
 const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
@@ -58,11 +57,11 @@ const definitions = REPORT_SCHEMA.$defs as { readonly finding: FindingDefinition
 const sorted = (values: Iterable<string>): string[] => [...values].sort();
 
 describe('report schema', () => {
-  it.each(FIXTURES)('accepts the JSON report of %s', async (name) => {
+  it.each(JSON_FIXTURES)('accepts the JSON report of %s', async (name) => {
     expect(validateReport(await checkJson(fixture(name)))).toEqual([]);
   });
 
-  it.each(FIXTURES)('accepts the baselined JSON report of %s', async (name) => {
+  it.each(JSON_FIXTURES)('accepts the baselined JSON report of %s', async (name) => {
     expect(validateReport(await baselinedRun(fixture(name)))).toEqual([]);
   });
 
@@ -106,9 +105,27 @@ describe('report schema', () => {
     expect(pack.files.map((file) => file.path)).toContain('schema/report.schema.json');
   });
 
-  it('exports the schema from the package', () => {
-    const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { exports: Record<string, unknown> };
+  const manifest = (): { exports: Record<string, string> } => JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 
-    expect(manifest.exports['./schema/report.json']).toBe('./schema/report.schema.json');
+  it('exports the schema from the package', () => {
+    expect(manifest().exports['./schema/report.json']).toBe('./schema/report.schema.json');
+  });
+
+  it('exports a schema file that exists', () => {
+    expect(existsSync(join(ROOT, manifest().exports['./schema/report.json'] ?? ''))).toBe(true);
+  });
+
+  it('rejects a finding whose details carry an extra key', () => {
+    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], problems: [], rules: [], root: '/app' }, TOOL));
+    const [first] = report.findings;
+
+    expect(validateReport(JSON.stringify({ ...report, findings: [{ ...first, details: { ...first.details, extra: true } }] }))).not.toEqual([]);
+  });
+
+  it('rejects a finding whose details belong to another rule', () => {
+    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], problems: [], rules: [], root: '/app' }, TOOL));
+    const [first] = report.findings;
+
+    expect(validateReport(JSON.stringify({ ...report, findings: [{ ...first, ruleId: 'unhandled-event', analyzer: 'event-flow' }] }))).not.toEqual([]);
   });
 });
