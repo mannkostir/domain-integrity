@@ -1,4 +1,4 @@
-import { LifecycleFinding, RuleDescription } from '../../../analyzer';
+import { LifecycleFinding } from '../../../analyzer';
 import { AggregateModel, LifecycleModel } from '../model';
 import { CheckOptions } from './options';
 import { outsideMutation } from './outside-mutation';
@@ -6,17 +6,7 @@ import { terminalStateLeak } from './terminal-state-leak';
 import { transitionDrift } from './transition-drift';
 import { unreachableState } from './unreachable-state';
 
-export const LIFECYCLE_RULES: readonly RuleDescription[] = [
-  { id: 'terminal-state-leak', description: 'A method can change an aggregate after it reached a terminal state.' },
-  { id: 'unreachable-state', description: 'A declared state value is never assigned.' },
-  { id: 'outside-mutation', description: 'Aggregate state is assigned outside the aggregate.' },
-  {
-    id: 'transition-drift',
-    description:
-      'A method can run from states its declared transition does not allow, or sets the state field without a declared transition.',
-  },
-  { id: 'transition-missing', description: 'A method cannot run from a state its declared transition allows.' },
-];
+export { LIFECYCLE_RULES } from './rules';
 
 type Check = (aggregate: AggregateModel, options: CheckOptions) => LifecycleFinding[];
 

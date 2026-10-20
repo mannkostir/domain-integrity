@@ -1,11 +1,11 @@
-import { LifecycleFinding, Severity } from '../../../analyzer';
+import { LifecycleFinding, ReportedRule, reportedUnder } from '../../../analyzer';
 import { AggregateModel, FieldBehaviour, MethodModel, StateField } from '../model';
 import { writesField } from '../values';
 import { fieldOf, quoted } from './format';
+import { TRANSITION_DRIFT, TRANSITION_MISSING } from './rules';
 
 type Drift = {
-  readonly checkId: 'transition-drift' | 'transition-missing';
-  readonly severity: Severity;
+  readonly rule: ReportedRule<'transition-drift' | 'transition-missing'>;
   readonly subject: string;
   readonly message: string;
   readonly fix: string;
@@ -19,7 +19,10 @@ const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodM
   field: field.name,
   file: method.file,
   line: method.line,
-  ...drift,
+  ...drift.rule,
+  subject: drift.subject,
+  message: drift.message,
+  fix: drift.fix,
 });
 
 const comparedWithDeclaration = (
@@ -36,8 +39,7 @@ const comparedWithDeclaration = (
     ...(extra.length > 0
       ? [
           {
-            checkId: 'transition-drift' as const,
-            severity: 'error' as const,
+            rule: reportedUnder(TRANSITION_DRIFT),
             subject: 'extra',
             message: `${method.name}() can run from ${quoted(field, extra)}, which the declaration does not allow.`,
             fix: `Add a guard that excludes ${quoted(field, extra)}, or add ${extra.length === 1 ? 'it' : 'them'} to transitions.${method.name}.`,
@@ -47,8 +49,7 @@ const comparedWithDeclaration = (
     ...(missing.length > 0
       ? [
           {
-            checkId: 'transition-missing' as const,
-            severity: 'warning' as const,
+            rule: reportedUnder(TRANSITION_MISSING),
             subject: 'missing',
             message: `${method.name}() cannot run from ${quoted(field, missing)}, although the declaration allows it.`,
             fix: `Remove ${quoted(field, missing)} from transitions.${method.name}, or relax the guard.`,
@@ -66,8 +67,7 @@ const driftOf = (field: StateField, method: MethodModel, transitions: ReadonlyMa
   if (!writesField(behaviour.sets)) return [];
   return [
     {
-      checkId: 'transition-drift',
-      severity: 'error',
+      rule: reportedUnder(TRANSITION_DRIFT),
       subject: 'undeclared',
       message: `${method.name}() sets ${field.name} but has no entry in transitions.`,
       fix: `Add transitions.${method.name} to the declaration.`,

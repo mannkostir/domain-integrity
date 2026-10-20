@@ -1,7 +1,8 @@
-import { LifecycleFinding } from '../../../analyzer';
+import { LifecycleFinding, reportedUnder } from '../../../analyzer';
 import { AggregateModel, AssignedValues, StateField } from '../model';
 import { hasUnknownWrite } from '../values';
 import { fieldOf } from './format';
+import { UNREACHABLE_STATE } from './rules';
 
 const assignmentsOf = (aggregate: AggregateModel, field: StateField): AssignedValues[] =>
   [
@@ -21,8 +22,7 @@ const unreachableValues = (aggregate: AggregateModel, field: StateField): Lifecy
     .filter((value) => !reached.has(value.token))
     .map((value) => ({
       analyzer: 'lifecycle',
-      checkId: 'unreachable-state',
-      severity: 'error',
+      ...reportedUnder(UNREACHABLE_STATE),
       aggregate: aggregate.name,
       aggregateId: aggregate.id,
       method: undefined,

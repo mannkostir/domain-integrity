@@ -1,6 +1,7 @@
-import { LifecycleFinding } from '../../../analyzer';
+import { LifecycleFinding, reportedUnder } from '../../../analyzer';
 import { AggregateModel } from '../model';
 import { CheckOptions } from './options';
+import { OUTSIDE_MUTATION } from './rules';
 
 export const outsideMutation = (aggregate: AggregateModel, options: CheckOptions): LifecycleFinding[] =>
   aggregate.outside
@@ -9,8 +10,7 @@ export const outsideMutation = (aggregate: AggregateModel, options: CheckOptions
     .filter((assignment) => !assignment.throughOwnSetter)
     .map((assignment) => ({
       analyzer: 'lifecycle',
-      checkId: 'outside-mutation',
-      severity: 'error',
+      ...reportedUnder(OUTSIDE_MUTATION),
       aggregate: aggregate.name,
       aggregateId: aggregate.id,
       method: undefined,

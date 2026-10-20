@@ -1,6 +1,7 @@
-import { HandlerFinding } from '../../../analyzer';
+import { HandlerFinding, reportedUnder } from '../../../analyzer';
 import { EventClassModel, EventFlowModel, SagaModel } from '../model';
 import { acceptedIds, nameOf, refOf } from './handler-label';
+import { SAGA_MISSING_FAILURE_PATH } from './rules';
 
 type Outcome = readonly [string, string];
 
@@ -41,8 +42,7 @@ export const sagaMissingFailurePath = (model: EventFlowModel): HandlerFinding[] 
       const failureName = nameOf(model, failure);
       return {
         analyzer: 'event-flow',
-        checkId: 'saga-missing-failure-path',
-        severity: 'error',
+        ...reportedUnder(SAGA_MISSING_FAILURE_PATH),
         event: failureName,
         eventId: failure,
         handler: saga.id,
