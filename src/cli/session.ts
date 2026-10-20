@@ -1,27 +1,66 @@
 import { AnalyzerRun, runAnalyzers } from '../analysis';
-import { AnalysisResult } from '../analyzer';
+import { AnalysisResult, CheckScope } from '../analyzer';
 import { DomainDeclaration } from '../engine/declaration';
 import { ProjectError } from '../engine/errors';
 import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
-import { Paths } from './io';
+import { Io, Paths } from './io';
 
-export type Session = { readonly results: readonly AnalysisResult[] };
+export type Session =
+  | { readonly kind: 'checkable'; readonly results: readonly AnalysisResult[] }
+  | { readonly kind: 'nothing-declared'; readonly results: readonly AnalysisResult[]; readonly notice: string };
 
-export const noAggregatesFound = (declaration: DomainDeclaration): string =>
-  `No aggregates found. Searched for classes extending or implementing: ${declaration.aggregateBaseClasses.join(', ')}.`;
+const NO_AGGREGATES = 'No aggregates found.';
 
-const noAggregatesMessage = (declaration: DomainDeclaration): string =>
-  `${noAggregatesFound(declaration)} Set "aggregateBaseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregateBaseClasses: ['MyAggregateBase'] })`;
+const searchedBaseClasses = (declaration: DomainDeclaration): string =>
+  `Searched for classes extending or implementing: ${declaration.aggregateBaseClasses.join(', ')}.`;
 
-export const nothingToAnalyseMessage = (declaration: DomainDeclaration): string =>
-  `${noAggregatesMessage(declaration)} No event handlers were found either. Recognised handlers use the decorators ${declaration.events.handlerDecorators.join(', ')} (set "events.handlerDecorators" for your own), the methods ${declaration.events.registerMethods.join(', ')} (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().`;
+const SET_BASE_CLASSES =
+  'Set "aggregateBaseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregateBaseClasses: [\'MyAggregateBase\'] })';
+
+const NO_HANDLERS = 'No event handlers were found either.';
+
+const recognisedHandlers = (declaration: DomainDeclaration): string =>
+  `Recognised handlers use the decorators ${declaration.events.handlerDecorators.join(', ')} (set "events.handlerDecorators" for your own), the methods ${declaration.events.registerMethods.join(', ')} (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().`;
+
+export const noAggregatesFound = (declaration: DomainDeclaration): string => `${NO_AGGREGATES} ${searchedBaseClasses(declaration)}`;
+
+const loadedSourceFiles = (count: number): string => `Loaded ${count} ${count === 1 ? 'source file' : 'source files'}.`;
+
+const nothingFoundMessage = (declaration: DomainDeclaration, fileCount: number): string =>
+  [
+    loadedSourceFiles(fileCount),
+    NO_AGGREGATES,
+    searchedBaseClasses(declaration),
+    SET_BASE_CLASSES,
+    NO_HANDLERS,
+    recognisedHandlers(declaration),
+  ].join('\n');
+
+const nothingDeclaredNotice = (config: string, fileCount: number): string =>
+  [
+    loadedSourceFiles(fileCount),
+    `Nothing to check: ${config} declares no lifecycles, and no event handlers or event flows were found.`,
+    'Run "domain-integrity init" to declare the lifecycles of the aggregates it finds.',
+  ].join('\n');
+
+export const runScope = (scopes: readonly CheckScope[]): CheckScope => {
+  if (scopes.includes('checkable')) return 'checkable';
+  return scopes.includes('nothing-declared') ? 'nothing-declared' : 'nothing-found';
+};
 
 export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[]): Session => {
   const project = loadProject(paths.tsconfig, paths.config);
   const configFile = configSourceFile(project, paths.config);
   const declaration = readDeclaration(configFile);
-  const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, configFile), root: paths.root, configFile }, analyzers);
-  if (results.every((result) => result.scope === 'nothing-found')) throw new ProjectError(nothingToAnalyseMessage(declaration));
-  return { results };
+  const files = analysedSourceFiles(project, configFile);
+  const results = runAnalyzers({ declaration, files, root: paths.root, configFile }, analyzers);
+  const scope = runScope(results.map((result) => result.scope));
+  if (scope === 'nothing-found') throw new ProjectError(nothingFoundMessage(declaration, files.length));
+  if (scope === 'nothing-declared') return { kind: 'nothing-declared', results, notice: nothingDeclaredNotice(paths.config, files.length) };
+  return { kind: 'checkable', results };
+};
+
+export const reportNotice = (session: Session, io: Io): void => {
+  if (session.kind === 'nothing-declared') io.err(`${session.notice}\n`);
 };
