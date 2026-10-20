@@ -277,9 +277,82 @@ Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfi
 
 `--version`, or `-V`, prints the version and exits `0`.
 
-The JSON report of `check` has a top-level `tool` with `name` and `version`, next to `findings`, `known` and `problems`. The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`. Each SARIF result names its rule by `ruleId` and `ruleIndex`, carries the finding's message as `message.text` and its fix in `properties.fix`, and has a `partialFingerprints` entry `domainIntegrity/v1` holding its baseline key. When a baseline is applied, whether given with `--baseline` or loaded from `domain-integrity.baseline.json`, known findings follow the new ones as results with an `external` suppression; they never affect the exit code.
+The JSON report is described under [JSON report](#json-report). The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`. Each SARIF result names its rule by `ruleId` and `ruleIndex`, carries the finding's message as `message.text` and its fix in `properties.fix`, and has a `partialFingerprints` entry `domainIntegrity/v1` holding its baseline key. When a baseline is applied, whether given with `--baseline` or loaded from `domain-integrity.baseline.json`, known findings follow the new ones as results with an `external` suppression; they never affect the exit code.
 
 If one analyzer crashes, the command prints `internal error in <analyzer>, please report (domain-integrity <version>)` with a short stack trace, still prints the other analyzers' results, and exits `2`; `--update-baseline` and `context --write` then write nothing.
+
+### JSON report
+
+`check --format json` prints one object with the keys `version`, `tool`, `summary`, `findings`, `known` and `problems`, in that order. `version` is the format version, currently `1`. It is raised only by a breaking change: a key removed or renamed, or the meaning or type of a value changed. A new key, rule or problem code keeps it, so code that reads the keys it knows keeps working. `tool` holds the package `name` and `version`. `summary` counts the new errors and warnings, the known findings and the problems, so `errors` and `warnings` match the text summary line. `known` holds the findings accepted by a baseline, in the same shape as `findings`.
+
+```json
+{
+  "version": 1,
+  "tool": {
+    "name": "domain-integrity",
+    "version": "0.2.1"
+  },
+  "summary": {
+    "errors": 5,
+    "warnings": 1,
+    "known": 0,
+    "problems": 0
+  },
+  "findings": [
+    {
+      "ruleId": "unreachable-state",
+      "severity": "error",
+      "analyzer": "lifecycle",
+      "key": "unreachable-state|Order||status|PAID",
+      "location": {
+        "file": "src/order.ts",
+        "line": 6
+      },
+      "message": "status value 'paid' is never assigned.",
+      "fix": "Add the method that moves Order into 'paid', or remove the value from the type.",
+      "details": {
+        "aggregate": "Order",
+        "aggregateId": "Order",
+        "field": "status",
+        "value": "PAID"
+      }
+    }
+  ],
+  "known": [],
+  "problems": []
+}
+```
+
+Every finding has the keys `ruleId`, `severity`, `analyzer`, `key`, `location`, `message`, `fix` and `details`, in that order, and every key is always present; a value that does not apply is `null`, never omitted. `severity` is `error` or `warning`, and `analyzer` is `lifecycle` or `event-flow`. `key` is the baseline key, the same string as the SARIF `domainIntegrity/v1` fingerprint. `location` holds `file`, relative to the tsconfig directory with `/` separators, and `line`. `details` holds the fields of the rule, in the order of the table. State values in `details` are the literal values the config and the keys use, such as `PAID` for a member declared as `paid = 'PAID'`, never enum member names; the message shows the member name. `aggregate`, `event`, `saga`, `owner` and the other names are the display names the messages use, and the matching `...Id` fields are the identifiers used in keys. The only nullable detail is `handler`, a string or `null`.
+
+| `ruleId` | `details` | Key after the rule id |
+|---|---|---|
+| `terminal-state-leak` | `aggregate`, `aggregateId`, `method`, `field`, `values[]` | `aggregateId`, `method`, `field`, `values` |
+| `unreachable-state` | `aggregate`, `aggregateId`, `field`, `value` | `aggregateId`, empty, `field`, `value` |
+| `outside-mutation` | `aggregate`, `aggregateId`, `field`, `scope` | `aggregateId`, empty, `field`, `scope` |
+| `transition-drift` | `aggregate`, `aggregateId`, `method`, `field`, `kind` (`extra` or `undeclared`), `values[]` | `aggregateId`, `method`, `field`, `kind` |
+| `transition-missing` | `aggregate`, `aggregateId`, `method`, `field`, `values[]` | `aggregateId`, `method`, `field`, `missing` |
+| `dead-handler` | `event`, `eventId`, `handler` | `eventId`, `handler` or empty, empty |
+| `handler-payload-mismatch` | `event`, `eventId`, `handler`, `declared[]`, `declaredIds[]` | `eventId`, `handler` or empty, `declaredIds` |
+| `unhandled-event` | `event`, `eventId` | `eventId`, empty, empty |
+| `saga-missing-failure-path` | `saga`, `sagaId`, `success`, `successId`, `failure`, `failureId` | `failureId`, `sagaId`, `successId` |
+| `undispatched-events` | `owner`, `ownerId`, `buffer`, `method`, `raisers[]` | `ownerId`, `buffer`, empty |
+
+For `transition-drift`, `values` lists the extra states for `extra` and is empty for `undeclared`; for `transition-missing` it lists the missing states. Neither enters the key.
+
+A problem is something the analysis could not resolve, such as a declared field that does not exist. Problems are not findings: they have no key, never enter a baseline and never affect the exit code. Each has the keys `code`, `analyzer`, `message` and `details`, in that order, and the same message is printed on stderr as a `problem:` line.
+
+| `code` | `analyzer` | `details` |
+|---|---|---|
+| `state-field-accessor` | `lifecycle` | `aggregate`, `field` |
+| `state-field-missing` | `lifecycle` | `aggregate`, `field` |
+| `state-field-unsupported-type` | `lifecycle` | `aggregate`, `field`, `type` |
+| `unknown-state-value` | `lifecycle` | `aggregate`, `field`, `value`, `known[]` |
+| `transition-method-missing` | `lifecycle` | `aggregate`, `method` |
+| `event-not-analysed` | `event-flow` | `event` |
+| `saga-outcome-unhandled` | `event-flow` | `saga`, `success`, `failure` |
+
+A JSON Schema describes the report. The package ships it as `schema/report.schema.json` and exports it as `domain-integrity/schema/report.json`; it is also available at [`https://unpkg.com/domain-integrity/schema/report.schema.json`](https://unpkg.com/domain-integrity/schema/report.schema.json). Its `$id` is `urn:domain-integrity:report:v1`. It is strict, with `additionalProperties` set to `false` throughout, and it describes exactly the output of the version it ships with: a newer release may add keys, rules and problem codes that an older schema rejects, so validate with the schema of the installed version.
 
 ## Built for codebases that agents write
 
@@ -319,13 +392,15 @@ A stale entry is a baseline key that matches no current finding. The text output
 
 Stale entries never change the exit code. They are not reported when the run has problems or an internal error, because its findings are then incomplete.
 
-Baseline entries for lifecycle findings are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
+Baseline entries are keyed by the rule and the fields that identify the finding, not by line number, so unrelated edits don't break the baseline.
 
-Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. A `transition-drift` entry ends in `extra` or `undeclared`, such as `transition-drift|Order|cancel|status|extra`, and a `transition-missing` entry in `missing`, such as `transition-missing|Order|place|status|missing`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
+Each entry is the `ruleId` followed by a tuple of `details` fields joined with `|`, as listed in the last column of the table under [JSON report](#json-report). The JSON `key` and the SARIF `domainIntegrity/v1` fingerprint carry the same string. Renaming an enum member keeps its key, because the key holds the state value; changing the value changes the key. Arrays in a key are joined with `,`. For lifecycle findings the aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. A `transition-drift` entry ends in `extra` or `undeclared`, such as `transition-drift|Order|cancel|status|extra`, and a `transition-missing` entry in `missing`, such as `transition-missing|Order|place|status|missing`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
 
 Before 0.3.0, `transition-missing` findings were reported as `transition-drift` with the subject `missing`. A baseline written by an earlier version lists them under the old key, so they come back as new; run `--update-baseline` again to regenerate it.
 
-Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|` and carry `owner`, `ownerId`, `buffer`, `method` and `raisers` instead.
+In 0.3.0 the JSON report changed shape: `checkId` became `ruleId`, `file` and `line` moved into `location`, the rule-specific fields moved under `details`, `subject` was removed, and problems became objects. Baseline files and SARIF fingerprints are unaffected.
+
+Event-flow findings have the key `ruleId|eventId|handler|` for `dead-handler`, `handler-payload-mismatch` and `unhandled-event`, with `handler-payload-mismatch` ending in the declared event ids instead of an empty segment. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|`, and `saga-missing-failure-path` findings `saga-missing-failure-path|failureId|sagaId|successId`.
 
 The SARIF report still carries baselined findings, as results with an `external` suppression, so code scanning does not see them disappear and close their alerts as fixed.
 
