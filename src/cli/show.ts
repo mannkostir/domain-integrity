@@ -3,7 +3,7 @@ import { AmbiguousReference, DiagramOutcome } from '../analyzer';
 import { UsageError } from '../engine/errors';
 import { failuresAmong, reportInternalErrors } from './internal-errors';
 import { Io, Paths } from './io';
-import { openSession } from './session';
+import { openSession, reportNotice } from './session';
 
 const ambiguityError = ({ reference, candidates }: AmbiguousReference): UsageError =>
   new UsageError(`Name "${reference}" is ambiguous. Use one of: ${candidates.join(', ')}`);
@@ -24,8 +24,13 @@ const nothingToShowError = (aggregate: string | undefined): UsageError =>
   );
 
 export const showCommand = (paths: Paths, aggregate: string | undefined, io: Io, analyzers: readonly AnalyzerRun[]): number => {
-  const { results } = openSession(paths, analyzers);
-  const outcomes = results.map((result) => result.diagram(aggregate));
+  const session = openSession(paths, analyzers);
+  reportNotice(session, io);
+  if (session.kind === 'nothing-declared') {
+    if (aggregate) io.err(`Nothing to show for "${aggregate}".\n`);
+    return 0;
+  }
+  const outcomes = session.results.map((result) => result.diagram(aggregate));
   const failures = failuresAmong(outcomes);
   reportInternalErrors(failures, io);
   const ambiguity = firstAmbiguity(outcomes);

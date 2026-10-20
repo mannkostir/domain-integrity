@@ -171,7 +171,15 @@ These shapes are recognised as handlers:
 - `subscribedTo()` returning an array literal, such as `[X, Y]`;
 - a `@Saga()` property that uses `ofType(X, …)`.
 
-A project with event handlers and no aggregates is accepted. When it has neither aggregates nor event flows, every command exits `2` with the "No aggregates found" message. When the tsconfig includes no source files, and neither do the tsconfigs it references, every command exits `2` with a message saying so and pointing you to `-p` or `references`.
+A project with event handlers and no aggregates is accepted. A project with nothing to check is handled as follows by `check`, `show` and `context`; each message starts with the number of source files loaded:
+
+| Project | Exit | Message |
+|---|---|---|
+| The tsconfig, and the tsconfigs it references, include no source files other than the config | `2` | Says so and points you to `-p` or `references` |
+| No aggregates are found for `aggregateBaseClasses`, and there are no event handlers or event flows | `2` | "No aggregates found", with the base classes and handler shapes it searched for, preceded by a `problem:` line for each problem an analyzer met, such as a declared event outside the analysed files |
+| Aggregates are found, but the config declares no lifecycles and there are no event handlers or event flows | `0` | A notice on stderr pointing you to `init` |
+
+In the last case stdout keeps the normal output, so JSON and SARIF reports stay valid: `check` reports no findings, `show` prints nothing, and `context` prints nothing; `context --write` still writes its marked section, with nothing between the markers.
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
 

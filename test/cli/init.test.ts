@@ -94,7 +94,7 @@ const MIXED_BASE_PROJECT = {
 };
 
 const declaredBaseClasses = (dir: string): readonly string[] =>
-  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json')), join(dir, 'domain.config.ts'))).aggregateBaseClasses;
+  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), join(dir, 'domain.config.ts'))).aggregateBaseClasses;
 
 describe('init --base-class', () => {
   it('declares an aggregate extending the named base class', async () => {
@@ -387,7 +387,7 @@ describe('init', () => {
   it('writes a config whose declared lifecycle targets are the suggested aggregates', async () => {
     const dir = writeProject(TICKET_SOURCES);
     await run(['init', '--yes'], captureIo(dir).io);
-    const project = loadProject(join(dir, 'tsconfig.json'));
+    const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'));
     const declaration = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts')));
 
     expect(declaration.lifecycles.map((lifecycle) => lifecycle.target.getName())).toEqual(['Ticket']);

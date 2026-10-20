@@ -1,10 +1,15 @@
-import { Analyzer, LifecycleFinding } from '../../analyzer';
+import { Analyzer, CheckScope, LifecycleFinding } from '../../analyzer';
 import { LIFECYCLE_RULES, runChecks } from './checks';
 import { lifecycleDiagrams } from './diagram';
 import { extractLifecycles } from './extract';
 import { LifecycleModel } from './model';
 import { LifecycleSuggestion, suggestLifecycles } from './suggest';
 import { lifecycleSummary } from './summary';
+
+const lifecycleScope = (model: LifecycleModel): CheckScope => {
+  if (model.aggregates.length === 0) return 'nothing-found';
+  return model.aggregates.some((aggregate) => aggregate.declared) ? 'checkable' : 'nothing-declared';
+};
 
 export const lifecycleAnalyzer: Analyzer<LifecycleModel, LifecycleSuggestion, LifecycleFinding> = {
   id: 'lifecycle',
@@ -15,5 +20,5 @@ export const lifecycleAnalyzer: Analyzer<LifecycleModel, LifecycleSuggestion, Li
   check: runChecks,
   diagram: lifecycleDiagrams,
   summarize: lifecycleSummary,
-  isEmpty: (model) => model.aggregates.length === 0,
+  scope: lifecycleScope,
 };

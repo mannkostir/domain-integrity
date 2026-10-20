@@ -11,7 +11,7 @@ import { ToolIdentity } from '../report/tool';
 import { guardedRead, writeText } from './files';
 import { reportInternalErrors } from './internal-errors';
 import { Io, Paths } from './io';
-import { openSession } from './session';
+import { openSession, reportNotice } from './session';
 import { toolIdentity } from './version';
 
 export type CheckOptions = {
@@ -68,7 +68,9 @@ const isComplete = ({ problems, failures }: Outcome): boolean => problems.length
 
 export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyzers: readonly AnalyzerRun[]): number => {
   const format = formatterFor(options);
-  const { results } = openSession(paths, analyzers);
+  const session = openSession(paths, analyzers);
+  reportNotice(session, io);
+  const { results } = session;
   const outcome: Outcome = {
     problems: results.flatMap((result) => result.problems),
     failures: results.flatMap((result) => result.failures),

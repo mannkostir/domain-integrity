@@ -64,6 +64,16 @@ describe('check', () => {
     }).toEqual({ code: 2, explained: true, misleading: false });
   });
 
+  it('exits 2 and explains a tsconfig that includes only the config', async () => {
+    const dir = writeTree({ 'tsconfig.json': JSON.stringify({ include: ['domain.config.ts'] }), 'domain.config.ts': TICKET_PROJECT['domain.config.ts'] });
+    const { io, stderr } = captureIo(dir);
+
+    expect({
+      code: await run(['check'], io),
+      explained: stderr().includes(`${join(dir, 'tsconfig.json')} includes no source files other than ${join(dir, 'domain.config.ts')}.`),
+    }).toEqual({ code: 2, explained: true });
+  });
+
   it('does not reject a config that a composite tsconfig include leaves out', async () => {
     const { io } = captureIo(writeProject(TICKET_PROJECT, { composite: true }));
 

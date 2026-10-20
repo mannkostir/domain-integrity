@@ -6,7 +6,7 @@ import { readText, writeText } from './files';
 import { failuresAmong, reportInternalErrors } from './internal-errors';
 import { Io, Paths } from './io';
 import { replaceSection } from './section';
-import { openSession } from './session';
+import { openSession, reportNotice } from './session';
 
 const summaryText = (outcomes: readonly SummaryOutcome[]): string =>
   outcomes.flatMap((outcome) => (outcome.kind === 'summary' && outcome.text.length > 0 ? [outcome.text] : [])).join('\n');
@@ -19,8 +19,9 @@ const writeSummary = (summary: string, write: string, io: Io): void => {
 };
 
 export const contextCommand = (paths: Paths, write: string | undefined, io: Io, analyzers: readonly AnalyzerRun[]): number => {
-  const { results } = openSession(paths, analyzers);
-  const outcomes = results.map((result) => result.summary(paths.root));
+  const session = openSession(paths, analyzers);
+  reportNotice(session, io);
+  const outcomes = session.results.map((result) => result.summary(paths.root));
   const failures = failuresAmong(outcomes);
   reportInternalErrors(failures, io);
   if (write === undefined) {
