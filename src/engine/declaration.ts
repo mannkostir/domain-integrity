@@ -33,6 +33,7 @@ export type DomainDeclaration = {
   readonly inertEventMethods: readonly string[];
   readonly inertMembers: readonly string[];
   readonly lifecycles: readonly DeclaredLifecycle[];
+  readonly reportTestFileMutations: boolean;
   readonly events: DeclaredEvents;
 };
 
@@ -44,5 +45,6 @@ export const DEFAULT_DECLARATION: DomainDeclaration = {
   inertEventMethods: [],
   inertMembers: [],
   lifecycles: [],
+  reportTestFileMutations: false,
   events: { handlerDecorators: ['EventsHandler', 'OnEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
 };

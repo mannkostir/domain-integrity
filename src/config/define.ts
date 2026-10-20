@@ -44,6 +44,7 @@ export type DomainConfig = {
   readonly inertEventMethods?: readonly string[];
   readonly inertMembers?: readonly string[];
   readonly lifecycles?: readonly LifecycleDeclaration[];
+  readonly reportTestFileMutations?: boolean;
 };
 
 export const lifecycle = <T extends object>(
