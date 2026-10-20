@@ -4,9 +4,9 @@ import { TOOL, bufferFinding, finding } from '../helpers/model';
 
 describe('formatJson', () => {
   it('writes findings with paths relative to the root', () => {
-    const parsed = JSON.parse(formatJson({ fresh: [finding({})], known: [], problems: ['p'], rules: [], root: '/app' }, TOOL));
+    const { findings, known, problems } = JSON.parse(formatJson({ fresh: [finding({})], known: [], problems: ['p'], rules: [], root: '/app' }, TOOL));
 
-    expect(parsed).toEqual({ tool: { name: 'domain-integrity', version: '1.2.3' }, findings: [{ ...finding({}), file: 'src/order.ts' }], known: [], problems: ['p'] });
+    expect({ findings, known, problems }).toEqual({ findings: [{ ...finding({}), file: 'src/order.ts' }], known: [], problems: ['p'] });
   });
 
   it('names the tool and its version', () => {
