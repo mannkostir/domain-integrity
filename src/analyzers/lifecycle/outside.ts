@@ -3,6 +3,7 @@ import { assignedValue, isAssignmentOperator } from './assigned';
 import { inheritanceChain } from './field-ref';
 import { isLibraryNode } from '../shared/library';
 import { SourceIndex } from '../shared/source-index';
+import { isTestFile } from '../shared/test-files';
 import { OutsideAssignment, StateField } from './model';
 import { UNRESOLVED } from './values';
 import { unwrap } from '../shared/wrappers';
@@ -81,11 +82,12 @@ const enclosingName = (node: Node): string =>
 const isOutside = (node: Node, cls: ClassDeclaration): boolean =>
   node.getFirstAncestor((ancestor) => ancestor === cls) === undefined;
 
-const located = (node: Node, field: StateField) => ({
+const located = (node: Node, field: StateField, root: string) => ({
   field: field.name,
   file: node.getSourceFile().getFilePath(),
   line: node.getStartLineNumber(),
   scope: enclosingName(node),
+  inTestFile: isTestFile(node.getSourceFile(), root),
 });
 
 const assignmentsTo = (sources: SourceIndex, field: string): readonly BinaryExpression[] =>
@@ -107,14 +109,19 @@ const sourced = (node: Node, assignment: OutsideAssignment): SourcedAssignment =
   assignment,
 });
 
-const directAssignments = (sources: SourceIndex, cls: ClassDeclaration, field: StateField): SourcedAssignment[] =>
+const directAssignments = (
+  sources: SourceIndex,
+  cls: ClassDeclaration,
+  field: StateField,
+  root: string,
+): SourcedAssignment[] =>
   assignmentsTo(sources, field.name)
     .filter(isAssignmentOperator)
     .filter((binary) => isOutside(binary, cls))
     .filter((binary) => targetsField(binary.getLeft(), cls, field.name))
     .map((binary) =>
       sourced(binary, {
-        ...located(binary, field),
+        ...located(binary, field, root),
         value:
           binary.getOperatorToken().getKind() === SyntaxKind.EqualsToken
             ? assignedValue(binary.getRight(), field)
@@ -123,13 +130,18 @@ const directAssignments = (sources: SourceIndex, cls: ClassDeclaration, field: S
       }),
     );
 
-const objectAssignments = (sources: SourceIndex, cls: ClassDeclaration, field: StateField): SourcedAssignment[] =>
+const objectAssignments = (
+  sources: SourceIndex,
+  cls: ClassDeclaration,
+  field: StateField,
+  root: string,
+): SourcedAssignment[] =>
   objectAssignCalls(sources)
     .filter((call) => isOutside(call, cls))
     .filter((call) => objectAssignTargetsField(call, cls, field.name))
     .map((call) =>
       sourced(call, {
-        ...located(call, field),
+        ...located(call, field, root),
         value: UNRESOLVED,
         throughOwnSetter: writesThroughOwnSetter(call.getArguments()[0], cls, field.name),
       }),
@@ -138,7 +150,15 @@ const objectAssignments = (sources: SourceIndex, cls: ClassDeclaration, field: S
 const inFileOrder = (files: readonly SourceFile[], entries: readonly SourcedAssignment[]): OutsideAssignment[] =>
   files.flatMap((file) => entries.filter(({ source }) => source === file).map(({ assignment }) => assignment));
 
-export const outsideAssignments = (sources: SourceIndex, cls: ClassDeclaration, field: StateField): OutsideAssignment[] =>
-  inFileOrder(sources.files, [...directAssignments(sources, cls, field), ...objectAssignments(sources, cls, field)]).sort(
+export const outsideAssignments = (
+  sources: SourceIndex,
+  cls: ClassDeclaration,
+  field: StateField,
+  root: string,
+): OutsideAssignment[] =>
+  inFileOrder(sources.files, [
+    ...directAssignments(sources, cls, field, root),
+    ...objectAssignments(sources, cls, field, root),
+  ]).sort(
     (a, b) => a.file.localeCompare(b.file) || a.line - b.line,
   );

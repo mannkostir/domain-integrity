@@ -40,6 +40,7 @@ export default defineDomain({});
       inertEventMethods: [],
       inertMembers: [],
       lifecycles: [],
+      reportTestFileMutations: false,
       events: { handlerDecorators: ['EventsHandler', 'OnEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
     });
   });
@@ -256,6 +257,43 @@ const names = ['id'];
 export default defineDomain({ inertMembers: names });
 `),
     ).toThrow(/domain.config.ts:4 expected an array literal/);
+  });
+
+  it('does not report test-file mutations by default', () => {
+    const declaration = read(`
+import { defineDomain } from 'domain-integrity';
+export default defineDomain({});
+`);
+
+    expect(declaration.reportTestFileMutations).toBe(false);
+  });
+
+  it('reads reportTestFileMutations', () => {
+    const declaration = read(`
+import { defineDomain } from 'domain-integrity';
+export default defineDomain({ reportTestFileMutations: true });
+`);
+
+    expect(declaration.reportTestFileMutations).toBe(true);
+  });
+
+  it('rejects a reportTestFileMutations that is not a boolean literal, with the line', () => {
+    expect(() =>
+      read(`
+import { defineDomain } from 'domain-integrity';
+const report = true as boolean;
+export default defineDomain({ reportTestFileMutations: report });
+`),
+    ).toThrow(/domain.config.ts:4 "reportTestFileMutations" must be true or false/);
+  });
+
+  it('rejects a computed reportTestFileMutations with a ConfigError', () => {
+    expect(() =>
+      read(`
+import { defineDomain } from 'domain-integrity';
+export default defineDomain({ reportTestFileMutations: Boolean(1) });
+`),
+    ).toThrow(ConfigError);
   });
 
   it('reads inertEventMethods listed in eventMethods', () => {

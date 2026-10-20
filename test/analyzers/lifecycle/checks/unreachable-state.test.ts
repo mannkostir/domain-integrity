@@ -26,13 +26,19 @@ describe('unreachableState', () => {
   });
 
   it('counts assignments outside the aggregate as reaching a value', () => {
-    const outside = [{ field: 'status', file: '/app/src/x.ts', line: 1, scope: 'x', value: assigned('CONFIRMED'), throughOwnSetter: false }];
+    const outside = [{ field: 'status', file: '/app/src/x.ts', line: 1, scope: 'x', value: assigned('CONFIRMED'), throughOwnSetter: false, inTestFile: false }];
 
     expect(unreachableState(aggregate({ methods: [CANCEL], outside }))).toEqual([]);
   });
 
   it('counts assignments through the aggregate setter as reaching a value', () => {
-    const outside = [{ field: 'status', file: '/app/src/x.ts', line: 1, scope: 'x', value: assigned('CONFIRMED'), throughOwnSetter: true }];
+    const outside = [{ field: 'status', file: '/app/src/x.ts', line: 1, scope: 'x', value: assigned('CONFIRMED'), throughOwnSetter: true, inTestFile: false }];
+
+    expect(unreachableState(aggregate({ methods: [CANCEL], outside }))).toEqual([]);
+  });
+
+  it('counts assignments in a test file as reaching a value', () => {
+    const outside = [{ field: 'status', file: '/app/src/order.spec.ts', line: 1, scope: 'x', value: assigned('CONFIRMED'), throughOwnSetter: false, inTestFile: true }];
 
     expect(unreachableState(aggregate({ methods: [CANCEL], outside }))).toEqual([]);
   });

@@ -20,6 +20,40 @@ export class Ticket extends AggregateRoot<{ status: TicketStatus; title: string 
 
 const ticket = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('Ticket');
 
+const mutatedProject = inMemoryProject({
+  '/src/order.ts': `
+export type OrderStatus = 'pending' | 'paid';
+export class Order {
+  status: OrderStatus = 'pending';
+  pay(): void { this.status = 'paid'; }
+}
+`,
+  '/src/order-service.ts': `
+import { Order } from './order';
+export const payNow = (order: Order): void => { order.status = 'paid'; };
+`,
+  '/src/order.spec.ts': `
+import { Order } from './order';
+export const payInSpec = (order: Order): void => { order.status = 'paid'; };
+`,
+});
+
+const outsideMutationFiles = (reportTestFileMutations: boolean): readonly string[] => {
+  const order = mutatedProject.getSourceFileOrThrow('/src/order.ts').getClassOrThrow('Order');
+  const result = analyse(lifecycleAnalyzer, {
+    declaration: {
+      ...DEFAULT_DECLARATION,
+      reportTestFileMutations,
+      lifecycles: [{ target: order, fields: [{ name: 'status', terminal: [], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
+    },
+    files: mutatedProject.getSourceFiles(),
+    root: '/',
+  });
+  return lifecycleFindings(result.findings)
+    .filter((finding) => finding.checkId === 'outside-mutation')
+    .map((finding) => finding.file);
+};
+
 describe('lifecycleAnalyzer', () => {
   it('runs all checks and reports the leak for an unguarded mutating method', () => {
     const result = analyse(lifecycleAnalyzer, {
@@ -111,6 +145,14 @@ export class Account {
     });
 
     expect(lifecycleFindings(result.findings).map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
+  });
+
+  it('reports outside mutations in production files but not in test files by default', () => {
+    expect(outsideMutationFiles(DEFAULT_DECLARATION.reportTestFileMutations)).toEqual(['/src/order-service.ts']);
+  });
+
+  it('reports outside mutations in test files when test-file mutations are reported', () => {
+    expect(outsideMutationFiles(true)).toEqual(['/src/order-service.ts', '/src/order.spec.ts']);
   });
 
   it('describes its four rules', () => {

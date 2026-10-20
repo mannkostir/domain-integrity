@@ -145,7 +145,7 @@ In an existing config the names are added: to `AggregateRoot` and `Entity` when 
 |---|---|
 | `terminal-state-leak` | A public method that can still change the aggregate after it reached a terminal state |
 | `unreachable-state` | A state your type declares but no code ever assigns |
-| `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. |
+| `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. Assignments in test files are not reported by default. |
 | `transition-drift` | A method that can run from states you did not declare (error), or no longer from states you did (warning) |
 
 Five more checks cover in-process event flows. All of them are errors:
@@ -170,7 +170,11 @@ A project with event handlers and no aggregates is accepted. When it has neither
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
 
-Every file your tsconfig includes is scanned, tests too, so an assignment in a test is reported as `outside-mutation`. To leave tests out, give `check` a tsconfig that excludes them:
+Every file your tsconfig includes is scanned, tests too, but an assignment in a test file is not reported as `outside-mutation`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`, relative to the tsconfig directory, the same rule the event-flow checks use. Such an assignment still counts as evidence: its value counts as assigned for `unreachable-state`, so a state that only a test builder sets is not reported as unreachable, and on an undeclared aggregate it counts as a write outside the class, which keeps an `init` suggestion. Set `reportTestFileMutations: true` to report test-file assignments too. Production code is judged the same either way.
+
+This default changed in 0.3.0. Earlier versions reported assignments in test files as `outside-mutation`; set `reportTestFileMutations: true` to keep that.
+
+To leave tests out of every analysis, give `check` a tsconfig that excludes them. Excluded files are no longer evidence either, so a state that only a test assigns can then be reported as `unreachable-state`:
 
 ```json
 {
@@ -183,7 +187,7 @@ Every file your tsconfig includes is scanned, tests too, so an assignment in a t
 npx domain-integrity check -p tsconfig.domain.json
 ```
 
-In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.spec.json`, which brings its tests in. Pass a tsconfig that references only the `tsconfig.lib.json` and `tsconfig.app.json` files to leave them out.
+In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.spec.json`, which brings its tests in. Keeping it no longer produces `outside-mutation` findings by default, since its tests only count as evidence. Pass a tsconfig that references only the `tsconfig.lib.json` and `tsconfig.app.json` files to leave them out entirely.
 
 ## Commands
 
@@ -336,6 +340,7 @@ Lifecycle declarations and the other top-level options:
 | `inertDecorators` | Class decorator names you assert neither install nor rewrite instance members, matched by name like `events.handlerDecorators`. They add to the built-in list and never replace it. A wrong entry for a decorator that does install members can produce a false finding. Default: `[]`. |
 | `inertEventMethods` | Event methods you assert never read aggregate state, such as an `addDomainEvent` that also registers `this` in a static `DomainEvents` registry or logs it. Every entry must also be in `eventMethods`, or `check` exits with code 2. The assertion covers every method of that name in the project, including overrides in subclasses. A listed method's body is not traced, and `this.addDomainEvent(new UserLoggedIn(this))` and `super.addDomainEvent(new UserLoggedIn(this))` count as event handoffs. The assertion holds only while every declaration of the name is a method, no project class declares a non-method instance member of that name, nothing in the project writes it, every base type in the aggregate's heritage resolves, and no class in the aggregate's family or class expression anywhere in the project has a class decorator other than an inert one or calls `Object.assign(this, …)`; see "Asserted event methods". A wrong entry for an event method that reads the state field, or calls code that does, can produce a false finding. Default: `[]`. |
 | `inertMembers` | Library getters, methods and properties that never read aggregate state, such as `id` or `clearDomainEvents`. A listed name counts as not reading the state field unless a `.ts` file in your project declares a member of that name; a `super.` call to it counts only the declarations above the class that makes the call; declarations in `.d.ts` files, including your own, count as library code. List only members whose library code never reads aggregate state and never calls back into your overrides: a wrong entry turns a guard through that member into no guard and can produce a false finding. Default: `[]`. |
+| `reportTestFileMutations` | Report assignments in test files as `outside-mutation`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`, relative to the tsconfig directory. Must be `true` or `false`, or `check` exits with code 2. A test-file assignment counts as evidence for `unreachable-state` either way. Default: `false`. |
 
 ## Quiet by design
 
@@ -347,6 +352,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Library base-class members**, other than the configured `eventMethods` and `inertMembers`, because library code can call back into your overrides. A method that reads a library getter such as `this.id` or calls `this.clearDomainEvents()` is skipped until you list that member in `inertMembers`.
 - **Values mentioned elsewhere.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types.
 - **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
+- **Outside mutations in test files.** An assignment in a `*.spec.*` or `*.test.*` file, or in a file under `__tests__/`, `test/` or `tests/`, is not reported as `outside-mutation` unless `reportTestFileMutations` is `true`. Its value still counts as assigned for `unreachable-state`.
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 - **Circular inheritance.** A class whose `extends` chain loops, which TypeScript rejects, is not analysed, for aggregates and event classes alike.
 

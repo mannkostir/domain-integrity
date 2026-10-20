@@ -4,7 +4,7 @@ import { aggregate, assigned, declared, DECLARED_ORDER, known, method, unknownSo
 
 describe('lifecycleSummary', () => {
   it('summarises declared lifecycles and the rules for agents', () => {
-    expect(lifecycleSummary({ aggregates: [DECLARED_ORDER], problems: [] }, '/app')).toBe(
+    expect(lifecycleSummary({ aggregates: [DECLARED_ORDER], problems: [], reportTestFileMutations: false }, '/app')).toBe(
       [
         '## Domain lifecycles',
         '',
@@ -24,7 +24,7 @@ describe('lifecycleSummary', () => {
   });
 
   const summaryOf = (model: ReturnType<typeof aggregate>): string =>
-    lifecycleSummary({ aggregates: [model], problems: [] }, '/app');
+    lifecycleSummary({ aggregates: [model], problems: [], reportTestFileMutations: false }, '/app');
 
   it('prints terminal none when the terminal set is empty', () => {
     expect(summaryOf(aggregate({ declarations: new Map([['status', declared([])]]) }))).toContain('  - terminal: none\n');

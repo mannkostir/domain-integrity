@@ -82,6 +82,13 @@ const stringList = (expression: Expression | undefined, fallback: readonly strin
         return element.getLiteralText();
       });
 
+const booleanLiteral = (expression: Expression | undefined, option: string, fallback: boolean): boolean => {
+  if (expression === undefined) return fallback;
+  if (Node.isTrueLiteral(expression)) return true;
+  if (Node.isFalseLiteral(expression)) return false;
+  throw unsupported(expression, `"${option}" must be true or false`);
+};
+
 const subsetOf = (names: readonly string[], allowed: readonly string[], option: string, within: string): readonly string[] => {
   const outside = names.find((name) => !allowed.includes(name));
   if (outside !== undefined) throw new ConfigError(`"${option}" lists "${outside}", which is not in "${within}".`);
@@ -215,6 +222,11 @@ export const readDeclaration = (file: SourceFile): DomainDeclaration => {
     ),
     inertMembers: stringList(valueOf(config, 'inertMembers'), DEFAULT_DECLARATION.inertMembers),
     lifecycles: lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle),
+    reportTestFileMutations: booleanLiteral(
+      valueOf(config, 'reportTestFileMutations'),
+      'reportTestFileMutations',
+      DEFAULT_DECLARATION.reportTestFileMutations,
+    ),
     events: readEvents(valueOf(config, 'events')),
   };
 };

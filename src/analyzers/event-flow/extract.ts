@@ -15,7 +15,7 @@ import { RawRegistration, RecognisedSite, RecogniserContext, enclosingClass } fr
 import { registerCallRecogniser } from './registrations/register-call';
 import { sagaStreamRecogniser } from './registrations/saga-stream';
 import { subscribedToRecogniser } from './registrations/subscribed-to';
-import { isTestFile } from './test-files';
+import { isTestFile } from '../shared/test-files';
 
 const RECOGNISERS = [decoratorRecogniser, registerCallRecogniser, subscribedToRecogniser, sagaStreamRecogniser];
 
