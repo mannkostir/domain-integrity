@@ -1,5 +1,6 @@
 import { ClassDeclaration, MethodDeclaration, Node, Scope } from 'ts-morph';
 import { AnalysisInput } from '../../analyzer';
+import { Problem } from '../../finding';
 import { DeclaredField, DeclaredLifecycle, DomainDeclaration } from '../../engine/declaration';
 import { ClassIdentity, classIdentities } from '../../engine/class-identity';
 import { setsOf } from './assigned';
@@ -9,6 +10,7 @@ import { AggregateScope } from './field-ref';
 import { hasCyclicInheritance } from '../shared/cyclic-heritage';
 import { methodSources } from './guards';
 import { initialValues } from './initial';
+import { transitionMethodMissing, unknownStateValue } from './problems';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
 import { instanceMethods } from './members';
 import { mutatingMethods } from './mutation';
@@ -22,12 +24,12 @@ import { writtenAlongside } from './written-alongside';
 
 type DeclaredOutcome =
   | { readonly kind: 'ok'; readonly field: StateField; readonly declaration: FieldDeclaration }
-  | { readonly kind: 'problems'; readonly problems: readonly string[] };
+  | { readonly kind: 'problems'; readonly problems: readonly Problem[] };
 
 type ResolvedFields = {
   readonly fields: readonly StateField[];
   readonly declarations: ReadonlyMap<string, FieldDeclaration>;
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
 };
 
 const resolveDeclaredField = (
@@ -36,17 +38,17 @@ const resolveDeclaredField = (
   methodNames: ReadonlySet<string>,
 ): DeclaredOutcome => {
   const resolution = resolveStateField(cls, declared.name);
-  if (resolution.kind === 'problem') return { kind: 'problems', problems: [resolution.message] };
+  if (resolution.kind === 'problem') return { kind: 'problems', problems: [resolution.problem] };
   const known = resolution.field.values.map((value) => value.token);
   const transitions = [...(declared.transitions ?? new Map<string, readonly string[]>())];
   const problems = [
     ...[...declared.terminal, ...transitions.flatMap(([, sources]) => sources)]
       .filter((token) => !known.includes(token))
-      .map((token) => `${aggregateName(cls)}.${declared.name}: unknown state value "${token}" (known: ${known.join(', ')})`),
+      .map((token) => unknownStateValue(aggregateName(cls), declared.name, token, known)),
     ...transitions
       .map(([method]) => method)
       .filter((method) => !methodNames.has(method))
-      .map((method) => `${aggregateName(cls)}: transitions refer to missing method "${method}"`),
+      .map((method) => transitionMethodMissing(aggregateName(cls), method)),
   ];
   if (problems.length > 0) return { kind: 'problems', problems };
   return {
@@ -129,7 +131,7 @@ const extractAggregate = (
   declaration: DomainDeclaration,
   project: ProjectIndex,
   root: string,
-): { readonly aggregate: AggregateModel; readonly problems: readonly string[] } => {
+): { readonly aggregate: AggregateModel; readonly problems: readonly Problem[] } => {
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
   const methods = instanceMethods(cls, declaration.aggregateBaseClasses);
   const scope = aggregateScope(cls, declaration, project);

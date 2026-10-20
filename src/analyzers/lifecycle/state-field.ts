@@ -1,14 +1,14 @@
 import { ClassDeclaration, Symbol as MorphSymbol, Node, Type } from 'ts-morph';
 import { SET, UNSET, isNullish, literalToken } from '../../engine/value-token';
+import { Problem } from '../../finding';
 import { aggregateName } from './discover';
 import { mayBeFalsy } from './falsy';
+import { stateFieldAccessor, stateFieldMissing, stateFieldUnsupportedType } from './problems';
 import { EnumReference, StateField, StateFieldKind, StateValue, UnsetForm } from './model';
 
 export type FieldResolution =
   | { readonly kind: 'resolved'; readonly field: StateField }
-  | { readonly kind: 'problem'; readonly message: string };
-
-const SUPPORTED = 'supported state types are an enum, a string or number literal union, boolean, and a nullable non-literal type such as Date | null (requires strictNullChecks)';
+  | { readonly kind: 'problem'; readonly problem: Problem };
 
 export const isDataProperty = (symbol: MorphSymbol): boolean =>
   symbol
@@ -82,10 +82,10 @@ const resolvedNullable = (name: string, members: readonly Type[], setMayBeFalsy:
 
 export const resolveStateField = (cls: ClassDeclaration, name: string): FieldResolution => {
   if (isAccessorOnly(cls, name)) {
-    return { kind: 'problem', message: `${aggregateName(cls)}.${name} is an accessor; declare its backing field instead` };
+    return { kind: 'problem', problem: stateFieldAccessor(aggregateName(cls), name) };
   }
   const type = fieldType(cls, name);
-  if (!type) return { kind: 'problem', message: `${aggregateName(cls)} has no field "${name}"` };
+  if (!type) return { kind: 'problem', problem: stateFieldMissing(aggregateName(cls), name) };
   const members = type.isUnion() ? type.getUnionTypes() : [type];
   const present = members.filter((member) => !isNullish(member));
   const nullable = present.length < members.length;
@@ -101,8 +101,5 @@ export const resolveStateField = (cls: ClassDeclaration, name: string): FieldRes
   if (nullable && present.length > 0 && present.every((member) => literalToken(member) === undefined)) {
     return resolvedNullable(name, members, mayBeFalsy(cls.getProject().getTypeChecker().compilerObject, present));
   }
-  return {
-    kind: 'problem',
-    message: `${aggregateName(cls)}.${name} has unsupported type "${type.getText()}"; ${SUPPORTED}`,
-  };
+  return { kind: 'problem', problem: stateFieldUnsupportedType(aggregateName(cls), name, type.getText()) };
 };

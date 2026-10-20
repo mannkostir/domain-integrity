@@ -1,3 +1,5 @@
+import { Problem } from '../../finding';
+
 export type Location = { readonly file: string; readonly line: number };
 export type ClassRef = { readonly id: string; readonly name: string; readonly qualifiedName: string } & Location;
 export type Payload = ({ readonly kind: 'classes'; readonly classes: readonly string[] } & Location) | { readonly kind: 'unreadable' };
@@ -45,5 +47,5 @@ export type EventFlowModel = {
   readonly inProcess: readonly string[];
   readonly sagas: readonly SagaModel[];
   readonly buffers: readonly UndispatchedBuffer[];
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
 };

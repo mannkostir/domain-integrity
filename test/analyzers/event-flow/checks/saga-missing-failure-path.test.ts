@@ -92,7 +92,14 @@ describe('sagaMissingFailurePath', () => {
 
 describe('sagaProblems', () => {
   it('reports a resolved saga that handles neither side of an outcome', () => {
-    expect(sagaProblems(sagaModel([]))).toEqual(['saga(OrderSaga) declares the outcome Paid → Failed, but OrderSaga handles neither.']);
+    expect(sagaProblems(sagaModel([]))).toEqual([
+      {
+        code: 'saga-outcome-unhandled',
+        analyzer: 'event-flow',
+        message: 'saga(OrderSaga) declares the outcome Paid → Failed, but OrderSaga handles neither.',
+        details: { saga: 'OrderSaga', success: 'Paid', failure: 'Failed' },
+      },
+    ]);
   });
 
   it('stays silent for a saga that is silenced or handles either side', () => {

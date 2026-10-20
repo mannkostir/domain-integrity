@@ -1,6 +1,7 @@
 import { AnalyzerRun, runAnalyzers } from '../analysis';
 import { AnalysisResult, CheckScope } from '../analyzer';
 import { DomainDeclaration } from '../engine/declaration';
+import { Problem } from '../finding';
 import { ProjectError } from '../engine/errors';
 import { analysedSourceFiles, configSourceFile, loadProject, loadedSourceFiles } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
@@ -25,10 +26,10 @@ const recognisedHandlers = (declaration: DomainDeclaration): string =>
 
 export const noAggregatesFound = (declaration: DomainDeclaration): string => `${NO_AGGREGATES} ${searchedBaseClasses(declaration)}`;
 
-const nothingFoundMessage = (declaration: DomainDeclaration, fileCount: number, problems: readonly string[]): string =>
+const nothingFoundMessage = (declaration: DomainDeclaration, fileCount: number, problems: readonly Problem[]): string =>
   [
     loadedSourceFiles(fileCount),
-    ...problems.map((problem) => `problem: ${problem}`),
+    ...problems.map((problem) => `problem: ${problem.message}`),
     NO_AGGREGATES,
     searchedBaseClasses(declaration),
     SET_BASE_CLASSES,

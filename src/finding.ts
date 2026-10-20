@@ -69,3 +69,34 @@ export type Finding = { readonly [R in RuleId]: FindingOf<R> }[RuleId];
 export type LifecycleFinding = Extract<Finding, { readonly analyzer: 'lifecycle' }>;
 
 export type EventFlowFinding = Extract<Finding, { readonly analyzer: 'event-flow' }>;
+
+export type DetailsByProblem = {
+  readonly 'state-field-accessor': { readonly aggregate: string; readonly field: string };
+  readonly 'state-field-missing': { readonly aggregate: string; readonly field: string };
+  readonly 'state-field-unsupported-type': { readonly aggregate: string; readonly field: string; readonly type: string };
+  readonly 'unknown-state-value': { readonly aggregate: string; readonly field: string; readonly value: string; readonly known: readonly string[] };
+  readonly 'transition-method-missing': { readonly aggregate: string; readonly method: string };
+  readonly 'event-not-analysed': { readonly event: string };
+  readonly 'saga-outcome-unhandled': { readonly saga: string; readonly success: string; readonly failure: string };
+};
+
+export type ProblemCode = keyof DetailsByProblem;
+
+export const PROBLEM_ANALYZERS = {
+  'state-field-accessor': 'lifecycle',
+  'state-field-missing': 'lifecycle',
+  'state-field-unsupported-type': 'lifecycle',
+  'unknown-state-value': 'lifecycle',
+  'transition-method-missing': 'lifecycle',
+  'event-not-analysed': 'event-flow',
+  'saga-outcome-unhandled': 'event-flow',
+} as const satisfies { readonly [C in ProblemCode]: AnalyzerId };
+
+export type ProblemOf<C extends ProblemCode> = {
+  readonly code: C;
+  readonly analyzer: (typeof PROBLEM_ANALYZERS)[C];
+  readonly message: string;
+  readonly details: DetailsByProblem[C];
+};
+
+export type Problem = { readonly [C in ProblemCode]: ProblemOf<C> }[ProblemCode];

@@ -1,5 +1,6 @@
 import { reportedUnder } from '../../../analyzer';
-import { FindingOf } from '../../../finding';
+import { FindingOf, Problem } from '../../../finding';
+import { sagaOutcomeUnhandled } from '../problems';
 import { EventClassModel, EventFlowModel, SagaModel } from '../model';
 import { acceptedIds, nameOf, refOf } from './handler-label';
 import { SAGA_MISSING_FAILURE_PATH } from './rules';
@@ -53,10 +54,7 @@ export const sagaMissingFailurePath = (model: EventFlowModel): FindingOf<'saga-m
       };
     });
 
-export const sagaProblems = (model: EventFlowModel): string[] =>
+export const sagaProblems = (model: EventFlowModel): Problem[] =>
   judged(model)
     .filter(({ saga, outcome: [success, failure] }) => !handles(model, saga, success) && !handles(model, saga, failure))
-    .map(({ saga, outcome: [success, failure] }) => {
-      const sagaName = nameOf(model, saga.id);
-      return `saga(${sagaName}) declares the outcome ${nameOf(model, success)} → ${nameOf(model, failure)}, but ${sagaName} handles neither.`;
-    });
+    .map(({ saga, outcome: [success, failure] }) => sagaOutcomeUnhandled(nameOf(model, saga.id), nameOf(model, success), nameOf(model, failure)));

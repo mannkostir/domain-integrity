@@ -1,7 +1,7 @@
 import { SourceFile } from 'ts-morph';
 import { DomainDeclaration } from './engine/declaration';
 import { DomainIntegrityError } from './engine/errors';
-import { Finding, Severity } from './finding';
+import { Finding, Problem, Severity } from './finding';
 
 export type AnalysisInput = {
   readonly declaration: DomainDeclaration;
@@ -38,7 +38,7 @@ export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
   readonly id: string;
   readonly rules: readonly RuleDescription<Produced['ruleId']>[];
   readonly extract: (input: AnalysisInput) => Model;
-  readonly problems: (model: Model) => readonly string[];
+  readonly problems: (model: Model) => readonly Problem[];
   readonly suggest: (model: Model) => readonly Suggestion[];
   readonly check: (model: Model) => readonly Produced[];
   readonly diagram: (model: Model, only: string | undefined) => AnalyzerDiagram;
@@ -48,7 +48,7 @@ export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
 
 export type AnalysisResult = {
   readonly rules: readonly RuleDescription[];
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
   readonly findings: readonly Finding[];
   readonly failures: readonly AnalyzerFailure[];
   readonly diagram: (only: string | undefined) => DiagramOutcome;
@@ -77,7 +77,7 @@ const failedResult = (rules: readonly RuleDescription[], failure: AnalyzerFailur
 
 type Evaluation<Model> = {
   readonly model: Model;
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
   readonly findings: readonly Finding[];
   readonly scope: CheckScope;
 };

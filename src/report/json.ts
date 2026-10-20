@@ -1,5 +1,5 @@
 import { toPosixRelative } from '../engine/path';
-import { Finding, Severity } from '../finding';
+import { Finding, Problem, Severity } from '../finding';
 import { findingKey } from './key';
 import { Report } from './text';
 import { ToolIdentity } from './tool';
@@ -17,6 +17,8 @@ const wireFinding = (root: string) => (finding: Finding) => ({
   details: finding.details,
 });
 
+const wireProblem = (problem: Problem) => ({ code: problem.code, analyzer: problem.analyzer, message: problem.message, details: problem.details });
+
 const countOf = (findings: readonly Finding[], severity: Severity): number => findings.filter((finding) => finding.severity === severity).length;
 
 export const formatJson = (report: Report, tool: ToolIdentity): string =>
@@ -32,7 +34,7 @@ export const formatJson = (report: Report, tool: ToolIdentity): string =>
       },
       findings: report.fresh.map(wireFinding(report.root)),
       known: report.known.map(wireFinding(report.root)),
-      problems: report.problems,
+      problems: report.problems.map(wireProblem),
     },
     null,
     2,

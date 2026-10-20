@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { formatJson } from '../../src/report/json';
+import { Problem } from '../../src/finding';
 import { Report } from '../../src/report/text';
 import { TOOL, bufferFinding, finding, flowFinding, missingFinding } from '../helpers/model';
+
+const MISSING_FIELD: Problem = {
+  code: 'state-field-missing',
+  analyzer: 'lifecycle',
+  message: 'Order has no field "state"',
+  details: { aggregate: 'Order', field: 'state' },
+};
 
 const report = (overrides: Partial<Report> = {}): Report => ({ fresh: [], known: [], problems: [], rules: [], root: '/app', ...overrides });
 
@@ -20,8 +28,14 @@ describe('formatJson', () => {
     expect(parse().tool).toEqual({ name: 'domain-integrity', version: '1.2.3' });
   });
 
+  it('writes problems with their code, analyzer, message and details in order', () => {
+    const [problem] = parse({ problems: [MISSING_FIELD] }).problems;
+
+    expect([Object.keys(problem), problem]).toEqual([['code', 'analyzer', 'message', 'details'], MISSING_FIELD]);
+  });
+
   it('counts new errors and warnings, known findings and problems', () => {
-    expect(parse({ fresh: [finding(), missingFinding()], known: [bufferFinding()], problems: ['p'] }).summary).toEqual({ errors: 1, warnings: 1, known: 1, problems: 1 });
+    expect(parse({ fresh: [finding(), missingFinding()], known: [bufferFinding()], problems: [MISSING_FIELD] }).summary).toEqual({ errors: 1, warnings: 1, known: 1, problems: 1 });
   });
 
   it('writes a finding through the envelope with a relative location and its key', () => {

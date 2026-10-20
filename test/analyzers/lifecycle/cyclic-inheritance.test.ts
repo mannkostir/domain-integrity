@@ -41,7 +41,7 @@ const leakingMethods = (files: Readonly<Record<string, string>>, path: string, n
     files: shapeProject.getSourceFiles(),
     root: '/',
   });
-  return [...lifecycleFindings(result.findings).map((finding) => methodOf(finding)), ...result.problems];
+  return [...lifecycleFindings(result.findings).map((finding) => methodOf(finding)), ...result.problems.map((problem) => problem.message)];
 };
 
 describe('cyclic inheritance through qualified or aliased heritage', () => {

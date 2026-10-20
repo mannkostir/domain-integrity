@@ -1,3 +1,4 @@
+import { Problem } from '../../finding';
 export type StateFieldKind = 'enum' | 'union' | 'boolean' | 'nullable';
 export type StateValue = { readonly token: string; readonly label: string; readonly source: string };
 export type EnumReference = { readonly name: string; readonly file: string };
@@ -12,4 +13,4 @@ export type MethodModel = { readonly name: string; readonly file: string; readon
 export type OutsideAssignment = { readonly field: string; readonly file: string; readonly line: number; readonly scope: string; readonly value: AssignedValues; readonly throughOwnSetter: boolean; readonly inTestFile: boolean };
 export type FieldDeclaration = { readonly terminal: ReadonlySet<string>; readonly allowAfterTerminal: ReadonlySet<string>; readonly transitions: ReadonlyMap<string, ReadonlySet<string>> | undefined };
 export type AggregateModel = { readonly id: string; readonly name: string; readonly qualifiedName: string; readonly file: string; readonly line: number; readonly declared: boolean; readonly fields: readonly StateField[]; readonly declarations: ReadonlyMap<string, FieldDeclaration>; readonly allowAfterTerminal: ReadonlySet<string>; readonly methods: readonly MethodModel[]; readonly initial: ReadonlyMap<string, AssignedValues>; readonly outside: readonly OutsideAssignment[]; readonly mentioned: ReadonlyMap<string, ReadonlySet<string>>; readonly uncertainlyWritten: ReadonlySet<string> };
-export type LifecycleModel = { readonly aggregates: readonly AggregateModel[]; readonly problems: readonly string[]; readonly reportTestFileMutations: boolean };
+export type LifecycleModel = { readonly aggregates: readonly AggregateModel[]; readonly problems: readonly Problem[]; readonly reportTestFileMutations: boolean };

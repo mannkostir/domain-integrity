@@ -1,6 +1,6 @@
 import { toPosixRelative } from '../engine/path';
 import { RuleDescription } from '../analyzer';
-import { Finding } from '../finding';
+import { Finding, Problem } from '../finding';
 
 export type AppliedBaseline = { readonly path: string; readonly stale: readonly string[] };
 
@@ -9,7 +9,7 @@ export type TextOptions = { readonly showKnown: boolean };
 export type Report = {
   readonly fresh: readonly Finding[];
   readonly known: readonly Finding[];
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
   readonly rules: readonly RuleDescription[];
   readonly root: string;
   readonly baseline?: AppliedBaseline;

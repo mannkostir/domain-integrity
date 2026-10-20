@@ -157,17 +157,28 @@ describe('resolveStateField', () => {
     ['InProps', 'note'],
     ['OwnFields', 'maybe'],
   ])('reports %s.%s as an unsupported type', (className, field) => {
-    expect(resolveStateField(cls(className), field)).toMatchObject({ kind: 'problem', message: expect.stringContaining('unsupported type') });
+    expect(resolveStateField(cls(className), field)).toMatchObject({
+      kind: 'problem',
+      problem: { code: 'state-field-unsupported-type', details: { aggregate: className, field } },
+    });
   });
 
   it('reports a field that does not exist', () => {
-    expect(resolveStateField(cls('InProps'), 'missing')).toEqual({ kind: 'problem', message: 'InProps has no field "missing"' });
+    expect(resolveStateField(cls('InProps'), 'missing')).toEqual({
+      kind: 'problem',
+      problem: { code: 'state-field-missing', analyzer: 'lifecycle', message: 'InProps has no field "missing"', details: { aggregate: 'InProps', field: 'missing' } },
+    });
   });
 
   it('asks for the backing field when the state field is only an accessor', () => {
     expect(resolveStateField(cls('Accessed'), 'status')).toEqual({
       kind: 'problem',
-      message: 'Accessed.status is an accessor; declare its backing field instead',
+      problem: {
+        code: 'state-field-accessor',
+        analyzer: 'lifecycle',
+        message: 'Accessed.status is an accessor; declare its backing field instead',
+        details: { aggregate: 'Accessed', field: 'status' },
+      },
     });
   });
 

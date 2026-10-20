@@ -2,9 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { AnalysisInput, Analyzer, analyse, reportedUnder } from '../src/analyzer';
 import { DEFAULT_DECLARATION } from '../src/engine/declaration';
 import { ConfigError } from '../src/engine/errors';
-import { LifecycleFinding } from '../src/finding';
+import { LifecycleFinding, Problem } from '../src/finding';
 
 const INPUT: AnalysisInput = { declaration: DEFAULT_DECLARATION, files: [], root: '/' };
+
+const MISSING_FIELD: Problem = {
+  code: 'state-field-missing',
+  analyzer: 'lifecycle',
+  message: 'Order has no field "state"',
+  details: { aggregate: 'Order', field: 'state' },
+};
 
 const BOOM = new Error('boom');
 
@@ -16,7 +23,7 @@ const healthy: Analyzer<string, never> = {
   id: 'fake',
   rules: [{ id: 'terminal-state-leak', severity: 'error', description: 'a fake rule', explanation: 'E', remedy: 'R' }],
   extract: () => 'model',
-  problems: (model) => [`problem in ${model}`],
+  problems: (model) => [{ ...MISSING_FIELD, message: `problem in ${model}` }],
   suggest: () => [],
   check: () => [],
   diagram: (model) => ({ kind: 'diagram', text: `diagram of ${model}` }),
@@ -53,7 +60,7 @@ describe('analyse', () => {
     const result = analyse(healthy, INPUT);
 
     expect({ problems: result.problems, findings: result.findings, scope: result.scope, failures: result.failures }).toEqual({
-      problems: ['problem in model'],
+      problems: [{ ...MISSING_FIELD, message: 'problem in model' }],
       findings: [],
       scope: 'nothing-found',
       failures: [],
