@@ -23,6 +23,12 @@ const describeFinding = ({ severity, ruleId, details }: FindingOf<'terminal-stat
   values: details.values,
 });
 
+export const checkJsonText = async (dir: string): Promise<string> => {
+  const { io, stdout } = captureIo(dir);
+  await run(['check', '--format', 'json'], io);
+  return stdout();
+};
+
 export const checkJson = async (dir: string) => {
   const { io, stdout } = captureIo(dir);
   const code = await run(['check', '--format', 'json'], io);
