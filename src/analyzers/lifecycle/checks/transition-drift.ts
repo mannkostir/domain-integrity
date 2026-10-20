@@ -13,13 +13,14 @@ type Drift = {
 
 const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodModel, drift: Drift): LifecycleFinding => ({
   analyzer: 'lifecycle',
+  checkId: drift.rule.checkId,
   aggregate: aggregate.name,
   aggregateId: aggregate.id,
   method: method.name,
   field: field.name,
   file: method.file,
   line: method.line,
-  ...drift.rule,
+  severity: drift.rule.severity,
   subject: drift.subject,
   message: drift.message,
   fix: drift.fix,
