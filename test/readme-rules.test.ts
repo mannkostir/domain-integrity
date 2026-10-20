@@ -1,12 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { EVENT_FLOW_RULES } from '../src/analyzers/event-flow/checks/rules';
-import { LIFECYCLE_RULES } from '../src/analyzers/lifecycle/checks/rules';
+import { ALL_RULES } from './helpers/rules';
 
 const README = readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
-
-const ALL_RULES = [...LIFECYCLE_RULES, ...EVENT_FLOW_RULES];
 
 type Heading = { readonly slug: string; readonly line: number };
 

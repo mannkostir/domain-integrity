@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { formatSarif } from '../../src/report/sarif';
 import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks';
-import { RuleDescription } from '../../src/analyzer';
+import { Finding, RuleDescription } from '../../src/analyzer';
 import { ToolIdentity } from '../../src/report/tool';
 import { TOOL, bufferFinding, finding } from '../helpers/model';
+import { SarifRule, SarifRun, parseSarif } from '../helpers/sarif-log';
 
 const UNDISPATCHED_RULE = EVENT_FLOW_RULES.filter((rule) => rule.id === 'undispatched-events');
-
-type SarifDriver = { readonly name: string; readonly version: string; readonly informationUri: string; readonly rules: unknown };
-
-type SarifRun = { readonly tool: { readonly driver: SarifDriver }; readonly results: unknown };
-
-const undispatchedRun = (): SarifRun =>
-  JSON.parse(formatSarif({ fresh: [bufferFinding()], known: [], problems: [], rules: UNDISPATCHED_RULE, root: '/app' }, TOOL)).runs[0];
 
 const WARNING_RULE: RuleDescription = { id: 'transition-drift', severity: 'warning', description: 'D', explanation: 'E', remedy: 'R' };
 
@@ -22,51 +16,35 @@ const DOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.
 
 const UNDOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.3' };
 
-const sarifRules = (rules: readonly RuleDescription[], tool: ToolIdentity) =>
-  JSON.parse(formatSarif({ fresh: [], known: [], problems: [], rules, root: '/app' }, tool)).runs[0].tool.driver.rules;
+const sarifRun = (fresh: readonly Finding[], rules: readonly RuleDescription[], tool: ToolIdentity = TOOL): SarifRun => {
+  const [run] = parseSarif(formatSarif({ fresh, known: [], problems: [], rules, root: '/app' }, tool)).runs;
+  if (run === undefined) throw new Error('The SARIF log has no run.');
+  return run;
+};
 
-const sarifRuleOf = (rule: RuleDescription, tool: ToolIdentity) => sarifRules([rule], tool)[0];
+const undispatchedRun = (): SarifRun => sarifRun([bufferFinding()], UNDISPATCHED_RULE);
+
+const sarifRules = (rules: readonly RuleDescription[], tool: ToolIdentity): readonly SarifRule[] => sarifRun([], rules, tool).tool.driver.rules;
+
+const sarifRuleOf = (rule: RuleDescription, tool: ToolIdentity): SarifRule => {
+  const [described] = sarifRules([rule], tool);
+  if (described === undefined) throw new Error(`The SARIF driver does not describe ${rule.id}.`);
+  return described;
+};
 
 describe('formatSarif', () => {
-  it('produces a SARIF 2.1.0 run with rules and located results', () => {
-    const parsed = JSON.parse(
-      formatSarif({
-        fresh: [finding({ severity: 'warning' })],
-        known: [],
-        problems: [],
-        rules: [{ id: 'terminal-state-leak', severity: 'error', description: 'D', explanation: 'E', remedy: 'R' }],
-        root: '/app',
-      }, TOOL),
-    );
+  it('produces a SARIF 2.1.0 log of one run', () => {
+    const log = parseSarif(formatSarif({ fresh: [], known: [], problems: [], rules: [], root: '/app' }, TOOL));
 
-    expect(parsed).toEqual({
+    expect({ $schema: log.$schema, version: log.version, runs: log.runs.length }).toEqual({
       $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
       version: '2.1.0',
-      runs: [
-        {
-          tool: { driver: { name: 'domain-integrity', version: '1.2.3', informationUri: 'https://example.test', rules: [
-                {
-                  id: 'terminal-state-leak',
-                  shortDescription: { text: 'D' },
-                  fullDescription: { text: 'E' },
-                  help: { text: 'R', markdown: 'R\n\n[Rule reference](https://example.test/#terminal-state-leak)' },
-                  helpUri: 'https://example.test/#terminal-state-leak',
-                  defaultConfiguration: { level: 'error' },
-                },
-              ],
-            },
-          },
-          results: [
-            {
-              ruleId: 'terminal-state-leak',
-              level: 'warning',
-              message: { text: 'M1 Fix: F1' },
-              locations: [{ physicalLocation: { artifactLocation: { uri: 'src/order.ts' }, region: { startLine: 10 } } }],
-            },
-          ],
-        },
-      ],
+      runs: 1,
     });
+  });
+
+  it('names the driver after the tool', () => {
+    expect(undispatchedRun().tool.driver.name).toBe('domain-integrity');
   });
 
   it('identifies the driver by version and information uri', () => {
@@ -76,23 +54,16 @@ describe('formatSarif', () => {
   });
 
   it('leaves out the information uri when the tool has none', () => {
-    const driver = JSON.parse(formatSarif({ fresh: [], known: [], problems: [], rules: [], root: '/app' }, { name: 'domain-integrity', version: '1.2.3' })).runs[0].tool.driver;
+    const { driver } = sarifRun([], [], UNDOCUMENTED_TOOL).tool;
 
     expect('informationUri' in driver).toBe(false);
   });
 
   it('declares the undispatched-events rule with its description', () => {
-    const [rule] = UNDISPATCHED_RULE;
+    const rules = undispatchedRun().tool.driver.rules.map(({ id, shortDescription }) => ({ id, shortDescription }));
 
-    expect(undispatchedRun().tool.driver.rules).toEqual([
-      {
-        id: 'undispatched-events',
-        shortDescription: { text: 'An event method stores events in a buffer that production code never reads or drains.' },
-        fullDescription: { text: rule?.explanation },
-        help: { text: rule?.remedy, markdown: `${rule?.remedy}\n\n[Rule reference](https://example.test/#undispatched-events)` },
-        helpUri: 'https://example.test/#undispatched-events',
-        defaultConfiguration: { level: 'error' },
-      },
+    expect(rules).toEqual([
+      { id: 'undispatched-events', shortDescription: { text: 'An event method stores events in a buffer that production code never reads or drains.' } },
     ]);
   });
 
@@ -121,11 +92,20 @@ describe('formatSarif', () => {
   });
 
   it('sets the default level of each rule from its severity', () => {
-    const levels = sarifRules([WARNING_RULE, ERROR_RULE], DOCUMENTED_TOOL).map(
-      (rule: { readonly defaultConfiguration: unknown }) => rule.defaultConfiguration,
-    );
+    const levels = sarifRules([WARNING_RULE, ERROR_RULE], DOCUMENTED_TOOL).map((rule) => rule.defaultConfiguration);
 
     expect(levels).toEqual([{ level: 'warning' }, { level: 'error' }]);
+  });
+
+  it('reports a finding at its level with its message and fix', () => {
+    expect(sarifRun([finding({ severity: 'warning' })], [ERROR_RULE]).results).toEqual([
+      {
+        ruleId: 'terminal-state-leak',
+        level: 'warning',
+        message: { text: 'M1 Fix: F1' },
+        locations: [{ physicalLocation: { artifactLocation: { uri: 'src/order.ts' }, region: { startLine: 10 } } }],
+      },
+    ]);
   });
 
   it('reports an undispatched-events finding under its rule at the buffer location', () => {

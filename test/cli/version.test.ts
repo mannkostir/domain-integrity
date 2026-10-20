@@ -38,6 +38,12 @@ describe('toolIdentityAt', () => {
     expect(toolIdentityAt(directory)).toEqual({ name: 'domain-integrity', version: '9.9.9' });
   });
 
+  it('omits the information uri when the homepage is not an absolute url', () => {
+    const directory = packageDirectory({ name: 'domain-integrity', version: '9.9.9', homepage: 'example.test/home' });
+
+    expect(toolIdentityAt(directory)).toEqual({ name: 'domain-integrity', version: '9.9.9' });
+  });
+
   it('ignores the manifest of another package', () => {
     const directory = packageDirectory({ name: 'other', version: '1.0.0', homepage: 'https://example.test/other' });
 

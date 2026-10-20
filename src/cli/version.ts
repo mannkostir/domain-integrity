@@ -9,11 +9,13 @@ const UNKNOWN_VERSION = 'unknown version';
 
 type OwnManifest = { readonly version: string; readonly homepage?: string };
 
+const isAbsoluteUrl = (value: unknown): value is string => typeof value === 'string' && URL.canParse(value);
+
 const ownManifest = (manifest: unknown): OwnManifest | undefined => {
   if (typeof manifest !== 'object' || manifest === null) return undefined;
   if (!('name' in manifest) || manifest.name !== PACKAGE_NAME) return undefined;
   if (!('version' in manifest) || typeof manifest.version !== 'string') return undefined;
-  const homepage = 'homepage' in manifest && typeof manifest.homepage === 'string' ? manifest.homepage : undefined;
+  const homepage = 'homepage' in manifest && isAbsoluteUrl(manifest.homepage) ? manifest.homepage : undefined;
   return homepage === undefined ? { version: manifest.version } : { version: manifest.version, homepage };
 };
 
