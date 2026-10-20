@@ -1,3 +1,5 @@
+import { sarifViolations } from './sarif-structure';
+
 export type SarifText = { readonly text: string };
 
 export type SarifRule = {
@@ -40,4 +42,9 @@ export type SarifRun = { readonly tool: { readonly driver: SarifDriver }; readon
 
 export type SarifLog = { readonly $schema: string; readonly version: string; readonly runs: readonly SarifRun[] };
 
-export const parseSarif = (text: string): SarifLog => JSON.parse(text);
+export const parseSarif = (text: string): SarifLog => {
+  const log: SarifLog = JSON.parse(text);
+  const violations = sarifViolations(log);
+  if (violations.length > 0) throw new Error(`Not a valid domain-integrity SARIF log: ${violations.join('; ')}`);
+  return log;
+};

@@ -4,7 +4,7 @@ import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
 import { MANIFEST } from '../helpers/manifest';
 import { ALL_RULES } from '../helpers/rules';
-import { SarifRule } from '../helpers/sarif-log';
+import { parseSarif } from '../helpers/sarif-log';
 
 const OUTSIDE_SPEC = fileURLToPath(new URL('../fixtures/outside-spec', import.meta.url));
 
@@ -64,7 +64,7 @@ describe('SARIF rule reference links', () => {
   it('links every SARIF rule to its entry in the package rule reference', async () => {
     const { stdout } = await runIn(['check', '--format', 'sarif']);
 
-    const rules: readonly SarifRule[] = JSON.parse(stdout).runs[0].tool.driver.rules;
+    const rules = parseSarif(stdout).runs.flatMap((sarifRun) => sarifRun.tool.driver.rules);
 
     expect(rules.map((rule) => ({ id: rule.id, helpUri: rule.helpUri })).sort(byId)).toEqual(
       ALL_RULES.map((rule) => ({ id: rule.id, helpUri: ruleReference(rule.id) })).sort(byId),
