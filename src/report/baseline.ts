@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { Finding, findingKey } from '../analyzer';
+import { Finding } from '../finding';
+import { findingKey } from './key';
 import { UsageError } from '../engine/errors';
 
 type BaselineFile = { readonly findings: readonly string[] };

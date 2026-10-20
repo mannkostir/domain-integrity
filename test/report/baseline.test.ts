@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { UsageError } from '../../src/engine/errors';
 import { baselineKeys, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../../src/report/baseline';
-import { bufferFinding, finding, flowFinding } from '../helpers/model';
+import { bufferFinding, finding, leakWith, mismatchFinding, unhandledFinding } from '../helpers/model';
 
 const tempFile = (content: string): string => {
   const path = join(mkdtempSync(join(tmpdir(), 'baseline-')), 'baseline.json');
@@ -16,8 +16,8 @@ describe('baseline', () => {
   it('round-trips findings by key, independent of line numbers', () => {
     const baseline = readBaseline(tempFile(serializeBaseline([finding({ line: 10 })])));
 
-    expect(partitionByBaseline([finding({ line: 99 }), finding({ method: 'other' })], baseline)).toEqual({
-      fresh: [finding({ method: 'other' })],
+    expect(partitionByBaseline([finding({ line: 99 }), leakWith({ method: 'other' })], baseline)).toEqual({
+      fresh: [leakWith({ method: 'other' })],
       known: [finding({ line: 99 })],
     });
   });
@@ -39,7 +39,7 @@ describe('baseline', () => {
   });
 
   it('keys a finding by its aggregate id', () => {
-    expect(JSON.parse(serializeBaseline([finding({ aggregateId: 'src/a/order.ts:Order' })])).findings).toEqual([
+    expect(JSON.parse(serializeBaseline([leakWith({ aggregateId: 'src/a/order.ts:Order' })])).findings).toEqual([
       'terminal-state-leak|src/a/order.ts:Order|annotate|status|CANCELLED',
     ]);
   });
@@ -48,14 +48,14 @@ describe('baseline', () => {
     expect(JSON.parse(serializeBaseline([finding({})])).findings).toEqual(['terminal-state-leak|Order|annotate|status|CANCELLED']);
   });
 
-  it('keys an event-flow finding by event, handler and subject', () => {
-    expect(JSON.parse(serializeBaseline([flowFinding({ checkId: 'handler-payload-mismatch', subject: 'PaymentCaptured' })])).findings).toEqual([
+  it('keys an event-flow finding by event, handler and declared ids', () => {
+    expect(JSON.parse(serializeBaseline([mismatchFinding()])).findings).toEqual([
       'handler-payload-mismatch|RefundIssued|RefundHandler.handle|PaymentCaptured',
     ]);
   });
 
   it('keys an event-flow finding without a handler with an empty handler segment', () => {
-    expect(JSON.parse(serializeBaseline([flowFinding({ checkId: 'unhandled-event', handler: undefined })])).findings).toEqual([
+    expect(JSON.parse(serializeBaseline([unhandledFinding()])).findings).toEqual([
       'unhandled-event|RefundIssued||',
     ]);
   });
@@ -65,7 +65,7 @@ describe('baseline', () => {
   });
 
   it('lists baseline keys once each, sorted', () => {
-    expect(baselineKeys([finding({ method: 'zeta' }), finding({ method: 'alpha' }), finding({ method: 'zeta', line: 40 })])).toEqual([
+    expect(baselineKeys([leakWith({ method: 'zeta' }), leakWith({ method: 'alpha' }), leakWith({ method: 'zeta' }, { line: 40 })])).toEqual([
       'terminal-state-leak|Order|alpha|status|CANCELLED',
       'terminal-state-leak|Order|zeta|status|CANCELLED',
     ]);
@@ -78,6 +78,6 @@ describe('baseline', () => {
   });
 
   it('reports no stale entries when every baseline entry matches a finding', () => {
-    expect(staleEntries([finding({}), finding({ method: 'other' })], new Set(['terminal-state-leak|Order|annotate|status|CANCELLED']))).toEqual([]);
+    expect(staleEntries([finding({}), leakWith({ method: 'other' })], new Set(['terminal-state-leak|Order|annotate|status|CANCELLED']))).toEqual([]);
   });
 });

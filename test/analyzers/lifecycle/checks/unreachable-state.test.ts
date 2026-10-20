@@ -9,18 +9,14 @@ describe('unreachableState', () => {
   it('flags a value that nothing assigns', () => {
     expect(unreachableState(aggregate({ methods: [CANCEL] }))).toEqual([
       {
-        analyzer: 'lifecycle',
-        checkId: 'unreachable-state',
+        ruleId: 'unreachable-state',
         severity: 'error',
-        aggregate: 'Order',
-        aggregateId: 'Order',
-        method: undefined,
-        field: 'status',
-        subject: 'CONFIRMED',
+        analyzer: 'lifecycle',
         file: '/app/src/order.ts',
         line: 3,
         message: "status value 'confirmed' is never assigned.",
         fix: "Add the method that moves Order into 'confirmed', or remove the value from the type.",
+        details: { aggregate: 'Order', aggregateId: 'Order', field: 'status', value: 'CONFIRMED' },
       },
     ]);
   });
@@ -73,7 +69,7 @@ describe('unreachableState', () => {
 
   it('identifies findings by the aggregate id', () => {
     expect(
-      unreachableState(aggregate({ id: QUALIFIED, methods: [CANCEL] })).map((finding) => finding.aggregateId),
+      unreachableState(aggregate({ id: QUALIFIED, methods: [CANCEL] })).map((finding) => finding.details.aggregateId),
     ).toEqual([QUALIFIED]);
   });
 });

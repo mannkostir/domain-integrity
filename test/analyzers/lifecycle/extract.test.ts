@@ -132,9 +132,24 @@ describe('extractLifecycles', () => {
     ]);
 
     expect(problems).toEqual([
-      'Order.status: unknown state value "ARCHIVED" (known: PENDING, CANCELLED)',
-      'Order: transitions refer to missing method "reopen"',
-      'Order has no field "missing"',
+      {
+        code: 'unknown-state-value',
+        analyzer: 'lifecycle',
+        message: 'Order.status: unknown state value "ARCHIVED" (known: PENDING, CANCELLED)',
+        details: { aggregate: 'Order', field: 'status', value: 'ARCHIVED', known: ['PENDING', 'CANCELLED'] },
+      },
+      {
+        code: 'transition-method-missing',
+        analyzer: 'lifecycle',
+        message: 'Order: transitions refer to missing method "reopen"',
+        details: { aggregate: 'Order', method: 'reopen' },
+      },
+      {
+        code: 'state-field-missing',
+        analyzer: 'lifecycle',
+        message: 'Order has no field "missing"',
+        details: { aggregate: 'Order', field: 'missing' },
+      },
     ]);
   });
 });

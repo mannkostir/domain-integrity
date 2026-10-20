@@ -10,18 +10,14 @@ describe('outsideMutation', () => {
   it('flags an assignment to a declared state field outside the aggregate', () => {
     expect(outsideMutation(aggregate({ outside: [ASSIGNMENT] }), DEFAULTS)).toEqual([
       {
-        analyzer: 'lifecycle',
-        checkId: 'outside-mutation',
+        ruleId: 'outside-mutation',
         severity: 'error',
-        aggregate: 'Order',
-        aggregateId: 'Order',
-        method: undefined,
-        field: 'status',
-        subject: 'WithStatus.mutate',
+        analyzer: 'lifecycle',
         file: '/app/src/spec.ts',
         line: 7,
         message: 'status of Order is assigned outside the aggregate in WithStatus.mutate.',
         fix: 'Move this change into a method on Order so its guards apply.',
+        details: { aggregate: 'Order', aggregateId: 'Order', field: 'status', scope: 'WithStatus.mutate' },
       },
     ]);
   });
@@ -36,7 +32,7 @@ describe('outsideMutation', () => {
 
   it('identifies findings by the aggregate id', () => {
     expect(
-      outsideMutation(aggregate({ id: QUALIFIED, outside: [ASSIGNMENT] }), DEFAULTS).map((finding) => finding.aggregateId),
+      outsideMutation(aggregate({ id: QUALIFIED, outside: [ASSIGNMENT] }), DEFAULTS).map((finding) => finding.details.aggregateId),
     ).toEqual([QUALIFIED]);
   });
 
@@ -47,13 +43,13 @@ describe('outsideMutation', () => {
   it('flags an assignment made in a test file when test-file mutations are reported', () => {
     expect(
       outsideMutation(aggregate({ outside: [{ ...ASSIGNMENT, inTestFile: true }] }), { reportTestFileMutations: true }).map(
-        (finding) => finding.subject,
+        (finding) => finding.details.scope,
       ),
     ).toEqual(['WithStatus.mutate']);
   });
 
   it('flags an assignment made in a production file when test-file mutations are not reported', () => {
-    expect(outsideMutation(aggregate({ outside: [ASSIGNMENT] }), DEFAULTS).map((finding) => finding.subject)).toEqual([
+    expect(outsideMutation(aggregate({ outside: [ASSIGNMENT] }), DEFAULTS).map((finding) => finding.details.scope)).toEqual([
       'WithStatus.mutate',
     ]);
   });

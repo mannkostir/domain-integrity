@@ -51,7 +51,7 @@ const modelWith = (declared: boolean) =>
 
 describe('methods that let this escape without writing the state field', () => {
   it('produce no transition drift', () => {
-    expect(lifecycleAnalyzer.check(modelWith(true)).filter((finding) => ['transition-drift', 'transition-missing'].includes(finding.checkId))).toEqual([]);
+    expect(lifecycleAnalyzer.check(modelWith(true)).filter((finding) => ['transition-drift', 'transition-missing'].includes(finding.ruleId))).toEqual([]);
   });
 
   it('are left out of the summary transitions', () => {

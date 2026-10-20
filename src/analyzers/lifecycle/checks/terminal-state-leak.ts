@@ -1,4 +1,5 @@
-import { LifecycleFinding, reportedUnder } from '../../../analyzer';
+import { reportedUnder } from '../../../analyzer';
+import { FindingOf } from '../../../finding';
 import { AggregateModel, FieldDeclaration, MethodModel, StateField } from '../model';
 import { fieldOf, quoted } from './format';
 import { TERMINAL_STATE_LEAK } from './rules';
@@ -8,18 +9,14 @@ const leakFinding = (
   field: StateField,
   method: MethodModel,
   leaked: readonly string[],
-): LifecycleFinding => ({
-  analyzer: 'lifecycle',
+): FindingOf<'terminal-state-leak'> => ({
   ...reportedUnder(TERMINAL_STATE_LEAK),
-  aggregate: aggregate.name,
-  aggregateId: aggregate.id,
-  method: method.name,
-  field: field.name,
-  subject: leaked.join(','),
+  analyzer: 'lifecycle',
   file: method.file,
   line: method.line,
   message: `${method.name}() can run after ${field.name} is ${quoted(field, leaked)}.`,
   fix: `Guard ${method.name}() so it cannot run when ${field.name} is ${quoted(field, leaked)}, or list it in allowAfterTerminal if that is intended.`,
+  details: { aggregate: aggregate.name, aggregateId: aggregate.id, method: method.name, field: field.name, values: leaked },
 });
 
 const exemptAfterTerminal = (
@@ -42,13 +39,13 @@ export const leakedTerminalTokens = (
     .filter((token) => declaration.terminal.has(token) && sources.values.has(token));
 };
 
-const leaksOf = (aggregate: AggregateModel, field: StateField, declaration: FieldDeclaration): LifecycleFinding[] =>
+const leaksOf = (aggregate: AggregateModel, field: StateField, declaration: FieldDeclaration): FindingOf<'terminal-state-leak'>[] =>
   aggregate.methods.flatMap((method) => {
     const leaked = leakedTerminalTokens(aggregate, method, field, declaration);
     return leaked.length === 0 ? [] : [leakFinding(aggregate, field, method, leaked)];
   });
 
-export const terminalStateLeak = (aggregate: AggregateModel): LifecycleFinding[] =>
+export const terminalStateLeak = (aggregate: AggregateModel): FindingOf<'terminal-state-leak'>[] =>
   [...aggregate.declarations].flatMap(([name, declaration]) =>
     leaksOf(aggregate, fieldOf(aggregate, name), declaration),
   );

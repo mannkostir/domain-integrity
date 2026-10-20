@@ -6,7 +6,8 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
-import { checkJson, pointHelpersAtRepo } from '../helpers/init-project';
+import { checkJson, checkJsonText, pointHelpersAtRepo } from '../helpers/init-project';
+import { validateReport } from '../helpers/schema';
 
 const FIXTURE = fileURLToPath(new URL('../fixtures/custom-base-class', import.meta.url));
 const PRINTED_COMMAND = /: npx domain-integrity (init --base-class <Name>.*)$/;
@@ -71,11 +72,11 @@ describe('init in a project whose aggregates extend their own base class', () =>
       findings: [
         {
           severity: 'error',
-          checkId: 'terminal-state-leak',
+          ruleId: 'terminal-state-leak',
           aggregate: 'Subscription',
           method: 'changePlan',
           field: 'state',
-          subject: 'cancelled',
+          values: ['cancelled'],
         },
       ],
     });
@@ -87,5 +88,13 @@ describe('init in a project whose aggregates extend their own base class', () =>
     const diagnostics = configDiagnostics(dir);
 
     expect(diagnostics).toEqual([]);
+  });
+
+  it('writes a JSON report the schema accepts', async () => {
+    const dir = await initFollowingPrintedCommand();
+
+    const report = await checkJsonText(dir);
+
+    expect(validateReport(report)).toEqual([]);
   });
 });

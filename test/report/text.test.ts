@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { formatText } from '../../src/report/text';
-import { bufferFinding, finding, flowFinding } from '../helpers/model';
+import { bufferFinding, finding, flowFinding, leakWith, unhandledFinding, unreachableFinding } from '../helpers/model';
 
 describe('formatText', () => {
-  const knownFinding = finding({ checkId: 'unreachable-state', method: undefined, line: 3, message: 'M2', fix: 'F2' });
+  const knownFinding = unreachableFinding();
   const appliedBaseline = { path: 'domain-integrity.baseline.json', stale: [] };
 
   it('omits known findings unless asked to show them', () => {
@@ -48,7 +48,7 @@ describe('formatText', () => {
 
   it('prints a single summary line when the baseline covers every finding', () => {
     const text = formatText(
-      { fresh: [], known: [knownFinding, finding({ line: 5 }), finding({ method: 'close', line: 7 })], problems: [], rules: [], root: '/app', baseline: appliedBaseline },
+      { fresh: [], known: [knownFinding, finding({ line: 5 }), leakWith({ method: 'close' }, { line: 7 })], problems: [], rules: [], root: '/app', baseline: appliedBaseline },
       { showKnown: false },
     );
 
@@ -98,7 +98,7 @@ describe('formatText', () => {
 
   it('names the aggregate by its id', () => {
     const text = formatText(
-      { fresh: [finding({ aggregateId: 'src/order.ts:Order' })], known: [], problems: [], rules: [], root: '/app' },
+      { fresh: [leakWith({ aggregateId: 'src/order.ts:Order' })], known: [], problems: [], rules: [], root: '/app' },
       { showKnown: false },
     );
 
@@ -113,7 +113,7 @@ describe('formatText', () => {
 
   it('locates an event-flow finding without a handler by its event alone', () => {
     const text = formatText(
-      { fresh: [flowFinding({ checkId: 'unhandled-event', handler: undefined })], known: [], problems: [], rules: [], root: '/app' },
+      { fresh: [unhandledFinding()], known: [], problems: [], rules: [], root: '/app' },
       { showKnown: false },
     );
 

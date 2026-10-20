@@ -4,6 +4,7 @@ import { ClassIdentity, classIdentities } from '../../engine/class-identity';
 import { SourceIndex } from '../shared/source-index';
 import { undispatchedBuffers } from './buffers/discover';
 import { hierarchyOf } from './hierarchy';
+import { eventNotAnalysed } from './problems';
 import { ProjectClasses } from './keys';
 import { ClassRef, EventClassModel, EventFlowModel, Location, Payload, ReceivableEvents, Registration, SagaModel, UnresolvedSite } from './model';
 import { RawPayload } from './payload';
@@ -122,6 +123,6 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
     inProcess: inProcess.map((cls) => identity(cls).id),
     sagas: sagaModels,
     buffers: undispatchedBuffers({ files: input.files, root: input.root, configFile: input.configFile, eventMethods: input.declaration.eventMethods, inertDecorators: input.declaration.inertDecorators, isProject, identity }),
-    problems: unique(outside).map((cls) => `"${cls.getName() ?? 'anonymous class'}" is declared in events but is not in the analysed files.`),
+    problems: unique(outside).map((cls) => eventNotAnalysed(cls.getName() ?? 'anonymous class')),
   };
 };

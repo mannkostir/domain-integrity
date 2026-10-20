@@ -14,23 +14,20 @@ describe('handlerPayloadMismatch', () => {
   it('reports a parameter typed as an unrelated class', () => {
     expect(handlerPayloadMismatch(withPayload(['Failed']))).toEqual([
       {
-        analyzer: 'event-flow',
-        checkId: 'handler-payload-mismatch',
+        ruleId: 'handler-payload-mismatch',
         severity: 'error',
-        event: 'Paid',
-        eventId: 'Paid',
-        handler: 'PaidHandler.handle',
-        subject: 'Failed',
+        analyzer: 'event-flow',
         file: '/app/src/handlers.ts',
         line: 5,
         message: 'PaidHandler.handle is registered for Paid but declares its event as Failed.',
         fix: 'Type the parameter as Paid, or register the handler for Failed.',
+        details: { event: 'Paid', eventId: 'Paid', handler: 'PaidHandler.handle', declared: ['Failed'], declaredIds: ['Failed'] },
       },
     ]);
   });
 
   it('reports a union with no matching member and names every member', () => {
-    expect(handlerPayloadMismatch(withPayload(['Failed', 'OrderSaga'])).map((finding) => [finding.subject, finding.message])).toEqual([
+    expect(handlerPayloadMismatch(withPayload(['Failed', 'OrderSaga'])).map((finding) => [finding.details.declaredIds.join(','), finding.message])).toEqual([
       ['Failed,OrderSaga', 'PaidHandler.handle is registered for Paid but declares its event as Failed | OrderSaga.'],
     ]);
   });

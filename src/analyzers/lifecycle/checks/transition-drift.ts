@@ -1,90 +1,64 @@
-import { LifecycleFinding, RuleDescription, reportedUnder } from '../../../analyzer';
+import { reportedUnder } from '../../../analyzer';
+import { FindingOf } from '../../../finding';
 import { AggregateModel, FieldBehaviour, MethodModel, StateField } from '../model';
 import { writesField } from '../values';
 import { fieldOf, quoted } from './format';
 import { TRANSITION_DRIFT, TRANSITION_MISSING } from './rules';
 
-type Drift = {
-  readonly rule: RuleDescription<'transition-drift' | 'transition-missing'>;
-  readonly subject: string;
-  readonly message: string;
-  readonly fix: string;
-};
+type Site = { readonly aggregate: AggregateModel; readonly field: StateField; readonly method: MethodModel };
 
-const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodModel, drift: Drift): LifecycleFinding => {
-  const { checkId, severity } = reportedUnder(drift.rule);
-  return {
-    analyzer: 'lifecycle',
-    checkId,
-    aggregate: aggregate.name,
-    aggregateId: aggregate.id,
-    method: method.name,
-    field: field.name,
-    file: method.file,
-    line: method.line,
-    severity,
-    subject: drift.subject,
-    message: drift.message,
-    fix: drift.fix,
-  };
-};
+type TransitionFinding = FindingOf<'transition-drift'> | FindingOf<'transition-missing'>;
 
-const comparedWithDeclaration = (
-  field: StateField,
-  method: MethodModel,
-  behaviour: FieldBehaviour,
-  declared: ReadonlySet<string>,
-): Drift[] => {
+const placed = ({ method }: Site) => ({ analyzer: 'lifecycle' as const, file: method.file, line: method.line });
+
+const target = ({ aggregate, field, method }: Site) => ({ aggregate: aggregate.name, aggregateId: aggregate.id, method: method.name, field: field.name });
+
+const extraFinding = (site: Site, extra: readonly string[]): FindingOf<'transition-drift'> => ({
+  ...reportedUnder(TRANSITION_DRIFT),
+  ...placed(site),
+  message: `${site.method.name}() can run from ${quoted(site.field, extra)}, which the declaration does not allow.`,
+  fix: `Add a guard that excludes ${quoted(site.field, extra)}, or add ${extra.length === 1 ? 'it' : 'them'} to transitions.${site.method.name}.`,
+  details: { ...target(site), kind: 'extra', values: extra },
+});
+
+const missingFinding = (site: Site, missing: readonly string[]): FindingOf<'transition-missing'> => ({
+  ...reportedUnder(TRANSITION_MISSING),
+  ...placed(site),
+  message: `${site.method.name}() cannot run from ${quoted(site.field, missing)}, although the declaration allows it.`,
+  fix: `Remove ${quoted(site.field, missing)} from transitions.${site.method.name}, or relax the guard.`,
+  details: { ...target(site), values: missing },
+});
+
+const undeclaredFinding = (site: Site): FindingOf<'transition-drift'> => ({
+  ...reportedUnder(TRANSITION_DRIFT),
+  ...placed(site),
+  message: `${site.method.name}() sets ${site.field.name} but has no entry in transitions.`,
+  fix: `Add transitions.${site.method.name} to the declaration.`,
+  details: { ...target(site), kind: 'undeclared', values: [] },
+});
+
+const comparedWithDeclaration = (site: Site, behaviour: FieldBehaviour, declared: ReadonlySet<string>): TransitionFinding[] => {
   if (behaviour.sources.kind === 'unknown') return [];
   const allowed = behaviour.sources.values;
   const extra = [...allowed].filter((token) => !declared.has(token));
   const missing = [...declared].filter((token) => !allowed.has(token));
-  return [
-    ...(extra.length > 0
-      ? [
-          {
-            rule: TRANSITION_DRIFT,
-            subject: 'extra',
-            message: `${method.name}() can run from ${quoted(field, extra)}, which the declaration does not allow.`,
-            fix: `Add a guard that excludes ${quoted(field, extra)}, or add ${extra.length === 1 ? 'it' : 'them'} to transitions.${method.name}.`,
-          },
-        ]
-      : []),
-    ...(missing.length > 0
-      ? [
-          {
-            rule: TRANSITION_MISSING,
-            subject: 'missing',
-            message: `${method.name}() cannot run from ${quoted(field, missing)}, although the declaration allows it.`,
-            fix: `Remove ${quoted(field, missing)} from transitions.${method.name}, or relax the guard.`,
-          },
-        ]
-      : []),
-  ];
+  return [...(extra.length > 0 ? [extraFinding(site, extra)] : []), ...(missing.length > 0 ? [missingFinding(site, missing)] : [])];
 };
 
-const driftOf = (field: StateField, method: MethodModel, transitions: ReadonlyMap<string, ReadonlySet<string>>): Drift[] => {
-  const behaviour = method.fields.get(field.name);
+const driftOf = (site: Site, transitions: ReadonlyMap<string, ReadonlySet<string>>): TransitionFinding[] => {
+  const behaviour = site.method.fields.get(site.field.name);
   if (!behaviour) return [];
-  const declared = transitions.get(method.name);
-  if (declared) return comparedWithDeclaration(field, method, behaviour, declared);
-  if (!writesField(behaviour.sets)) return [];
-  return [
-    {
-      rule: TRANSITION_DRIFT,
-      subject: 'undeclared',
-      message: `${method.name}() sets ${field.name} but has no entry in transitions.`,
-      fix: `Add transitions.${method.name} to the declaration.`,
-    },
-  ];
+  const declared = transitions.get(site.method.name);
+  if (declared) return comparedWithDeclaration(site, behaviour, declared);
+  return writesField(behaviour.sets) ? [undeclaredFinding(site)] : [];
 };
 
-export const transitionDrift = (aggregate: AggregateModel): LifecycleFinding[] =>
+export const transitionDrift = (aggregate: AggregateModel): TransitionFinding[] =>
   [...aggregate.declarations].flatMap(([name, declaration]) => {
     const transitions = declaration.transitions;
     if (!transitions) return [];
     const field = fieldOf(aggregate, name);
     return aggregate.methods
       .filter((method) => method.visibility === 'public')
-      .flatMap((method) => driftOf(field, method, transitions).map((drift) => toFinding(aggregate, field, method, drift)));
+      .flatMap((method) => driftOf({ aggregate, field, method }, transitions));
   });

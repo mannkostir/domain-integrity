@@ -1,6 +1,7 @@
 import { SourceFile } from 'ts-morph';
 import { DomainDeclaration } from './engine/declaration';
 import { DomainIntegrityError } from './engine/errors';
+import { Finding, Problem, Severity } from './finding';
 
 export type AnalysisInput = {
   readonly declaration: DomainDeclaration;
@@ -8,63 +9,6 @@ export type AnalysisInput = {
   readonly root: string;
   readonly configFile?: SourceFile;
 };
-
-export type Severity = 'error' | 'warning';
-
-type FindingCore = {
-  readonly checkId: string;
-  readonly severity: Severity;
-  readonly subject: string;
-  readonly file: string;
-  readonly line: number;
-  readonly message: string;
-  readonly fix: string;
-};
-
-export type LifecycleCheckId = 'terminal-state-leak' | 'unreachable-state' | 'outside-mutation' | 'transition-drift' | 'transition-missing';
-
-export type LifecycleFinding = FindingCore & {
-  readonly analyzer: 'lifecycle';
-  readonly checkId: LifecycleCheckId;
-  readonly aggregate: string;
-  readonly aggregateId: string;
-  readonly method: string | undefined;
-  readonly field: string;
-};
-
-export type HandlerCheckId = 'dead-handler' | 'handler-payload-mismatch' | 'unhandled-event' | 'saga-missing-failure-path';
-
-export type HandlerFinding = FindingCore & {
-  readonly analyzer: 'event-flow';
-  readonly checkId: HandlerCheckId;
-  readonly event: string;
-  readonly eventId: string;
-  readonly handler: string | undefined;
-};
-
-export type EventBufferFinding = FindingCore & {
-  readonly analyzer: 'event-flow';
-  readonly checkId: 'undispatched-events';
-  readonly owner: string;
-  readonly ownerId: string;
-  readonly buffer: string;
-  readonly method: string;
-  readonly raisers: readonly string[];
-};
-
-export type EventFlowFinding = HandlerFinding | EventBufferFinding;
-
-export type Finding = LifecycleFinding | EventFlowFinding;
-
-const eventFlowKey = (finding: EventFlowFinding): string =>
-  finding.checkId === 'undispatched-events'
-    ? [finding.checkId, finding.ownerId, finding.buffer, finding.subject].join('|')
-    : [finding.checkId, finding.eventId, finding.handler ?? '', finding.subject].join('|');
-
-export const findingKey = (finding: Finding): string =>
-  finding.analyzer === 'lifecycle'
-    ? [finding.checkId, finding.aggregateId, finding.method ?? '', finding.field, finding.subject].join('|')
-    : eventFlowKey(finding);
 
 export type AmbiguousReference = { readonly kind: 'ambiguous'; readonly reference: string; readonly candidates: readonly string[] };
 
@@ -84,17 +28,17 @@ export type RuleDescription<Id extends string = string> = {
   readonly remedy: string;
 };
 
-export type ReportedRule<Id extends string> = { readonly checkId: Id; readonly severity: Severity };
+export type ReportedRule<Id extends string> = { readonly ruleId: Id; readonly severity: Severity };
 
-export const reportedUnder = <Id extends string>(rule: RuleDescription<Id>): ReportedRule<Id> => ({ checkId: rule.id, severity: rule.severity });
+export const reportedUnder = <Id extends string>(rule: RuleDescription<Id>): ReportedRule<Id> => ({ ruleId: rule.id, severity: rule.severity });
 
 export type CheckScope = 'nothing-found' | 'nothing-declared' | 'checkable';
 
 export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
   readonly id: string;
-  readonly rules: readonly RuleDescription<Produced['checkId']>[];
+  readonly rules: readonly RuleDescription<Produced['ruleId']>[];
   readonly extract: (input: AnalysisInput) => Model;
-  readonly problems: (model: Model) => readonly string[];
+  readonly problems: (model: Model) => readonly Problem[];
   readonly suggest: (model: Model) => readonly Suggestion[];
   readonly check: (model: Model) => readonly Produced[];
   readonly diagram: (model: Model, only: string | undefined) => AnalyzerDiagram;
@@ -104,7 +48,7 @@ export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
 
 export type AnalysisResult = {
   readonly rules: readonly RuleDescription[];
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
   readonly findings: readonly Finding[];
   readonly failures: readonly AnalyzerFailure[];
   readonly diagram: (only: string | undefined) => DiagramOutcome;
@@ -133,7 +77,7 @@ const failedResult = (rules: readonly RuleDescription[], failure: AnalyzerFailur
 
 type Evaluation<Model> = {
   readonly model: Model;
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
   readonly findings: readonly Finding[];
   readonly scope: CheckScope;
 };

@@ -3,7 +3,7 @@ import { analyse } from '../../../src/analyzer';
 import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
-import { lifecycleFindings } from '../../helpers/model';
+import { lifecycleFindings, methodOf } from '../../helpers/model';
 
 const project = inMemoryProject({
   '/src/aggregate-root.ts': AGGREGATE_ROOT,
@@ -50,7 +50,7 @@ const outsideMutationFiles = (reportTestFileMutations: boolean): readonly string
     root: '/',
   });
   return lifecycleFindings(result.findings)
-    .filter((finding) => finding.checkId === 'outside-mutation')
+    .filter((finding) => finding.ruleId === 'outside-mutation')
     .map((finding) => finding.file);
 };
 
@@ -65,7 +65,7 @@ describe('lifecycleAnalyzer', () => {
       root: '/',
     });
 
-    expect(lifecycleFindings(result.findings).map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
+    expect(lifecycleFindings(result.findings).map((finding) => `${finding.ruleId} ${methodOf(finding)}`)).toEqual(['terminal-state-leak rename']);
   });
 
   it('reports the leak for an unguarded method that emits the state it just assigned', () => {
@@ -91,7 +91,7 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
       root: '/',
     });
 
-    expect(lifecycleFindings(result.findings).map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak pay']);
+    expect(lifecycleFindings(result.findings).map((finding) => `${finding.ruleId} ${methodOf(finding)}`)).toEqual(['terminal-state-leak pay']);
   });
 
   it('a truthy exit on a number field keeps set as a source', () => {
@@ -120,7 +120,7 @@ export class Meter {
       root: '/',
     });
 
-    expect(result.findings.filter((finding) => ['transition-drift', 'transition-missing'].includes(finding.checkId))).toEqual([]);
+    expect(result.findings.filter((finding) => ['transition-drift', 'transition-missing'].includes(finding.ruleId))).toEqual([]);
   });
 
   it('reports a terminal leak when a falsy exit on a string field lets set values through', () => {
@@ -144,7 +144,7 @@ export class Account {
       root: '/',
     });
 
-    expect(lifecycleFindings(result.findings).map((finding) => `${finding.checkId} ${finding.method}`)).toEqual(['terminal-state-leak rename']);
+    expect(lifecycleFindings(result.findings).map((finding) => `${finding.ruleId} ${methodOf(finding)}`)).toEqual(['terminal-state-leak rename']);
   });
 
   it('reports outside mutations in production files but not in test files by default', () => {

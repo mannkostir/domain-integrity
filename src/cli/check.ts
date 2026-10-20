@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { AnalyzerRun } from '../analysis';
-import { AnalyzerFailure, Finding } from '../analyzer';
+import { AnalyzerFailure } from '../analyzer';
+import { Finding, Problem } from '../finding';
 import { UsageError } from '../engine/errors';
 import { baselineKeys, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
 import { formatJson } from '../report/json';
@@ -37,7 +38,7 @@ const formatterFor = ({ format, showKnown = false }: CheckOptions): Formatter =>
 };
 
 type Outcome = {
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
   readonly failures: readonly AnalyzerFailure[];
   readonly findings: readonly Finding[];
 };
@@ -76,7 +77,7 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
     failures: results.flatMap((result) => result.failures),
     findings: results.flatMap((result) => result.findings),
   };
-  outcome.problems.forEach((problem) => io.err(`problem: ${problem}\n`));
+  outcome.problems.forEach((problem) => io.err(`problem: ${problem.message}\n`));
   reportInternalErrors(outcome.failures, io);
   if (options.updateBaseline) return updateBaseline(outcome, options, io);
   const baselinePath = baselinePathFor(options, io);

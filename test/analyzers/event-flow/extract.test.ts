@@ -69,8 +69,8 @@ describe('extractEventFlows', () => {
 
     expect({ problems: model.problems, inProcess: model.inProcess, sagas: model.sagas }).toEqual({
       problems: [
-        '"Failed" is declared in events but is not in the analysed files.',
-        '"Paid" is declared in events but is not in the analysed files.',
+        { code: 'event-not-analysed', analyzer: 'event-flow', message: '"Failed" is declared in events but is not in the analysed files.', details: { event: 'Failed' } },
+        { code: 'event-not-analysed', analyzer: 'event-flow', message: '"Paid" is declared in events but is not in the analysed files.', details: { event: 'Paid' } },
       ],
       inProcess: [],
       sagas: [],

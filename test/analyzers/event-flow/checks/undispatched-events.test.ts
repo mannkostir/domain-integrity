@@ -16,20 +16,15 @@ describe('undispatchedEvents', () => {
   it('reports one finding per undispatched buffer', () => {
     expect(undispatchedEvents(flowModel({ buffers: [buffer] }))).toEqual([
       {
-        analyzer: 'event-flow',
-        checkId: 'undispatched-events',
+        ruleId: 'undispatched-events',
         severity: 'error',
-        owner: 'AggregateRoot',
-        ownerId: 'AggregateRoot',
-        buffer: '_domainEvents',
-        method: 'addDomainEvent',
-        raisers: ['Booking', 'Payment'],
-        subject: '',
+        analyzer: 'event-flow',
         file: '/app/src/aggregate-root.ts',
         line: 3,
         message:
           'AggregateRoot._domainEvents collects events from addDomainEvent() raised by Booking, Payment, but no production code reads or drains it, so those events never reach a handler.',
         fix: 'Dispatch the events in _domainEvents after saving the aggregate and clear it, or stop raising them.',
+        details: { owner: 'AggregateRoot', ownerId: 'AggregateRoot', buffer: '_domainEvents', method: 'addDomainEvent', raisers: ['Booking', 'Payment'] },
       },
     ]);
   });

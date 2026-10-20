@@ -1,4 +1,5 @@
-import { LifecycleCheckId, RuleDescription } from '../../../analyzer';
+import { RuleDescription } from '../../../analyzer';
+import { LifecycleFinding } from '../../../finding';
 
 export const TERMINAL_STATE_LEAK: RuleDescription<'terminal-state-leak'> = {
   id: 'terminal-state-leak',
@@ -51,7 +52,7 @@ export const TRANSITION_MISSING: RuleDescription<'transition-missing'> = {
     "Remove the state from the method's entry in transitions in domain.config.ts, or relax the guard if the method should still run from it. Accept the finding into the baseline only while it is a known gap you mean to resolve.",
 };
 
-export const LIFECYCLE_RULES: readonly RuleDescription<LifecycleCheckId>[] = [
+export const LIFECYCLE_RULES: readonly RuleDescription<LifecycleFinding['ruleId']>[] = [
   TERMINAL_STATE_LEAK,
   UNREACHABLE_STATE,
   OUTSIDE_MUTATION,

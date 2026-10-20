@@ -1,5 +1,6 @@
 import { toPosixRelative } from '../engine/path';
-import { EventFlowFinding, Finding, RuleDescription } from '../analyzer';
+import { RuleDescription } from '../analyzer';
+import { Finding, Problem } from '../finding';
 
 export type AppliedBaseline = { readonly path: string; readonly stale: readonly string[] };
 
@@ -8,7 +9,7 @@ export type TextOptions = { readonly showKnown: boolean };
 export type Report = {
   readonly fresh: readonly Finding[];
   readonly known: readonly Finding[];
-  readonly problems: readonly string[];
+  readonly problems: readonly Problem[];
   readonly rules: readonly RuleDescription[];
   readonly root: string;
   readonly baseline?: AppliedBaseline;
@@ -16,17 +17,32 @@ export type Report = {
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-const eventFlowLocation = (finding: EventFlowFinding): string =>
-  finding.checkId === 'undispatched-events'
-    ? `${finding.ownerId}.${finding.buffer}`
-    : `${finding.eventId}${finding.handler ? ` → ${finding.handler}` : ''}`;
+const handledBy = (eventId: string, handler: string | null): string => (handler === null ? eventId : `${eventId} → ${handler}`);
 
-const location = (finding: Finding): string =>
-  finding.analyzer === 'lifecycle' ? `${finding.aggregateId}${finding.method ? `.${finding.method}()` : ''}` : eventFlowLocation(finding);
+const location = (finding: Finding): string => {
+  switch (finding.ruleId) {
+    case 'terminal-state-leak':
+    case 'transition-drift':
+    case 'transition-missing':
+      return `${finding.details.aggregateId}.${finding.details.method}()`;
+    case 'unreachable-state':
+    case 'outside-mutation':
+      return finding.details.aggregateId;
+    case 'dead-handler':
+    case 'handler-payload-mismatch':
+      return handledBy(finding.details.eventId, finding.details.handler);
+    case 'unhandled-event':
+      return finding.details.eventId;
+    case 'saga-missing-failure-path':
+      return handledBy(finding.details.failureId, finding.details.sagaId);
+    case 'undispatched-events':
+      return `${finding.details.ownerId}.${finding.details.buffer}`;
+  }
+};
 
 const entry = (finding: Finding, root: string, suffix: string): string =>
   [
-    `${finding.severity} ${finding.checkId}  ${location(finding)}  ${toPosixRelative(root, finding.file)}:${finding.line}${suffix}`,
+    `${finding.severity} ${finding.ruleId}  ${location(finding)}  ${toPosixRelative(root, finding.file)}:${finding.line}${suffix}`,
     `  ${finding.message}`,
     `  Fix: ${finding.fix}`,
   ].join('\n');

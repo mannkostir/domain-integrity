@@ -6,7 +6,8 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
-import { checkJson, pointHelpersAtRepo } from '../helpers/init-project';
+import { checkJson, checkJsonText, pointHelpersAtRepo } from '../helpers/init-project';
+import { validateReport } from '../helpers/schema';
 
 const FIXTURE = fileURLToPath(new URL('../fixtures/nodenext-esm', import.meta.url));
 
@@ -39,11 +40,11 @@ describe('init in a NodeNext ESM project', () => {
       findings: [
         {
           severity: 'error',
-          checkId: 'terminal-state-leak',
+          ruleId: 'terminal-state-leak',
           aggregate: 'Shipment',
           method: 'redirect',
           field: 'status',
-          subject: 'DELIVERED',
+          values: ['DELIVERED'],
         },
       ],
     });
@@ -63,5 +64,13 @@ describe('init in a NodeNext ESM project', () => {
     const config = readFileSync(join(dir, 'domain.config.ts'), 'utf8');
 
     expect(config).toContain("from './src/shipment.js'");
+  });
+
+  it('writes a JSON report the schema accepts', async () => {
+    const dir = await initialisedCopy();
+
+    const report = await checkJsonText(dir);
+
+    expect(validateReport(report)).toEqual([]);
   });
 });

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { FINGERPRINT, formatSarif } from '../../src/report/sarif';
 import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks';
-import { Finding, RuleDescription } from '../../src/analyzer';
+import { RuleDescription } from '../../src/analyzer';
+import { Finding } from '../../src/finding';
 import { ToolIdentity } from '../../src/report/tool';
-import { TOOL, bufferFinding, finding, flowFinding } from '../helpers/model';
+import { TOOL, bufferFinding, finding, flowFinding, missingFinding, unhandledFinding } from '../helpers/model';
 import { SarifResult, SarifRule, SarifRun, parseSarif } from '../helpers/sarif-log';
 import { sarifViolations } from '../helpers/sarif-structure';
 import { ALL_RULES } from '../helpers/rules';
@@ -168,7 +169,7 @@ describe('formatSarif', () => {
   it('produces a structurally valid log for fresh and known findings of both analyzers', () => {
     const report = {
       fresh: [finding({}), bufferFinding(), flowFinding({})],
-      known: [finding({ checkId: 'transition-missing', severity: 'warning' }), flowFinding({ checkId: 'unhandled-event', handler: undefined })],
+      known: [missingFinding(), unhandledFinding()],
       problems: [],
       rules: ALL_RULES,
       root: '/app',

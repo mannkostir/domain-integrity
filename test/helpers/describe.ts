@@ -11,7 +11,7 @@ export const defaultScope = (cls: ClassDeclaration): AggregateScope =>
 
 export const resolvedField = (cls: ClassDeclaration, name: string): StateField => {
   const resolution = resolveStateField(cls, name);
-  if (resolution.kind === 'problem') throw new Error(resolution.message);
+  if (resolution.kind === 'problem') throw new Error(resolution.problem.message);
   return resolution.field;
 };
 

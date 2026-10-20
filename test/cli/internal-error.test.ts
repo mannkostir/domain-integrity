@@ -73,7 +73,7 @@ describe('an analyzer that throws', () => {
   it('keeps the JSON findings of the other analyzers and exits 2', async () => {
     const { code, stdout } = await runBroken(['check', '--format', 'json']);
 
-    expect({ code, methods: JSON.parse(stdout).findings.map((finding: { method: string }) => finding.method) }).toEqual({
+    expect({ code, methods: JSON.parse(stdout).findings.map((finding: { details: { method: string } }) => finding.details.method) }).toEqual({
       code: 2,
       methods: ['rename'],
     });

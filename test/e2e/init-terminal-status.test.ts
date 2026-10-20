@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
-import { checkJson, pointHelpersAtRepo } from '../helpers/init-project';
+import { checkJson, checkJsonText, pointHelpersAtRepo } from '../helpers/init-project';
+import { validateReport } from '../helpers/schema';
 
 const FIXTURE = fileURLToPath(new URL('../fixtures/terminal-status-timestamp', import.meta.url));
 
@@ -28,11 +29,11 @@ describe('init for a timestamp set only alongside a terminal status', () => {
       findings: [
         {
           severity: 'error',
-          checkId: 'terminal-state-leak',
+          ruleId: 'terminal-state-leak',
           aggregate: 'Ticket',
           method: 'rename',
           field: 'status',
-          subject: 'CLOSED',
+          values: ['CLOSED'],
         },
       ],
     });
@@ -44,5 +45,13 @@ describe('init for a timestamp set only alongside a terminal status', () => {
     const config = readFileSync(join(dir, 'domain.config.ts'), 'utf8');
 
     expect(config).toContain('closedAt: { terminal: [] }');
+  });
+
+  it('writes a JSON report the schema accepts', async () => {
+    const dir = await initialisedCopy();
+
+    const report = await checkJsonText(dir);
+
+    expect(validateReport(report)).toEqual([]);
   });
 });

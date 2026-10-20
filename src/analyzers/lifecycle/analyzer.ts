@@ -1,4 +1,5 @@
-import { Analyzer, CheckScope, LifecycleFinding } from '../../analyzer';
+import { Analyzer, CheckScope } from '../../analyzer';
+import { LifecycleFinding } from '../../finding';
 import { LIFECYCLE_RULES, runChecks } from './checks';
 import { lifecycleDiagrams } from './diagram';
 import { extractLifecycles } from './extract';

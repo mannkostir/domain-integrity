@@ -10,6 +10,6 @@ describe('event-flow checks', () => {
   it('runs every check and sorts by location', () => {
     const model = flowModel({ events: new Map([['Paid', eventClass('Paid', { constructions: [] })]]) });
 
-    expect(runEventFlowChecks(model).map((finding) => finding.checkId)).toEqual(['dead-handler']);
+    expect(runEventFlowChecks(model).map((finding) => finding.ruleId)).toEqual(['dead-handler']);
   });
 });

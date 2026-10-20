@@ -11,7 +11,7 @@ const LOOPING_EVENTS =
 const SELF_IMPORTED_LOOPING_EVENTS =
   "import * as self from './events';\nexport class Echo extends self.Paid {}\nexport class Paid extends self.Echo {}\nexport class Failed extends self.Echo {}\nexport class Refunded extends self.Echo {}";
 
-const checkIds = (events: string): readonly string[] => {
+const ruleIds = (events: string): readonly string[] => {
   const project = inMemoryProject({
     '/app/src/decorators.ts': 'export const EventsHandler = (...events: unknown[]) => (target: unknown) => target;',
     '/app/src/events.ts': events,
@@ -22,24 +22,24 @@ const checkIds = (events: string): readonly string[] => {
   const config = project.getSourceFileOrThrow('/app/domain.config.ts');
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
   const result = analyse(eventFlowAnalyzer, { declaration: readDeclaration(config), files, root: '/app' });
-  return result.findings.map((finding) => finding.checkId);
+  return result.findings.map((finding) => finding.ruleId);
 };
 
 describe('event-flow on looping event heritage', () => {
   it('reports the unhandled event and the payload mismatch when the heritage is linear', () => {
-    const found = checkIds(LINEAR_EVENTS);
+    const found = ruleIds(LINEAR_EVENTS);
 
     expect(found).toEqual(['unhandled-event', 'handler-payload-mismatch']);
   });
 
   it('reports neither when the event heritage loops', () => {
-    const found = checkIds(LOOPING_EVENTS);
+    const found = ruleIds(LOOPING_EVENTS);
 
     expect(found).toEqual([]);
   });
 
   it('reports neither when the event heritage loops through a namespace self-import', () => {
-    const found = checkIds(SELF_IMPORTED_LOOPING_EVENTS);
+    const found = ruleIds(SELF_IMPORTED_LOOPING_EVENTS);
 
     expect(found).toEqual([]);
   });

@@ -5,7 +5,7 @@ import { inheritanceChain } from '../../../src/analyzers/lifecycle/field-ref';
 import { hasCyclicInheritance } from '../../../src/analyzers/shared/cyclic-heritage';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
-import { lifecycleFindings } from '../../helpers/model';
+import { lifecycleFindings, methodOf } from '../../helpers/model';
 
 const project = inMemoryProject({
   '/src/aggregate-root.ts': AGGREGATE_ROOT,
@@ -41,7 +41,7 @@ const leakingMethods = (files: Readonly<Record<string, string>>, path: string, n
     files: shapeProject.getSourceFiles(),
     root: '/',
   });
-  return [...lifecycleFindings(result.findings).map((finding) => finding.method), ...result.problems];
+  return [...lifecycleFindings(result.findings).map((finding) => methodOf(finding)), ...result.problems.map((problem) => problem.message)];
 };
 
 describe('cyclic inheritance through qualified or aliased heritage', () => {
