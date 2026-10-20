@@ -6,7 +6,7 @@ import { UsageError } from '../engine/errors';
 import { baselineKeys, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
 import { formatJson } from '../report/json';
 import { formatSarif } from '../report/sarif';
-import { AppliedBaseline, Report, TextOptions, formatText } from '../report/text';
+import { AppliedBaseline, Report, formatText } from '../report/text';
 import { ToolIdentity } from '../report/tool';
 import { guardedRead, writeText } from './files';
 import { reportInternalErrors } from './internal-errors';
@@ -23,18 +23,17 @@ export type CheckOptions = {
 
 type Formatter = (report: Report, tool: ToolIdentity) => string;
 
-const FORMATTERS: Readonly<Record<string, (options: TextOptions) => Formatter>> = {
-  text: (options) => (report) => formatText(report, options),
-  json: () => formatJson,
-  sarif: () => formatSarif,
-};
-
 const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
 
-const formatterFor = (options: CheckOptions): Formatter => {
-  const build = FORMATTERS[options.format];
-  if (!build) throw new UsageError(`Unknown format "${options.format}". Use one of: ${Object.keys(FORMATTERS).join(', ')}.`);
-  return build({ showKnown: options.showKnown ?? false });
+const formatterFor = ({ format, showKnown = false }: CheckOptions): Formatter => {
+  const formatters: Readonly<Record<string, Formatter>> = {
+    text: (report) => formatText(report, { showKnown }),
+    json: formatJson,
+    sarif: formatSarif,
+  };
+  const formatter = formatters[format];
+  if (!formatter) throw new UsageError(`Unknown format "${format}". Use one of: ${Object.keys(formatters).join(', ')}.`);
+  return formatter;
 };
 
 type Outcome = {
