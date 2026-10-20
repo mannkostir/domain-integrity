@@ -290,7 +290,7 @@ If one analyzer crashes, the command prints `internal error in <analyzer>, pleas
   "version": 1,
   "tool": {
     "name": "domain-integrity",
-    "version": "0.2.1"
+    "version": "0.3.0"
   },
   "summary": {
     "errors": 5,
@@ -340,7 +340,7 @@ Every finding has the keys `ruleId`, `severity`, `analyzer`, `key`, `location`, 
 
 For `transition-drift`, `values` lists the extra states for `extra` and is empty for `undeclared`; for `transition-missing` it lists the missing states. Neither enters the key.
 
-A problem is something the analysis could not resolve, such as a declared field that does not exist. Problems are not findings: they have no key, never enter a baseline and never affect the exit code. Each has the keys `code`, `analyzer`, `message` and `details`, in that order, and the same message is printed on stderr as a `problem:` line.
+A problem is something the analysis could not resolve, such as a declared field that does not exist. Problems are not findings: they have no key, never enter a baseline, and a run with problems exits `2`; because its findings are then incomplete, it does not report stale baseline entries. Each has the keys `code`, `analyzer`, `message` and `details`, in that order, and the same message is printed on stderr as a `problem:` line.
 
 | `code` | `analyzer` | `details` |
 |---|---|---|
