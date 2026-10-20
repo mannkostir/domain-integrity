@@ -273,9 +273,10 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
       "results": [
         {
           "ruleId": "undispatched-events",
+          "ruleIndex": 9,
           "level": "error",
           "message": {
-            "text": "Undispatched.events collects events from addEvent() raised by Undispatched, but no production code reads or drains it, so those events never reach a handler. Fix: Dispatch the events in events after saving the aggregate and clear it, or stop raising them."
+            "text": "Undispatched.events collects events from addEvent() raised by Undispatched, but no production code reads or drains it, so those events never reach a handler."
           },
           "locations": [
             {
@@ -288,13 +289,20 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "undispatched-events|Undispatched|events|"
+          },
+          "properties": {
+            "fix": "Dispatch the events in events after saving the aggregate and clear it, or stop raising them."
+          }
         },
         {
           "ruleId": "dead-handler",
+          "ruleIndex": 5,
           "level": "error",
           "message": {
-            "text": "RefundHandler.handle handles RefundIssued, but no production code constructs RefundIssued. Fix: Publish RefundIssued where it happens, or delete the handler."
+            "text": "RefundHandler.handle handles RefundIssued, but no production code constructs RefundIssued."
           },
           "locations": [
             {
@@ -307,13 +315,20 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "dead-handler|RefundIssued|RefundHandler.handle|"
+          },
+          "properties": {
+            "fix": "Publish RefundIssued where it happens, or delete the handler."
+          }
         },
         {
           "ruleId": "handler-payload-mismatch",
+          "ruleIndex": 6,
           "level": "error",
           "message": {
-            "text": "OrderPlacedHandler.handle is registered for OrderPlaced but declares its event as PaymentCaptured. Fix: Type the parameter as OrderPlaced, or register the handler for PaymentCaptured."
+            "text": "OrderPlacedHandler.handle is registered for OrderPlaced but declares its event as PaymentCaptured."
           },
           "locations": [
             {
@@ -326,13 +341,20 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "handler-payload-mismatch|OrderPlaced|OrderPlacedHandler.handle|PaymentCaptured"
+          },
+          "properties": {
+            "fix": "Type the parameter as OrderPlaced, or register the handler for PaymentCaptured."
+          }
         },
         {
           "ruleId": "unhandled-event",
+          "ruleIndex": 7,
           "level": "error",
           "message": {
-            "text": "Shipped is declared in-process and constructed, but no handler is registered for it. Fix: Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere."
+            "text": "Shipped is declared in-process and constructed, but no handler is registered for it."
           },
           "locations": [
             {
@@ -345,13 +367,20 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "unhandled-event|Shipped||"
+          },
+          "properties": {
+            "fix": "Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere."
+          }
         },
         {
           "ruleId": "saga-missing-failure-path",
+          "ruleIndex": 8,
           "level": "error",
           "message": {
-            "text": "OrderSaga handles PaymentCaptured but not its declared failure PaymentFailed. Fix: Handle PaymentFailed in OrderSaga, for example with a compensating command."
+            "text": "OrderSaga handles PaymentCaptured but not its declared failure PaymentFailed."
           },
           "locations": [
             {
@@ -364,7 +393,13 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "saga-missing-failure-path|PaymentFailed|OrderSaga|PaymentCaptured"
+          },
+          "properties": {
+            "fix": "Handle PaymentFailed in OrderSaga, for example with a compensating command."
+          }
         }
       ]
     }

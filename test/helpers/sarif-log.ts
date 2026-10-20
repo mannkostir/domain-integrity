@@ -16,11 +16,17 @@ export type SarifLocation = {
   };
 };
 
+export type SarifSuppression = { readonly kind: string; readonly justification: string };
+
 export type SarifResult = {
   readonly ruleId: string;
+  readonly ruleIndex: number;
   readonly level: string;
   readonly message: SarifText;
   readonly locations: readonly SarifLocation[];
+  readonly partialFingerprints: Readonly<Record<string, string>>;
+  readonly properties: { readonly fix: string };
+  readonly suppressions?: readonly SarifSuppression[];
 };
 
 export type SarifDriver = {

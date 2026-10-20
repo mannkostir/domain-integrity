@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
 import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeProject, writeTree } from '../helpers/disk';
+import { parseSarif } from '../helpers/sarif-log';
 
 describe('check', () => {
   it('exits 1 and prints the leak for an unguarded mutating method', async () => {
@@ -24,6 +25,26 @@ describe('check', () => {
     const { io, stdout } = captureIo(dir);
 
     expect({ code: await run(['check', '--baseline', 'baseline.json'], io), known: stdout().includes('(baseline)') }).toEqual({ code: 0, known: true });
+  });
+
+  it('exits 0 with SARIF when every error finding is in the baseline', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
+
+    expect(await run(['check', '--baseline', 'baseline.json', '--format', 'sarif'], captureIo(dir).io)).toBe(0);
+  });
+
+  it('reports baselined findings in SARIF as externally suppressed results', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
+    const { io, stdout } = captureIo(dir);
+    await run(['check', '--baseline', 'baseline.json', '--format', 'sarif'], io);
+
+    const results = parseSarif(stdout()).runs.flatMap((sarifRun) => sarifRun.results);
+
+    expect(results.map((result) => ({ ruleId: result.ruleId, suppressions: result.suppressions?.map((suppression) => suppression.kind) }))).toEqual([
+      { ruleId: 'terminal-state-leak', suppressions: ['external'] },
+    ]);
   });
 
   it('exits 2 and explains a tsconfig that includes no source files', async () => {

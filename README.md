@@ -269,7 +269,7 @@ Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfi
 
 `--version`, or `-V`, prints the version and exits `0`.
 
-The JSON report of `check` has a top-level `tool` with `name` and `version`, next to `findings`, `known` and `problems`. The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`.
+The JSON report of `check` has a top-level `tool` with `name` and `version`, next to `findings`, `known` and `problems`. The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`. Each SARIF result names its rule by `ruleId` and `ruleIndex`, carries the finding's message as `message.text` and its fix in `properties.fix`, and has a `partialFingerprints` entry `domainIntegrity/v1` holding its baseline key. With `--baseline`, known findings follow the new ones as results with an `external` suppression; they never affect the exit code.
 
 If one analyzer crashes, the command prints `internal error in <analyzer>, please report (domain-integrity <version>)` with a short stack trace, still prints the other analyzers' results, and exits `2`; `--update-baseline` and `context --write` then write nothing.
 
@@ -300,6 +300,8 @@ Before 0.3.0, `transition-missing` findings were reported as `transition-drift` 
 
 Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|` and carry `owner`, `ownerId`, `buffer`, `method` and `raisers` instead.
 
+The SARIF report carries baselined findings as suppressed results, so code scanning keeps them as suppressed alerts.
+
 ## CI
 
 ```yaml
@@ -326,6 +328,8 @@ jobs:
 ```
 
 Findings appear as code-scanning alerts on the pull request, and the job fails when `check` does.
+
+Code scanning matches alerts across runs by the `domainIntegrity/v1` fingerprint, built from the baseline key, so an alert survives when its lines move. A change to the key format would come with a new fingerprint version. With `baseline` set, known findings are uploaded as suppressed results, so code scanning keeps their alerts as suppressed instead of closing them as fixed; they never fail the job.
 
 | Input | Default | Meaning |
 | --- | --- | --- |

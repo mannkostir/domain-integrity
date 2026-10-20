@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatSarif } from '../../src/report/sarif';
+import { FINGERPRINT, formatSarif } from '../../src/report/sarif';
 import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks';
 import { Finding, RuleDescription } from '../../src/analyzer';
 import { ToolIdentity } from '../../src/report/tool';
-import { TOOL, bufferFinding, finding } from '../helpers/model';
-import { SarifRule, SarifRun, parseSarif } from '../helpers/sarif-log';
+import { TOOL, bufferFinding, finding, flowFinding } from '../helpers/model';
+import { SarifResult, SarifRule, SarifRun, parseSarif } from '../helpers/sarif-log';
+import { sarifViolations } from '../helpers/sarif-structure';
+import { ALL_RULES } from '../helpers/rules';
 
 const UNDISPATCHED_RULE = EVENT_FLOW_RULES.filter((rule) => rule.id === 'undispatched-events');
 
@@ -16,8 +18,8 @@ const DOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.
 
 const UNDOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.3' };
 
-const sarifRun = (fresh: readonly Finding[], rules: readonly RuleDescription[], tool: ToolIdentity = TOOL): SarifRun => {
-  const [run] = parseSarif(formatSarif({ fresh, known: [], problems: [], rules, root: '/app' }, tool)).runs;
+const sarifRun = (fresh: readonly Finding[], rules: readonly RuleDescription[], tool: ToolIdentity = TOOL, known: readonly Finding[] = []): SarifRun => {
+  const [run] = parseSarif(formatSarif({ fresh, known, problems: [], rules, root: '/app' }, tool)).runs;
   if (run === undefined) throw new Error('The SARIF log has no run.');
   return run;
 };
@@ -31,6 +33,16 @@ const sarifRuleOf = (rule: RuleDescription, tool: ToolIdentity): SarifRule => {
   if (described === undefined) throw new Error(`The SARIF driver does not describe ${rule.id}.`);
   return described;
 };
+
+const onlyResult = (run: SarifRun): SarifResult => {
+  const [result] = run.results;
+  if (result === undefined) throw new Error('The SARIF run has no result.');
+  return result;
+};
+
+const leakResult = (): SarifResult => onlyResult(sarifRun([finding({})], [WARNING_RULE, ERROR_RULE]));
+
+const knownLeakResult = (): SarifResult => onlyResult(sarifRun([], [ERROR_RULE], TOOL, [finding({})]));
 
 describe('formatSarif', () => {
   it('produces a SARIF 2.1.0 log of one run', () => {
@@ -97,25 +109,75 @@ describe('formatSarif', () => {
     expect(levels).toEqual([{ level: 'warning' }, { level: 'error' }]);
   });
 
-  it('reports a finding at its level with its message and fix', () => {
-    expect(sarifRun([finding({ severity: 'warning' })], [ERROR_RULE]).results).toEqual([
-      {
-        ruleId: 'terminal-state-leak',
-        level: 'warning',
-        message: { text: 'M1 Fix: F1' },
-        locations: [{ physicalLocation: { artifactLocation: { uri: 'src/order.ts' }, region: { startLine: 10 } } }],
-      },
-    ]);
+  it('reports a result at the level of its finding', () => {
+    expect(onlyResult(sarifRun([finding({ severity: 'warning' })], [ERROR_RULE])).level).toBe('warning');
+  });
+
+  it('points a result at the index of its rule in the driver', () => {
+    expect(leakResult().ruleIndex).toBe(1);
+  });
+
+  it('reports the finding message without the fix', () => {
+    expect(leakResult().message).toEqual({ text: 'M1' });
+  });
+
+  it('carries the fix as a result property', () => {
+    expect(leakResult().properties).toEqual({ fix: 'F1' });
+  });
+
+  it('fingerprints a result by the baseline key of its finding', () => {
+    expect(leakResult().partialFingerprints).toEqual({ [FINGERPRINT]: 'terminal-state-leak|Order|annotate|status|CANCELLED' });
+  });
+
+  it('names the fingerprint after the tool and its key format version', () => {
+    expect(FINGERPRINT).toBe('domainIntegrity/v1');
+  });
+
+  it('leaves a fresh result unsuppressed', () => {
+    expect('suppressions' in leakResult()).toBe(false);
+  });
+
+  it('reports known findings after the fresh ones', () => {
+    const run = sarifRun([finding({})], [ERROR_RULE], TOOL, [finding({ message: 'M2' })]);
+
+    expect(run.results.map((result) => result.message.text)).toEqual(['M1', 'M2']);
+  });
+
+  it('suppresses a known finding as recorded outside the source', () => {
+    expect(knownLeakResult().suppressions).toEqual([{ kind: 'external', justification: 'Recorded in the domain-integrity baseline.' }]);
+  });
+
+  it('fingerprints a known finding like a fresh one', () => {
+    expect(knownLeakResult().partialFingerprints).toEqual({ [FINGERPRINT]: 'terminal-state-leak|Order|annotate|status|CANCELLED' });
+  });
+
+  it('refuses a finding whose rule the report does not declare', () => {
+    expect(() => sarifRun([bufferFinding()], [ERROR_RULE])).toThrow('undispatched-events');
   });
 
   it('reports an undispatched-events finding under its rule at the buffer location', () => {
     expect(undispatchedRun().results).toEqual([
       {
         ruleId: 'undispatched-events',
+        ruleIndex: 0,
         level: 'error',
-        message: { text: 'M4 Fix: F4' },
+        message: { text: 'M4' },
         locations: [{ physicalLocation: { artifactLocation: { uri: 'src/aggregate-root.ts' }, region: { startLine: 3 } } }],
+        partialFingerprints: { [FINGERPRINT]: 'undispatched-events|AggregateRoot|_domainEvents|' },
+        properties: { fix: 'F4' },
       },
     ]);
+  });
+
+  it('produces a structurally valid log for fresh and known findings of both analyzers', () => {
+    const report = {
+      fresh: [finding({}), bufferFinding(), flowFinding({})],
+      known: [finding({ checkId: 'transition-missing', severity: 'warning' }), flowFinding({ checkId: 'unhandled-event', handler: undefined })],
+      problems: [],
+      rules: ALL_RULES,
+      root: '/app',
+    };
+
+    expect(sarifViolations(JSON.parse(formatSarif(report, TOOL)))).toEqual([]);
   });
 });
