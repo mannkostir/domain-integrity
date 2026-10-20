@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AnalyzerRun } from '../../src/analysis';
@@ -6,10 +6,10 @@ import { AnalysisInput, Analyzer, analyse } from '../../src/analyzer';
 import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
 import { UsageError } from '../../src/engine/errors';
-import { packageVersion } from '../../src/cli/version';
 import { TICKET_PROJECT, captureIo, writeProject } from '../helpers/disk';
+import { MANIFEST } from '../helpers/manifest';
 
-const PACKAGE_VERSION: string = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+const PACKAGE_VERSION = MANIFEST.version;
 
 const REPORT = `internal error in broken, please report (domain-integrity ${PACKAGE_VERSION})`;
 
@@ -144,11 +144,5 @@ describe('an analyzer that throws', () => {
     const { code, stderr } = await runBroken(['check'], [throwing(circular)]);
 
     expect({ code, reported: stderr.includes(`${REPORT}\n[object Object]`) }).toEqual({ code: 2, reported: true });
-  });
-});
-
-describe('packageVersion', () => {
-  it('reads the version of the domain-integrity package', () => {
-    expect(packageVersion()).toBe(PACKAGE_VERSION);
   });
 });

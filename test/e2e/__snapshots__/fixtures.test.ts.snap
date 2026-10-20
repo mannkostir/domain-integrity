@@ -94,6 +94,8 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
       "tool": {
         "driver": {
           "name": "domain-integrity",
+          "version": "<package version>",
+          "informationUri": "https://github.com/mannkostir/domain-integrity#readme",
           "rules": [
             {
               "id": "terminal-state-leak",

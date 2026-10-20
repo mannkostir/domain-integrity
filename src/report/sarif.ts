@@ -1,7 +1,8 @@
 import { toPosixRelative } from '../engine/path';
 import { Report } from './text';
+import { ToolIdentity } from './tool';
 
-export const formatSarif = (report: Report): string =>
+export const formatSarif = (report: Report, tool: ToolIdentity): string =>
   `${JSON.stringify(
     {
       $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
@@ -10,7 +11,9 @@ export const formatSarif = (report: Report): string =>
         {
           tool: {
             driver: {
-              name: 'domain-integrity',
+              name: tool.name,
+              version: tool.version,
+              informationUri: tool.informationUri,
               rules: report.rules.map((rule) => ({ id: rule.id, shortDescription: { text: rule.description } })),
             },
           },
