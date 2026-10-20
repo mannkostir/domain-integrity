@@ -84,7 +84,7 @@ export const reportedUnder = <Id extends string>(rule: RuleDescription<Id>): Rep
 
 export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
   readonly id: string;
-  readonly rules: readonly RuleDescription[];
+  readonly rules: readonly RuleDescription<Produced['checkId']>[];
   readonly extract: (input: AnalysisInput) => Model;
   readonly problems: (model: Model) => readonly string[];
   readonly suggest: (model: Model) => readonly Suggestion[];
