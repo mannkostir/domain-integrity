@@ -32,11 +32,11 @@ const invitation = project.getSourceFileOrThrow('/src/invitation.ts').getClassOr
 
 describe('outsideAssignments', () => {
   it('finds typed assignments to the field outside the aggregate class', () => {
-    const found = outsideAssignments(new SourceIndex(project.getSourceFiles()), invitation, resolvedField(invitation, 'status'));
+    const found = outsideAssignments(new SourceIndex(project.getSourceFiles()), invitation, resolvedField(invitation, 'status'), '/');
 
     expect(found.map((assignment) => ({ ...assignment, value: describeAssigned(assignment.value) }))).toEqual([
-      { field: 'status', file: '/src/service.ts', line: 3, scope: 'acceptLater', value: { tokens: ['accepted'], unresolved: false, mayWrite: false }, throughOwnSetter: false },
-      { field: 'status', file: '/src/with-status.ts', line: 5, scope: 'WithStatus.mutate', value: { tokens: [], unresolved: true, mayWrite: false }, throughOwnSetter: false },
+      { field: 'status', file: '/src/service.ts', line: 3, scope: 'acceptLater', value: { tokens: ['accepted'], unresolved: false, mayWrite: false }, throughOwnSetter: false, inTestFile: false },
+      { field: 'status', file: '/src/with-status.ts', line: 5, scope: 'WithStatus.mutate', value: { tokens: [], unresolved: true, mayWrite: false }, throughOwnSetter: false, inTestFile: false },
     ]);
   });
 });
@@ -77,6 +77,7 @@ describe('outsideAssignments through wrappers and Object.assign', () => {
     new SourceIndex(wrappedProject.getSourceFiles()),
     wrappedInvitation,
     resolvedField(wrappedInvitation, 'status'),
+    '/',
   );
 
   it('sees through casts and non-null assertions on the receiver', () => {
@@ -101,7 +102,7 @@ describe('outsideAssignments through wrappers and Object.assign', () => {
   });
 
   it('records Object.assign onto the props of the aggregate', () => {
-    const found = outsideAssignments(new SourceIndex(wrappedProject.getSourceFiles()), ticket, resolvedField(ticket, 'status'));
+    const found = outsideAssignments(new SourceIndex(wrappedProject.getSourceFiles()), ticket, resolvedField(ticket, 'status'), '/');
 
     expect(found.map((assignment) => assignment.scope)).toEqual(['viaProps']);
   });
@@ -179,7 +180,7 @@ export const patch = (page: Page): void => { Object.assign(page, { status: 'live
 
 const setterAssignments = (file: string, name: string) => {
   const cls = setterProject.getSourceFileOrThrow(file).getClassOrThrow(name);
-  return outsideAssignments(new SourceIndex(setterProject.getSourceFiles()), cls, resolvedField(cls, 'status')).map((assignment) => ({
+  return outsideAssignments(new SourceIndex(setterProject.getSourceFiles()), cls, resolvedField(cls, 'status'), '/').map((assignment) => ({
     scope: assignment.scope,
     throughOwnSetter: assignment.throughOwnSetter,
   }));
@@ -211,6 +212,42 @@ describe('outsideAssignments through the aggregate setter', () => {
     expect(setterAssignments('/src/page.ts', 'Page')).toEqual([
       { scope: 'publish', throughOwnSetter: false },
       { scope: 'patch', throughOwnSetter: false },
+    ]);
+  });
+});
+
+const testFileProject = inMemoryProject({
+  '/src/aggregate-root.ts': AGGREGATE_ROOT,
+  '/src/invitation.ts': `
+import { AggregateRoot } from './aggregate-root';
+export class Invitation extends AggregateRoot<{ note: string }> {
+  status: 'pending' | 'accepted' = 'pending';
+}
+`,
+  '/src/invitation-service.ts': `
+import { Invitation } from './invitation';
+export const accept = (invitation: Invitation): void => { invitation.status = 'accepted'; };
+`,
+  '/src/invitation.spec.ts': `
+import { Invitation } from './invitation';
+export const acceptInSpec = (invitation: Invitation): void => { invitation.status = 'accepted'; };
+`,
+  '/test/builders/invitation.ts': `
+import { Invitation } from '../../src/invitation';
+export const acceptInBuilder = (invitation: Invitation): void => { invitation.status = 'accepted'; };
+`,
+});
+
+describe('outsideAssignments in test files', () => {
+  it('marks assignments made in test files relative to the analysis root', () => {
+    const cls = testFileProject.getSourceFileOrThrow('/src/invitation.ts').getClassOrThrow('Invitation');
+
+    const found = outsideAssignments(new SourceIndex(testFileProject.getSourceFiles()), cls, resolvedField(cls, 'status'), '/');
+
+    expect(found.map((assignment) => ({ scope: assignment.scope, inTestFile: assignment.inTestFile }))).toEqual([
+      { scope: 'accept', inTestFile: false },
+      { scope: 'acceptInSpec', inTestFile: true },
+      { scope: 'acceptInBuilder', inTestFile: true },
     ]);
   });
 });

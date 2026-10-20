@@ -128,6 +128,7 @@ const extractAggregate = (
   identity: ClassIdentity,
   declaration: DomainDeclaration,
   project: ProjectIndex,
+  root: string,
 ): { readonly aggregate: AggregateModel; readonly problems: readonly string[] } => {
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
   const methods = instanceMethods(cls, declaration.aggregateBaseClasses);
@@ -148,10 +149,10 @@ const extractAggregate = (
       methods: methodModels(scope, methods, resolved.fields, declared !== undefined),
       initial: new Map(resolved.fields.map((field) => [field.name, initialValues(cls, field)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(project, field)]) : []),
-      outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field)) : [],
+      outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, root)) : [],
       uncertainlyWritten: declared
         ? new Set()
-        : fieldsWrittenUncertainly(cls, declaration.aggregateBaseClasses, project.sources, resolved.fields),
+        : fieldsWrittenUncertainly(cls, declaration.aggregateBaseClasses, project.sources, resolved.fields, root),
     },
   };
 };
@@ -164,9 +165,10 @@ export const extractLifecycles = ({ declaration, files, root }: AnalysisInput): 
     declaration.lifecycles.map((lifecycle) => lifecycle.target),
   );
   const identities = classIdentities(classes, root);
-  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(identities, cls), declaration, project));
+  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(identities, cls), declaration, project, root));
   return {
     aggregates: extracted.map((result) => result.aggregate),
     problems: extracted.flatMap((result) => result.problems),
+    reportTestFileMutations: declaration.reportTestFileMutations,
   };
 };

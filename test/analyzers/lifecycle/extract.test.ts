@@ -139,6 +139,29 @@ describe('extractLifecycles', () => {
   });
 });
 
+const specWrittenProject = inMemoryProject({
+  '/src/aggregate-root.ts': AGGREGATE_ROOT,
+  '/src/invoice.ts': `
+import { AggregateRoot } from './aggregate-root';
+export class Invoice extends AggregateRoot<{ state: 'open' | 'paid' }> {
+  state: 'open' | 'paid' = 'open';
+  pay(): void { this.state = 'paid'; }
+}
+`,
+  '/src/invoice.spec.ts': `
+import { Invoice } from './invoice';
+export const reopen = (invoice: Invoice): void => { invoice.state = 'open'; };
+`,
+});
+
+describe('extractLifecycles writes from test files', () => {
+  it('treats a field of an undeclared aggregate written only from a test file as uncertainly written', () => {
+    const { aggregates } = extractLifecycles({ declaration: DEFAULT_DECLARATION, files: specWrittenProject.getSourceFiles(), root: '/' });
+
+    expect([...(aggregates.find((aggregate) => aggregate.name === 'Invoice')?.uncertainlyWritten ?? [])]).toEqual(['state']);
+  });
+});
+
 describe('extractLifecycles aggregate ids', () => {
   const duplicated = inMemoryProject({
     '/src/aggregate-root.ts': AGGREGATE_ROOT,

@@ -1,5 +1,6 @@
 import { LifecycleFinding, RuleDescription } from '../../../analyzer';
-import { LifecycleModel } from '../model';
+import { AggregateModel, LifecycleModel } from '../model';
+import { CheckOptions } from './options';
 import { outsideMutation } from './outside-mutation';
 import { terminalStateLeak } from './terminal-state-leak';
 import { transitionDrift } from './transition-drift';
@@ -12,10 +13,14 @@ export const LIFECYCLE_RULES: readonly RuleDescription[] = [
   { id: 'transition-drift', description: "A method's allowed source states differ from its declared transition." },
 ];
 
-const CHECKS = [terminalStateLeak, unreachableState, outsideMutation, transitionDrift];
+type Check = (aggregate: AggregateModel, options: CheckOptions) => LifecycleFinding[];
+
+const CHECKS: readonly Check[] = [terminalStateLeak, unreachableState, outsideMutation, transitionDrift];
 
 const byLocation = (a: LifecycleFinding, b: LifecycleFinding): number =>
   a.file.localeCompare(b.file) || a.line - b.line || a.checkId.localeCompare(b.checkId);
 
-export const runChecks = (model: LifecycleModel): LifecycleFinding[] =>
-  model.aggregates.flatMap((aggregate) => CHECKS.flatMap((check) => check(aggregate))).sort(byLocation);
+export const runChecks = (model: LifecycleModel): LifecycleFinding[] => {
+  const options: CheckOptions = { reportTestFileMutations: model.reportTestFileMutations };
+  return model.aggregates.flatMap((aggregate) => CHECKS.flatMap((check) => check(aggregate, options))).sort(byLocation);
+};

@@ -32,7 +32,7 @@ describe('suggestLifecycles', () => {
       method('cancel', true, { status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') } }),
     ];
 
-    expect(terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), methods })], problems: [] })).toEqual([
+    expect(terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), methods })], problems: [], reportTestFileMutations: false })).toEqual([
       ['status', ['CANCELLED']],
     ]);
   });
@@ -42,14 +42,14 @@ describe('suggestLifecycles', () => {
     const methods = [method('delete', true, { deleted: { sources: known('true', 'false'), sets: assigned('true') } })];
 
     expect(
-      terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [deleted], methods })], problems: [] }),
+      terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [deleted], methods })], problems: [], reportTestFileMutations: false }),
     ).toEqual([['deleted', ['true']]]);
   });
 
   it('suggests no terminal state when a setter guard could not be analysed', () => {
     const methods = [method('cancel', true, { status: { sources: unknownSources, sets: assigned('CANCELLED') } })];
 
-    expect(terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), methods })], problems: [] })).toEqual([
+    expect(terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), methods })], problems: [], reportTestFileMutations: false })).toEqual([
       ['status', []],
     ]);
   });
@@ -60,7 +60,7 @@ describe('suggestLifecycles', () => {
       method('rename', true, { status: { sources: unknownSources, sets: mayWriteValue } }),
     ];
 
-    expect(terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), methods })], problems: [] })).toEqual([
+    expect(terminalLabels({ aggregates: [aggregate({ declared: false, declarations: new Map(), methods })], problems: [], reportTestFileMutations: false })).toEqual([
       ['status', ['CANCELLED']],
     ]);
   });
@@ -77,7 +77,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', ['CANCELLED']],
@@ -94,7 +94,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', ['CANCELLED']],
@@ -108,7 +108,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, lockedAt], methods: [confirm, cancel, lock] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', ['CANCELLED']],
@@ -129,7 +129,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close, reopen] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', []],
@@ -149,7 +149,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirmAndClose, cancel] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', ['CANCELLED']],
@@ -169,7 +169,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [settle, cancel] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', ['CANCELLED']],
@@ -189,7 +189,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [cancel, close] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', []],
@@ -212,7 +212,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [cancel, close] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', ['CANCELLED']],
@@ -233,7 +233,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [stage, closedAt], methods: [close] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['stage', ['CLOSED']],
@@ -254,7 +254,7 @@ describe('suggestLifecycles', () => {
     expect(
       terminalLabels({
         aggregates: [aggregate({ declared: false, declarations: new Map(), fields: [STATUS, closedAt], methods: [confirm, close, archive] })],
-        problems: [],
+        problems: [], reportTestFileMutations: false,
       }),
     ).toEqual([
       ['status', ['CANCELLED']],
@@ -263,6 +263,6 @@ describe('suggestLifecycles', () => {
   });
 
   it('skips aggregates that are already declared', () => {
-    expect(suggestLifecycles({ aggregates: [aggregate({ fields: [STATUS] })], problems: [] })).toEqual([]);
+    expect(suggestLifecycles({ aggregates: [aggregate({ fields: [STATUS] })], problems: [], reportTestFileMutations: false })).toEqual([]);
   });
 });

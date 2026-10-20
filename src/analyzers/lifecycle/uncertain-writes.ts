@@ -17,8 +17,8 @@ const mayChange = (value: AssignedValues): boolean => value.tokens.size > 0 || h
 const writtenByAny = (accessors: readonly Node[], field: StateField): boolean =>
   accessors.some((accessor) => mayChange(setsOf(accessor, field)));
 
-const writtenOutsideClass = (sources: SourceIndex, cls: ClassDeclaration, field: StateField): boolean =>
-  outsideAssignments(sources, cls, field).length > 0;
+const writtenOutsideClass = (sources: SourceIndex, cls: ClassDeclaration, field: StateField, root: string): boolean =>
+  outsideAssignments(sources, cls, field, root).length > 0;
 
 const isAssignment = (binary: BinaryExpression): boolean => {
   const operator = binary.getOperatorToken().getKind();
@@ -152,6 +152,7 @@ export const fieldsWrittenUncertainly = (
   aggregateBaseClasses: readonly string[],
   sources: SourceIndex,
   fields: readonly StateField[],
+  root: string,
 ): ReadonlySet<string> => {
   const accessors = instanceAccessors(cls, aggregateBaseClasses);
   const assignedUncertainly = uncertainInClass(cls, aggregateBaseClasses, sources);
@@ -159,7 +160,7 @@ export const fieldsWrittenUncertainly = (
     fields
       .filter(
         (field) =>
-          assignedUncertainly(field) || writtenByAny(accessors, field) || writtenOutsideClass(sources, cls, field),
+          assignedUncertainly(field) || writtenByAny(accessors, field) || writtenOutsideClass(sources, cls, field, root),
       )
       .map((field) => field.name),
   );

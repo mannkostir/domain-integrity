@@ -1,8 +1,10 @@
 import { LifecycleFinding } from '../../../analyzer';
 import { AggregateModel } from '../model';
+import { CheckOptions } from './options';
 
-export const outsideMutation = (aggregate: AggregateModel): LifecycleFinding[] =>
+export const outsideMutation = (aggregate: AggregateModel, options: CheckOptions): LifecycleFinding[] =>
   aggregate.outside
+    .filter((assignment) => options.reportTestFileMutations || !assignment.inTestFile)
     .filter((assignment) => aggregate.declarations.has(assignment.field))
     .filter((assignment) => !assignment.throughOwnSetter)
     .map((assignment) => ({
