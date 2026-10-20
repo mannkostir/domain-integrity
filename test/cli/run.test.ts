@@ -1,6 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AnalyzerRun } from '../../src/analysis';
+import { analyse } from '../../src/analyzer';
+import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
 import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeProject, writeTree } from '../helpers/disk';
 import { parseSarif } from '../helpers/sarif-log';
@@ -24,7 +27,10 @@ describe('check', () => {
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
     const { io, stdout } = captureIo(dir);
 
-    expect({ code: await run(['check', '--baseline', 'baseline.json'], io), known: stdout().includes('(baseline)') }).toEqual({ code: 0, known: true });
+    expect({ code: await run(['check', '--baseline', 'baseline.json'], io), stdout: stdout() }).toEqual({
+      code: 0,
+      stdout: '0 errors, 0 warnings, 1 known from baseline baseline.json\n',
+    });
   });
 
   it('exits 0 with SARIF when every error finding is in the baseline', async () => {
@@ -180,6 +186,175 @@ export default defineDomain({ lifecycles: [lifecycle(Ticket, { states: { status:
       written: false,
       notice: true,
     });
+  });
+});
+
+const TICKET_KEY = 'terminal-state-leak|Ticket|rename|status|CLOSED';
+
+const GHOST_KEY = 'terminal-state-leak|Ghost|vanish|status|CLOSED';
+
+const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
+
+const writeBaseline = (dir: string, path: string, keys: readonly string[]): void =>
+  writeFileSync(join(dir, path), JSON.stringify({ version: 1, findings: keys }));
+
+const duplicatingLifecycle: AnalyzerRun = (input) => {
+  const result = analyse(lifecycleAnalyzer, input);
+  return { ...result, findings: [...result.findings, ...result.findings] };
+};
+
+describe('check with a baseline', () => {
+  it('prints only the summary line when the baseline covers every finding', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, 'baseline.json', [TICKET_KEY]);
+    const { io, stdout } = captureIo(dir);
+    await run(['check', '--baseline', 'baseline.json'], io);
+
+    expect(stdout()).toBe('0 errors, 0 warnings, 1 known from baseline baseline.json\n');
+  });
+
+  it('lists known findings marked as baseline with --show-known', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, 'baseline.json', [TICKET_KEY]);
+    const { io, stdout } = captureIo(dir);
+    await run(['check', '--baseline', 'baseline.json', '--show-known'], io);
+
+    expect(stdout()).toContain('terminal-state-leak  Ticket.rename()  src/ticket.ts:6 (baseline)');
+  });
+
+  it('loads the default baseline file from the working directory', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
+    const { io, stdout } = captureIo(dir);
+
+    expect({ code: await run(['check'], io), stdout: stdout() }).toEqual({
+      code: 0,
+      stdout: '0 errors, 0 warnings, 1 known from baseline domain-integrity.baseline.json\n',
+    });
+  });
+
+  it('runs without a baseline when the default file is absent', async () => {
+    const { io, stdout } = captureIo(writeProject(TICKET_PROJECT));
+
+    expect({ code: await run(['check'], io), summary: stdout().endsWith('1 error, 0 warnings\n') }).toEqual({ code: 1, summary: true });
+  });
+
+  it('prefers an explicit baseline over the default file', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
+    writeBaseline(dir, 'empty.json', []);
+
+    expect(await run(['check', '--baseline', 'empty.json'], captureIo(dir).io)).toBe(1);
+  });
+
+  it('exits 2 when the default baseline file is not valid JSON', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeFileSync(join(dir, DEFAULT_BASELINE), 'not json');
+    const { io, stderr } = captureIo(dir);
+
+    expect({ code: await run(['check'], io), invalid: stderr().includes('domain-integrity.baseline.json is not valid JSON.') }).toEqual({
+      code: 2,
+      invalid: true,
+    });
+  });
+
+  it('exits 2 when the default baseline file is not a baseline', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeFileSync(join(dir, DEFAULT_BASELINE), '{"nope": true}');
+    const { io, stderr } = captureIo(dir);
+
+    expect({ code: await run(['check'], io), rejected: stderr().includes('domain-integrity.baseline.json is not a domain-integrity baseline.') }).toEqual({
+      code: 2,
+      rejected: true,
+    });
+  });
+
+  it('exits 2 when an explicit baseline is missing even if the default file exists', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
+    const { io, stderr } = captureIo(dir);
+
+    expect({ code: await run(['check', '--baseline', 'missing.json'], io), notFound: stderr().includes('not found') }).toEqual({
+      code: 2,
+      notFound: true,
+    });
+  });
+
+  it('lists stale baseline entries in the text output', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, 'baseline.json', [TICKET_KEY, GHOST_KEY]);
+    const { io, stdout } = captureIo(dir);
+    await run(['check', '--baseline', 'baseline.json'], io);
+
+    expect(stdout()).toBe(
+      [
+        '1 stale baseline entry, remove with --update-baseline:',
+        `  ${GHOST_KEY}`,
+        '',
+        '0 errors, 0 warnings, 1 known from baseline baseline.json',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('exits 0 when the baseline has stale entries', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, 'baseline.json', [TICKET_KEY, GHOST_KEY]);
+
+    expect(await run(['check', '--baseline', 'baseline.json'], captureIo(dir).io)).toBe(0);
+  });
+
+  it('keeps the JSON output free of baseline details', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    const plain = captureIo(dir);
+    await run(['check', '--format', 'json'], plain.io);
+    writeBaseline(dir, 'baseline.json', [TICKET_KEY, GHOST_KEY]);
+    const withBaseline = captureIo(dir);
+    await run(['check', '--baseline', 'baseline.json', '--format', 'json'], withBaseline.io);
+
+    expect(Object.keys(JSON.parse(withBaseline.stdout()))).toEqual(Object.keys(JSON.parse(plain.stdout())));
+  });
+
+  it('does not report stale entries when the run has problems', async () => {
+    const dir = writeProject(MISSING_FIELD_PROJECT);
+    writeBaseline(dir, 'baseline.json', [GHOST_KEY]);
+    const { io, stdout } = captureIo(dir);
+    await run(['check', '--baseline', 'baseline.json'], io);
+
+    expect(stdout().includes('stale')).toBe(false);
+  });
+
+  it('prunes stale entries when updating the baseline', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, 'baseline.json', [TICKET_KEY, GHOST_KEY]);
+    await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
+
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual([TICKET_KEY]);
+  });
+
+  it('reports the number of entries written in the plural', async () => {
+    const { io, stdout } = captureIo(writeProject(SAME_NAMED_PROJECT));
+    await run(['check', '--update-baseline'], io);
+
+    expect(stdout()).toBe('Baseline written to domain-integrity.baseline.json with 2 entries.\n');
+  });
+
+  it('reports the number of distinct entries written', async () => {
+    const { io, stdout } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['check', '--update-baseline'], io, [duplicatingLifecycle]);
+
+    expect(stdout()).toBe('Baseline written to domain-integrity.baseline.json with 1 entry.\n');
+  });
+
+  it('reports an auto-loaded baseline as suppressed results in SARIF', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
+    const { io, stdout } = captureIo(dir);
+    await run(['check', '--format', 'sarif'], io);
+
+    const results = parseSarif(stdout()).runs.flatMap((sarifRun) => sarifRun.results);
+
+    expect(results.map((result) => result.suppressions?.map((suppression) => suppression.kind))).toEqual([['external']]);
   });
 });
 

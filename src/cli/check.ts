@@ -1,8 +1,9 @@
+import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { AnalyzerRun } from '../analysis';
 import { AnalyzerFailure, Finding } from '../analyzer';
 import { UsageError } from '../engine/errors';
-import { partitionByBaseline, readBaseline, serializeBaseline } from '../report/baseline';
+import { baselineKeys, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
 import { formatJson } from '../report/json';
 import { formatSarif } from '../report/sarif';
 import { Report, formatText } from '../report/text';
@@ -17,19 +18,21 @@ export type CheckOptions = {
   readonly format: string;
   readonly baseline?: string;
   readonly updateBaseline?: boolean;
+  readonly showKnown?: boolean;
 };
 
-const FORMATTERS: Readonly<Record<string, (report: Report, tool: ToolIdentity) => string>> = {
-  text: formatText,
-  json: formatJson,
-  sarif: formatSarif,
-};
+type Formatter = (report: Report, tool: ToolIdentity) => string;
 
 const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
 
-const formatterFor = (format: string): ((report: Report, tool: ToolIdentity) => string) => {
-  const formatter = FORMATTERS[format];
-  if (!formatter) throw new UsageError(`Unknown format "${format}". Use one of: ${Object.keys(FORMATTERS).join(', ')}.`);
+const formatterFor = ({ format, showKnown = false }: CheckOptions): Formatter => {
+  const formatters: Readonly<Record<string, Formatter>> = {
+    text: (report) => formatText(report, { showKnown }),
+    json: formatJson,
+    sarif: formatSarif,
+  };
+  const formatter = formatters[format];
+  if (!formatter) throw new UsageError(`Unknown format "${format}". Use one of: ${Object.keys(formatters).join(', ')}.`);
   return formatter;
 };
 
@@ -50,12 +53,21 @@ const updateBaseline = ({ problems, failures, findings }: Outcome, options: Chec
   }
   const path = resolve(io.cwd, options.baseline ?? DEFAULT_BASELINE);
   writeText(path, serializeBaseline(findings));
-  io.out(`Baseline written to ${relative(io.cwd, path)} with ${findings.length} findings.\n`);
+  const entries = baselineKeys(findings).length;
+  io.out(`Baseline written to ${relative(io.cwd, path)} with ${entries} ${entries === 1 ? 'entry' : 'entries'}.\n`);
   return 0;
 };
 
+const baselinePathFor = (options: CheckOptions, io: Io): string | undefined => {
+  if (options.baseline) return resolve(io.cwd, options.baseline);
+  const fallback = resolve(io.cwd, DEFAULT_BASELINE);
+  return existsSync(fallback) ? fallback : undefined;
+};
+
+const isComplete = ({ problems, failures }: Outcome): boolean => problems.length === 0 && failures.length === 0;
+
 export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyzers: readonly AnalyzerRun[]): number => {
-  const format = formatterFor(options.format);
+  const format = formatterFor(options);
   const { results } = openSession(paths, analyzers);
   const outcome: Outcome = {
     problems: results.flatMap((result) => result.problems),
@@ -65,10 +77,14 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   outcome.problems.forEach((problem) => io.err(`problem: ${problem}\n`));
   reportInternalErrors(outcome.failures, io);
   if (options.updateBaseline) return updateBaseline(outcome, options, io);
-  const baselinePath = options.baseline ? resolve(io.cwd, options.baseline) : undefined;
+  const baselinePath = baselinePathFor(options, io);
   const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath)) : new Set<string>();
   const { fresh, known } = partitionByBaseline(outcome.findings, baseline);
-  io.out(format({ fresh, known, problems: outcome.problems, rules: results.flatMap((result) => result.rules), root: paths.root }, toolIdentity()));
-  if (outcome.problems.length > 0 || outcome.failures.length > 0) return 2;
+  const rules = results.flatMap((result) => result.rules);
+  const complete = isComplete(outcome);
+  const stale = complete ? staleEntries(outcome.findings, baseline) : [];
+  const applied = baselinePath ? { baseline: { path: relative(io.cwd, baselinePath), stale } } : {};
+  io.out(format({ fresh, known, problems: outcome.problems, rules, root: paths.root, ...applied }, toolIdentity()));
+  if (!complete) return 2;
   return fresh.some((finding) => finding.severity === 'error') ? 1 : 0;
 };

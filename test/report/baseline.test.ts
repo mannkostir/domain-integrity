@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { UsageError } from '../../src/engine/errors';
-import { partitionByBaseline, readBaseline, serializeBaseline } from '../../src/report/baseline';
+import { baselineKeys, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../../src/report/baseline';
 import { bufferFinding, finding, flowFinding } from '../helpers/model';
 
 const tempFile = (content: string): string => {
@@ -62,5 +62,22 @@ describe('baseline', () => {
 
   it('keys an undispatched buffer by owner and buffer', () => {
     expect(JSON.parse(serializeBaseline([bufferFinding()])).findings).toEqual(['undispatched-events|AggregateRoot|_domainEvents|']);
+  });
+
+  it('lists baseline keys once each, sorted', () => {
+    expect(baselineKeys([finding({ method: 'zeta' }), finding({ method: 'alpha' }), finding({ method: 'zeta', line: 40 })])).toEqual([
+      'terminal-state-leak|Order|alpha|status|CANCELLED',
+      'terminal-state-leak|Order|zeta|status|CANCELLED',
+    ]);
+  });
+
+  it('reports baseline entries that match no finding as stale, sorted', () => {
+    const baseline = new Set(['z|stale', 'terminal-state-leak|Order|annotate|status|CANCELLED', 'a|stale']);
+
+    expect(staleEntries([finding({})], baseline)).toEqual(['a|stale', 'z|stale']);
+  });
+
+  it('reports no stale entries when every baseline entry matches a finding', () => {
+    expect(staleEntries([finding({}), finding({ method: 'other' })], new Set(['terminal-state-leak|Order|annotate|status|CANCELLED']))).toEqual([]);
   });
 });
