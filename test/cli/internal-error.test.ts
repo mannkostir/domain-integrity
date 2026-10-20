@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AnalyzerRun } from '../../src/analysis';
@@ -8,8 +8,7 @@ import { run } from '../../src/cli/run';
 import { UsageError } from '../../src/engine/errors';
 import { packageVersion, toolIdentity } from '../../src/cli/version';
 import { TICKET_PROJECT, captureIo, writeProject } from '../helpers/disk';
-
-const MANIFEST: { readonly version: string; readonly homepage: string } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+import { MANIFEST } from '../helpers/manifest';
 
 const PACKAGE_VERSION = MANIFEST.version;
 

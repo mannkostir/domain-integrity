@@ -1,13 +1,22 @@
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { EventFlowFinding, Finding } from '../../src/analyzer';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
 
-const PACKAGE_VERSION: string = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+type SarifRun = { readonly tool: { readonly driver: Readonly<Record<string, unknown>> } };
 
-const withoutPackageVersion = (report: string): string => report.replace(`"version": "${PACKAGE_VERSION}"`, '"version": "<package version>"');
+type SarifLog = { readonly runs: readonly [SarifRun, ...SarifRun[]] };
+
+const withoutPackageVersion = (report: string): string => {
+  const sarif: SarifLog = JSON.parse(report);
+  const [first, ...rest] = sarif.runs;
+  const masked: SarifLog = {
+    ...sarif,
+    runs: [{ ...first, tool: { ...first.tool, driver: { ...first.tool.driver, version: '<package version>' } } }, ...rest],
+  };
+  return `${JSON.stringify(masked, null, 2)}\n`;
+};
 
 const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 

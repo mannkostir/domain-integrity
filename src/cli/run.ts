@@ -7,6 +7,7 @@ import { contextCommand } from './context';
 import { InitOptions, initCommand } from './init';
 import { DEFAULT_CONFIG, DEFAULT_TSCONFIG, Io, Paths } from './io';
 import { showCommand } from './show';
+import { packageVersion } from './version';
 
 type CommonOptions = { readonly project: string; readonly config: string };
 
@@ -25,6 +26,7 @@ const withCommonOptions = (command: Command): Command =>
 const buildProgram = (io: Io, outcome: { exitCode: number }, analyzers: readonly AnalyzerRun[]): Command => {
   const program = new Command('domain-integrity')
     .description('Check aggregate lifecycles and in-process event flows against their declared intent.')
+    .version(packageVersion(), '-V, --version', 'print the version')
     .exitOverride()
     .configureOutput({ writeOut: io.out, writeErr: io.err });
 
