@@ -2,7 +2,7 @@ import { AnalyzerRun, runAnalyzers } from '../analysis';
 import { AnalysisResult, CheckScope } from '../analyzer';
 import { DomainDeclaration } from '../engine/declaration';
 import { ProjectError } from '../engine/errors';
-import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/project';
+import { analysedSourceFiles, configSourceFile, loadProject, loadedSourceFiles } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
 import { Io, Paths } from './io';
 
@@ -24,8 +24,6 @@ const recognisedHandlers = (declaration: DomainDeclaration): string =>
   `Recognised handlers use the decorators ${declaration.events.handlerDecorators.join(', ')} (set "events.handlerDecorators" for your own), the methods ${declaration.events.registerMethods.join(', ')} (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().`;
 
 export const noAggregatesFound = (declaration: DomainDeclaration): string => `${NO_AGGREGATES} ${searchedBaseClasses(declaration)}`;
-
-const loadedSourceFiles = (count: number): string => `Loaded ${count} ${count === 1 ? 'source file' : 'source files'}.`;
 
 const nothingFoundMessage = (declaration: DomainDeclaration, fileCount: number): string =>
   [

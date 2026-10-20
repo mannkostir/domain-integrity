@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 import type { Project } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, ProjectError } from '../../src/engine/errors';
-import { analysedSourceFiles, configSourceFile, loadProject } from '../../src/engine/project';
+import { analysedSourceFiles, configSourceFile, loadProject, loadedSourceFiles } from '../../src/engine/project';
 import { writeTree } from '../helpers/disk';
 import { inMemoryProject } from '../helpers/in-memory';
 
@@ -111,7 +111,11 @@ describe('loadProject', () => {
       'domain.config.ts': 'export default {};\n',
     });
 
-    expect(() => loadProject(join(dir, 'tsconfig.json'), `${dir}/./src/../domain.config.ts`)).toThrow(/includes no source files other than/);
+    expect(() => loadProject(join(dir, 'tsconfig.json'), `${dir}/./src/../domain.config.ts`)).toThrow(
+      new ProjectError(
+        `Loaded 0 source files.\n${join(dir, 'tsconfig.json')} includes no source files other than ${join(dir, 'domain.config.ts')}.\nPass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.`,
+      ),
+    );
   });
 
   it('loads a project that includes a source besides the config', () => {
@@ -122,6 +126,16 @@ describe('loadProject', () => {
     });
 
     expect(fileNames(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), dir)).toEqual(['domain.config.ts', 'src/a.ts']);
+  });
+});
+
+describe('loadedSourceFiles', () => {
+  it('counts one source file in the singular', () => {
+    expect(loadedSourceFiles(1)).toBe('Loaded 1 source file.');
+  });
+
+  it('counts other numbers of source files in the plural', () => {
+    expect(loadedSourceFiles(0)).toBe('Loaded 0 source files.');
   });
 });
 

@@ -7,16 +7,20 @@ const EMPTY_CONFIG = "import { defineDomain } from 'domain-integrity';\nexport d
 
 const NOTHING_DECLARED_CONFIG = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ lifecycles: [] });\n";
 
-const PROJECTS: Readonly<Record<string, () => string>> = {
+const PROJECTS = {
   'no source files': () => writeProject({ 'domain.config.ts': EMPTY_CONFIG }),
   'no aggregates and no event handlers': () => writeProject({ 'src/empty.ts': 'export const nothing = 1;\n', 'domain.config.ts': EMPTY_CONFIG }),
   'nothing declared': () => writeProject({ ...TICKET_SOURCES, 'domain.config.ts': NOTHING_DECLARED_CONFIG }),
-};
+} satisfies Readonly<Record<string, () => string>>;
 
-const projectFor = (name: string): string => PROJECTS[name]!();
+type ProjectName = keyof typeof PROJECTS;
+
+type ExitCase = readonly [ProjectName, string, number];
+
+const projectFor = (name: ProjectName): string => PROJECTS[name]();
 
 describe('a project with nothing to check', () => {
-  it.each([
+  it.each<ExitCase>([
     ['no source files', 'check', 2],
     ['no source files', 'show', 2],
     ['no source files', 'context', 2],

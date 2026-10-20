@@ -5,16 +5,18 @@ import { readReferencesFromDisk, referencedTsconfigs } from './references';
 
 const isProjectSource = (file: SourceFile): boolean => !file.isDeclarationFile() && !file.isInNodeModules();
 
-const includedSources = (tsconfigPath: string, references: readonly string[]): string =>
+export const loadedSourceFiles = (count: number): string => `Loaded ${count} ${count === 1 ? 'source file' : 'source files'}.`;
+
+const includesClause = (tsconfigPath: string, references: readonly string[]): string =>
   references.length === 0 ? `${tsconfigPath} includes` : `${tsconfigPath} and the tsconfigs it references include`;
 
-const noSourcesSentence = (included: string, onlyConfigPath: string | undefined): string =>
-  onlyConfigPath === undefined ? `${included} no source files.` : `${included} no source files other than ${onlyConfigPath}.`;
+const noSourcesSentence = (includes: string, configFile: SourceFile | undefined): string =>
+  configFile === undefined ? `${includes} no source files.` : `${includes} no source files other than ${configFile.getFilePath()}.`;
 
-const emptyProgramMessage = (tsconfigPath: string, references: readonly string[], onlyConfigPath: string | undefined): string =>
+const emptyProgramMessage = (tsconfigPath: string, references: readonly string[], configFile: SourceFile | undefined): string =>
   [
-    'Loaded 0 source files.',
-    noSourcesSentence(includedSources(tsconfigPath, references), onlyConfigPath),
+    loadedSourceFiles(0),
+    noSourcesSentence(includesClause(tsconfigPath, references), configFile),
     ...(references.length === 0 ? ['Pass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.'] : []),
   ].join('\n');
 
@@ -61,7 +63,7 @@ export const loadProject = (tsconfigPath: string, configPath: string): Project =
   const project = projectFrom(tsconfigPath, references);
   const configFile = project.getSourceFile(configPath);
   if (analysedSourceFiles(project, configFile).length === 0) {
-    throw new ProjectError(emptyProgramMessage(tsconfigPath, references, configFile === undefined ? undefined : configPath));
+    throw new ProjectError(emptyProgramMessage(tsconfigPath, references, configFile));
   }
   return project;
 };
