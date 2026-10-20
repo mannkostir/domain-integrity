@@ -135,6 +135,37 @@ describe('a project with nothing to check', () => {
     expect(await run(['show', 'Ticket'], io)).toBe(0);
   });
 
+  it('says there is nothing to show for the given name when nothing is declared', async () => {
+    const dir = projectFor('nothing declared');
+    const { io, stderr } = captureIo(dir);
+    await run(['show', 'Ticket'], io);
+
+    expect(stderr()).toBe(
+      [
+        'Loaded 2 source files.',
+        `Nothing to check: ${join(dir, 'domain.config.ts')} declares no lifecycles, and no event handlers or event flows were found.`,
+        'Run "domain-integrity init" to declare the lifecycles of the aggregates it finds.',
+        'Nothing to show for "Ticket".',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('prints only the notice for show without a name when nothing is declared', async () => {
+    const dir = projectFor('nothing declared');
+    const { io, stderr } = captureIo(dir);
+    await run(['show'], io);
+
+    expect(stderr()).toBe(
+      [
+        'Loaded 2 source files.',
+        `Nothing to check: ${join(dir, 'domain.config.ts')} declares no lifecycles, and no event handlers or event flows were found.`,
+        'Run "domain-integrity init" to declare the lifecycles of the aggregates it finds.',
+        '',
+      ].join('\n'),
+    );
+  });
+
   it('prints the notice for context when nothing is declared', async () => {
     const { io, stderr } = captureIo(projectFor('nothing declared'));
     await run(['context'], io);

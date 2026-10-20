@@ -26,7 +26,10 @@ const nothingToShowError = (aggregate: string | undefined): UsageError =>
 export const showCommand = (paths: Paths, aggregate: string | undefined, io: Io, analyzers: readonly AnalyzerRun[]): number => {
   const session = openSession(paths, analyzers);
   reportNotice(session, io);
-  if (session.kind === 'nothing-declared') return 0;
+  if (session.kind === 'nothing-declared') {
+    if (aggregate) io.err(`Nothing to show for "${aggregate}".\n`);
+    return 0;
+  }
   const outcomes = session.results.map((result) => result.diagram(aggregate));
   const failures = failuresAmong(outcomes);
   reportInternalErrors(failures, io);
