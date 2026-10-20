@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks/rules';
-import { LIFECYCLE_RULES } from '../../src/analyzers/lifecycle/checks/rules';
-
-const ALL_RULES = [...LIFECYCLE_RULES, ...EVENT_FLOW_RULES];
+import { ALL_RULES } from '../helpers/rules';
 
 describe('rule list', () => {
   it('gives every rule a distinct id across analyzers', () => {

@@ -101,60 +101,170 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
               "id": "terminal-state-leak",
               "shortDescription": {
                 "text": "A method can change an aggregate after it reached a terminal state."
+              },
+              "fullDescription": {
+                "text": "A public method has no guard that stops it once a state field holds a declared terminal value, so it can still change an aggregate that is meant to be finished. A cancelled order that can still be shipped, or a closed account that still takes deposits, is a broken business rule."
+              },
+              "help": {
+                "text": "Guard the method with an early return or throw on the state field so it cannot run from the terminal value. If changing a finished aggregate is intended, as for a remove method, list the method in allowAfterTerminal in domain.config.ts. Accept the finding into the baseline only while it is a known defect you mean to fix.",
+                "markdown": "Guard the method with an early return or throw on the state field so it cannot run from the terminal value. If changing a finished aggregate is intended, as for a remove method, list the method in allowAfterTerminal in domain.config.ts. Accept the finding into the baseline only while it is a known defect you mean to fix.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#terminal-state-leak)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#terminal-state-leak",
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
               "id": "unreachable-state",
               "shortDescription": {
                 "text": "A declared state value is never assigned."
+              },
+              "fullDescription": {
+                "text": "A value of the state field type is never assigned anywhere in the analysed code, so no aggregate can ever reach it. Either the method that should move the aggregate into that state is missing, or the type carries a value that no longer means anything."
+              },
+              "help": {
+                "text": "Add the method that moves the aggregate into that value, or remove the value from the type. Accept the finding into the baseline only if the value is honestly set by code the analysis cannot see, such as a database write.",
+                "markdown": "Add the method that moves the aggregate into that value, or remove the value from the type. Accept the finding into the baseline only if the value is honestly set by code the analysis cannot see, such as a database write.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#unreachable-state)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#unreachable-state",
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
               "id": "outside-mutation",
               "shortDescription": {
                 "text": "Aggregate state is assigned outside the aggregate."
+              },
+              "fullDescription": {
+                "text": "A state field is assigned from code outside the aggregate, such as a service, mapper or specification, so the aggregate's guards and transitions are bypassed. A write through the aggregate's own setter is not reported, and neither are assignments in test files unless reportTestFileMutations is true."
+              },
+              "help": {
+                "text": "Move the change into a method on the aggregate so its guards apply, and call that method instead. Accept the finding into the baseline only if the assignment honestly has to stay where it is, such as a persistence mapper that rebuilds a stored aggregate.",
+                "markdown": "Move the change into a method on the aggregate so its guards apply, and call that method instead. Accept the finding into the baseline only if the assignment honestly has to stay where it is, such as a persistence mapper that rebuilds a stored aggregate.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#outside-mutation)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#outside-mutation",
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
               "id": "transition-drift",
               "shortDescription": {
                 "text": "A method can run from states its declared transition does not allow, or sets the state field without a declared transition."
+              },
+              "fullDescription": {
+                "text": "A method can run from states that its entry in transitions does not list, or it sets the state field while transitions has no entry for it. The code then allows more than the declared lifecycle, so the declaration no longer describes what the aggregate does."
+              },
+              "help": {
+                "text": "Add a guard that excludes the extra states, or, if the code is right, add those states to the method's entry in transitions in domain.config.ts, or add an entry for a method that has none. Accept the finding into the baseline only while it is a known defect you mean to fix.",
+                "markdown": "Add a guard that excludes the extra states, or, if the code is right, add those states to the method's entry in transitions in domain.config.ts, or add an entry for a method that has none. Accept the finding into the baseline only while it is a known defect you mean to fix.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#transition-drift)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#transition-drift",
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
               "id": "transition-missing",
               "shortDescription": {
                 "text": "A method cannot run from a state its declared transition allows."
+              },
+              "fullDescription": {
+                "text": "A method's guard keeps it from running in a state that its entry in transitions lists, so the declaration promises a transition the code no longer offers. It is a warning: the code is not breaking a rule, but the declaration has drifted from it."
+              },
+              "help": {
+                "text": "Remove the state from the method's entry in transitions in domain.config.ts, or relax the guard if the method should still run from it. Accept the finding into the baseline only while it is a known gap you mean to resolve.",
+                "markdown": "Remove the state from the method's entry in transitions in domain.config.ts, or relax the guard if the method should still run from it. Accept the finding into the baseline only while it is a known gap you mean to resolve.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#transition-missing)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#transition-missing",
+              "defaultConfiguration": {
+                "level": "warning"
               }
             },
             {
               "id": "dead-handler",
               "shortDescription": {
                 "text": "A handler is registered for an event class that production code never constructs."
+              },
+              "fullDescription": {
+                "text": "A handler is registered for an event class that no production code constructs, so the handler never runs. Usually the event was never published where it happens, or it was removed and the handler was left behind."
+              },
+              "help": {
+                "text": "Publish the event where it happens, or delete the handler. Accept the finding into the baseline only if the event is honestly constructed by code the analysis cannot see, such as code outside the analysed files.",
+                "markdown": "Publish the event where it happens, or delete the handler. Accept the finding into the baseline only if the event is honestly constructed by code the analysis cannot see, such as code outside the analysed files.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#dead-handler)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#dead-handler",
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
               "id": "handler-payload-mismatch",
               "shortDescription": {
                 "text": "A handler is registered for one event class but declares its event as an unrelated class."
+              },
+              "fullDescription": {
+                "text": "A handler is registered for one event class but types its event parameter as an unrelated class. The handler is then handed an event of a different class than it expects."
+              },
+              "help": {
+                "text": "Type the parameter as the registered event class, or register the handler for the class it declares. Accept the finding into the baseline only while it is a known defect you mean to fix.",
+                "markdown": "Type the parameter as the registered event class, or register the handler for the class it declares. Accept the finding into the baseline only while it is a known defect you mean to fix.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#handler-payload-mismatch)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#handler-payload-mismatch",
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
               "id": "unhandled-event",
               "shortDescription": {
                 "text": "A declared in-process event is constructed but has no handler."
+              },
+              "fullDescription": {
+                "text": "An event class listed in events.inProcess is constructed in production code, but no handler is registered for it, so the event is raised and nothing reacts to it. It runs only for the classes declared in events.inProcess."
+              },
+              "help": {
+                "text": "Add a handler for the event, or, if it is consumed elsewhere, such as by another process, remove it from events.inProcess in domain.config.ts. Accept the finding into the baseline only while it is a known gap you mean to close.",
+                "markdown": "Add a handler for the event, or, if it is consumed elsewhere, such as by another process, remove it from events.inProcess in domain.config.ts. Accept the finding into the baseline only while it is a known gap you mean to close.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#unhandled-event)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#unhandled-event",
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
               "id": "saga-missing-failure-path",
               "shortDescription": {
                 "text": "A saga handles the success event of a declared outcome but not its failure event."
+              },
+              "fullDescription": {
+                "text": "A saga declared with saga() handles the success event of a declared outcome but not its failure event, so a failure leaves the process stuck halfway with nothing to compensate. It runs only for sagas and outcomes declared in events.sagas."
+              },
+              "help": {
+                "text": "Handle the failure event in the saga, for example with a compensating command. If the outcome is declared wrongly, correct it in events.sagas in domain.config.ts. Accept the finding into the baseline only if the failure is honestly handled somewhere the analysis cannot see.",
+                "markdown": "Handle the failure event in the saga, for example with a compensating command. If the outcome is declared wrongly, correct it in events.sagas in domain.config.ts. Accept the finding into the baseline only if the failure is honestly handled somewhere the analysis cannot see.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#saga-missing-failure-path)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#saga-missing-failure-path",
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
               "id": "undispatched-events",
               "shortDescription": {
                 "text": "An event method stores events in a buffer that production code never reads or drains."
+              },
+              "fullDescription": {
+                "text": "An event method pushes events onto a private buffer that no production code reads or drains, so every event raised into it is silently lost. It is reported only when the analysis can prove that nothing reads the buffer."
+              },
+              "help": {
+                "text": "Dispatch the events in the buffer after saving the aggregate and clear it, or stop raising them. Accept the finding into the baseline only if the buffer is honestly read by code the analysis cannot see, such as reflection or library code.",
+                "markdown": "Dispatch the events in the buffer after saving the aggregate and clear it, or stop raising them. Accept the finding into the baseline only if the buffer is honestly read by code the analysis cannot see, such as reflection or library code.\\n\\n[Rule reference](https://github.com/mannkostir/domain-integrity#undispatched-events)"
+              },
+              "helpUri": "https://github.com/mannkostir/domain-integrity#undispatched-events",
+              "defaultConfiguration": {
+                "level": "error"
               }
             }
           ]
@@ -163,9 +273,10 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
       "results": [
         {
           "ruleId": "undispatched-events",
+          "ruleIndex": 9,
           "level": "error",
           "message": {
-            "text": "Undispatched.events collects events from addEvent() raised by Undispatched, but no production code reads or drains it, so those events never reach a handler. Fix: Dispatch the events in events after saving the aggregate and clear it, or stop raising them."
+            "text": "Undispatched.events collects events from addEvent() raised by Undispatched, but no production code reads or drains it, so those events never reach a handler."
           },
           "locations": [
             {
@@ -178,13 +289,20 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "undispatched-events|Undispatched|events|"
+          },
+          "properties": {
+            "fix": "Dispatch the events in events after saving the aggregate and clear it, or stop raising them."
+          }
         },
         {
           "ruleId": "dead-handler",
+          "ruleIndex": 5,
           "level": "error",
           "message": {
-            "text": "RefundHandler.handle handles RefundIssued, but no production code constructs RefundIssued. Fix: Publish RefundIssued where it happens, or delete the handler."
+            "text": "RefundHandler.handle handles RefundIssued, but no production code constructs RefundIssued."
           },
           "locations": [
             {
@@ -197,13 +315,20 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "dead-handler|RefundIssued|RefundHandler.handle|"
+          },
+          "properties": {
+            "fix": "Publish RefundIssued where it happens, or delete the handler."
+          }
         },
         {
           "ruleId": "handler-payload-mismatch",
+          "ruleIndex": 6,
           "level": "error",
           "message": {
-            "text": "OrderPlacedHandler.handle is registered for OrderPlaced but declares its event as PaymentCaptured. Fix: Type the parameter as OrderPlaced, or register the handler for PaymentCaptured."
+            "text": "OrderPlacedHandler.handle is registered for OrderPlaced but declares its event as PaymentCaptured."
           },
           "locations": [
             {
@@ -216,13 +341,20 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "handler-payload-mismatch|OrderPlaced|OrderPlacedHandler.handle|PaymentCaptured"
+          },
+          "properties": {
+            "fix": "Type the parameter as OrderPlaced, or register the handler for PaymentCaptured."
+          }
         },
         {
           "ruleId": "unhandled-event",
+          "ruleIndex": 7,
           "level": "error",
           "message": {
-            "text": "Shipped is declared in-process and constructed, but no handler is registered for it. Fix: Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere."
+            "text": "Shipped is declared in-process and constructed, but no handler is registered for it."
           },
           "locations": [
             {
@@ -235,13 +367,20 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "unhandled-event|Shipped||"
+          },
+          "properties": {
+            "fix": "Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere."
+          }
         },
         {
           "ruleId": "saga-missing-failure-path",
+          "ruleIndex": 8,
           "level": "error",
           "message": {
-            "text": "OrderSaga handles PaymentCaptured but not its declared failure PaymentFailed. Fix: Handle PaymentFailed in OrderSaga, for example with a compensating command."
+            "text": "OrderSaga handles PaymentCaptured but not its declared failure PaymentFailed."
           },
           "locations": [
             {
@@ -254,7 +393,13 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
                 }
               }
             }
-          ]
+          ],
+          "partialFingerprints": {
+            "domainIntegrity/v1": "saga-missing-failure-path|PaymentFailed|OrderSaga|PaymentCaptured"
+          },
+          "properties": {
+            "fix": "Handle PaymentFailed in OrderSaga, for example with a compensating command."
+          }
         }
       ]
     }

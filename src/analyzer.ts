@@ -76,7 +76,13 @@ export type DiagramOutcome = AnalyzerDiagram | AnalyzerFailure;
 
 export type SummaryOutcome = { readonly kind: 'summary'; readonly text: string } | AnalyzerFailure;
 
-export type RuleDescription<Id extends string = string> = { readonly id: Id; readonly severity: Severity; readonly description: string };
+export type RuleDescription<Id extends string = string> = {
+  readonly id: Id;
+  readonly severity: Severity;
+  readonly description: string;
+  readonly explanation: string;
+  readonly remedy: string;
+};
 
 export type ReportedRule<Id extends string> = { readonly checkId: Id; readonly severity: Severity };
 

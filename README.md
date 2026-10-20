@@ -143,11 +143,11 @@ In an existing config the names are added: to `AggregateRoot` and `Entity` when 
 
 | Check | Catches |
 |---|---|
-| `terminal-state-leak` | A public method that can still change the aggregate after it reached a terminal state |
-| `unreachable-state` | A state your type declares but no code ever assigns |
-| `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. Assignments in test files are not reported by default. |
-| `transition-drift` | A method that can run from states you did not declare, or that sets the state field without an entry in `transitions` |
-| `transition-missing` | A method that can no longer run from a state you declared for it. A warning. |
+| [`terminal-state-leak`](#terminal-state-leak) | A public method that can still change the aggregate after it reached a terminal state |
+| [`unreachable-state`](#unreachable-state) | A state your type declares but no code ever assigns |
+| [`outside-mutation`](#outside-mutation) | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. Assignments in test files are not reported by default. |
+| [`transition-drift`](#transition-drift) | A method that can run from states you did not declare, or that sets the state field without an entry in `transitions` |
+| [`transition-missing`](#transition-missing) | A method that can no longer run from a state you declared for it. A warning. |
 
 All lifecycle checks are errors except `transition-missing`, which is a warning.
 
@@ -155,11 +155,11 @@ Five more checks cover in-process event flows. All of them are errors:
 
 | Check | Catches |
 |---|---|
-| `dead-handler` | A handler is registered for an event class that production code never constructs |
-| `handler-payload-mismatch` | A handler is registered for one event class but declares its event as an unrelated class |
-| `unhandled-event` | A declared in-process event is constructed but has no handler |
-| `saga-missing-failure-path` | A saga handles the success event of a declared outcome but not its failure event |
-| `undispatched-events` | An event method stores events in a buffer that production code never reads or drains |
+| [`dead-handler`](#dead-handler) | A handler is registered for an event class that production code never constructs |
+| [`handler-payload-mismatch`](#handler-payload-mismatch) | A handler is registered for one event class but declares its event as an unrelated class |
+| [`unhandled-event`](#unhandled-event) | A declared in-process event is constructed but has no handler |
+| [`saga-missing-failure-path`](#saga-missing-failure-path) | A saga handles the success event of a declared outcome but not its failure event |
+| [`undispatched-events`](#undispatched-events) | An event method stores events in a buffer that production code never reads or drains |
 
 Every check has one severity. An error is a broken rule: any error finding not in the baseline makes `check` exit `1`. A warning is a declaration that no longer matches the code, such as a transition no method can take any more: it is reported in every format, but a run whose only new findings are warnings still exits `0`. SARIF results carry the severity as their `level`.
 
@@ -194,6 +194,68 @@ npx domain-integrity check -p tsconfig.domain.json
 
 In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.spec.json`, which brings its tests in. Keeping it no longer produces `outside-mutation` findings by default, since its tests only count as evidence. Pass a tsconfig that references only the `tsconfig.lib.json` and `tsconfig.app.json` files to leave them out entirely.
 
+### Rule reference
+
+#### terminal-state-leak
+
+A public method has no guard that stops it once a state field holds a declared terminal value, so it can still change an aggregate that is meant to be finished. A cancelled order that can still be shipped, or a closed account that still takes deposits, is a broken business rule.
+
+Guard the method with an early return or throw on the state field so it cannot run from the terminal value. If changing a finished aggregate is intended, as for a remove method, list the method in `allowAfterTerminal` in `domain.config.ts`. Accept the finding into the baseline only while it is a known defect you mean to fix.
+
+#### unreachable-state
+
+A value of the state field type is never assigned anywhere in the analysed code, so no aggregate can ever reach it. Either the method that should move the aggregate into that state is missing, or the type carries a value that no longer means anything.
+
+Add the method that moves the aggregate into that value, or remove the value from the type. Accept the finding into the baseline only if the value is honestly set by code the analysis cannot see, such as a database write.
+
+#### outside-mutation
+
+A state field is assigned from code outside the aggregate, such as a service, mapper or specification, so the aggregate's guards and transitions are bypassed. A write through the aggregate's own setter is not reported, and neither are assignments in test files unless `reportTestFileMutations` is true.
+
+Move the change into a method on the aggregate so its guards apply, and call that method instead. Accept the finding into the baseline only if the assignment honestly has to stay where it is, such as a persistence mapper that rebuilds a stored aggregate.
+
+#### transition-drift
+
+A method can run from states that its entry in `transitions` does not list, or it sets the state field while `transitions` has no entry for it. The code then allows more than the declared lifecycle, so the declaration no longer describes what the aggregate does.
+
+Add a guard that excludes the extra states, or, if the code is right, add those states to the method's entry in `transitions` in `domain.config.ts`, or add an entry for a method that has none. Accept the finding into the baseline only while it is a known defect you mean to fix.
+
+#### transition-missing
+
+A method's guard keeps it from running in a state that its entry in `transitions` lists, so the declaration promises a transition the code no longer offers. It is a warning: the code is not breaking a rule, but the declaration has drifted from it.
+
+Remove the state from the method's entry in `transitions` in `domain.config.ts`, or relax the guard if the method should still run from it. Accept the finding into the baseline only while it is a known gap you mean to resolve.
+
+#### dead-handler
+
+A handler is registered for an event class that no production code constructs, so the handler never runs. Usually the event was never published where it happens, or it was removed and the handler was left behind.
+
+Publish the event where it happens, or delete the handler. Accept the finding into the baseline only if the event is honestly constructed by code the analysis cannot see, such as code outside the analysed files.
+
+#### handler-payload-mismatch
+
+A handler is registered for one event class but types its event parameter as an unrelated class. The handler is then handed an event of a different class than it expects.
+
+Type the parameter as the registered event class, or register the handler for the class it declares. Accept the finding into the baseline only while it is a known defect you mean to fix.
+
+#### unhandled-event
+
+An event class listed in `events.inProcess` is constructed in production code, but no handler is registered for it, so the event is raised and nothing reacts to it. It runs only for the classes declared in `events.inProcess`.
+
+Add a handler for the event, or, if it is consumed elsewhere, such as by another process, remove it from `events.inProcess` in `domain.config.ts`. Accept the finding into the baseline only while it is a known gap you mean to close.
+
+#### saga-missing-failure-path
+
+A saga declared with `saga()` handles the success event of a declared outcome but not its failure event, so a failure leaves the process stuck halfway with nothing to compensate. It runs only for sagas and outcomes declared in `events.sagas`.
+
+Handle the failure event in the saga, for example with a compensating command. If the outcome is declared wrongly, correct it in `events.sagas` in `domain.config.ts`. Accept the finding into the baseline only if the failure is honestly handled somewhere the analysis cannot see.
+
+#### undispatched-events
+
+An event method pushes events onto a private buffer that no production code reads or drains, so every event raised into it is silently lost. It is reported only when the analysis can prove that nothing reads the buffer.
+
+Dispatch the events in the buffer after saving the aggregate and clear it, or stop raising them. Accept the finding into the baseline only if the buffer is honestly read by code the analysis cannot see, such as reflection or library code.
+
 ## Commands
 
 | Command | What it does |
@@ -207,7 +269,7 @@ Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfi
 
 `--version`, or `-V`, prints the version and exits `0`.
 
-The JSON report of `check` has a top-level `tool` with `name` and `version`, next to `findings`, `known` and `problems`. The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`.
+The JSON report of `check` has a top-level `tool` with `name` and `version`, next to `findings`, `known` and `problems`. The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`. Each SARIF result names its rule by `ruleId` and `ruleIndex`, carries the finding's message as `message.text` and its fix in `properties.fix`, and has a `partialFingerprints` entry `domainIntegrity/v1` holding its baseline key. With `--baseline`, known findings follow the new ones as results with an `external` suppression; they never affect the exit code.
 
 If one analyzer crashes, the command prints `internal error in <analyzer>, please report (domain-integrity <version>)` with a short stack trace, still prints the other analyzers' results, and exits `2`; `--update-baseline` and `context --write` then write nothing.
 
@@ -238,6 +300,8 @@ Before 0.3.0, `transition-missing` findings were reported as `transition-drift` 
 
 Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|` and carry `owner`, `ownerId`, `buffer`, `method` and `raisers` instead.
 
+The SARIF report still carries baselined findings, as results with an `external` suppression, so code scanning does not see them disappear and close their alerts as fixed.
+
 ## CI
 
 ```yaml
@@ -264,6 +328,10 @@ jobs:
 ```
 
 Findings appear as code-scanning alerts on the pull request, and the job fails when `check` does.
+
+Every result carries the `domainIntegrity/v1` fingerprint, its baseline key, which identifies a finding across runs without its line number; a change to the key format would come with a new fingerprint version. GitHub code scanning itself matches alerts by the `primaryLocationLineHash` fingerprint that the upload step adds. With `baseline` set, known findings are uploaded as suppressed results instead of being left out, so code scanning does not close their alerts as fixed; they never fail the job.
+
+GitHub's SARIF reference does not list `suppressions` among the properties code scanning uses, and uploaded suppressed results have been reported to appear as open alerts, so on GitHub baselined findings may show as open. Tools that honour SARIF suppressions treat them as suppressed. To dismiss them on GitHub, add the [`advanced-security/dismiss-alerts`](https://github.com/advanced-security/dismiss-alerts) action after the upload; it reads the suppressions from the SARIF report.
 
 | Input | Default | Meaning |
 | --- | --- | --- |

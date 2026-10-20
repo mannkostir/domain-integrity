@@ -13,7 +13,7 @@ const fail = (): never => {
 
 const healthy: Analyzer<string, never> = {
   id: 'fake',
-  rules: [{ id: 'terminal-state-leak', severity: 'error', description: 'a fake rule' }],
+  rules: [{ id: 'terminal-state-leak', severity: 'error', description: 'a fake rule', explanation: 'E', remedy: 'R' }],
   extract: () => 'model',
   problems: (model) => [`problem in ${model}`],
   suggest: () => [],
@@ -30,7 +30,7 @@ describe('analyse', () => {
     const lifecycleOnly: Analyzer<string, never, LifecycleFinding> = {
       ...healthy,
       // @ts-expect-error
-      rules: [{ id: 'dead-handler', severity: 'error', description: 'an event-flow rule' }],
+      rules: [{ id: 'dead-handler', severity: 'error', description: 'an event-flow rule', explanation: 'E', remedy: 'R' }],
       check: () => [],
     };
 
@@ -108,6 +108,6 @@ describe('analyse', () => {
 
 describe('reportedUnder', () => {
   it('takes the check id and severity of a finding from its rule', () => {
-    expect(reportedUnder({ id: 'fake-rule', severity: 'warning', description: 'a fake rule' })).toEqual({ checkId: 'fake-rule', severity: 'warning' });
+    expect(reportedUnder({ id: 'fake-rule', severity: 'warning', description: 'a fake rule', explanation: 'E', remedy: 'R' })).toEqual({ checkId: 'fake-rule', severity: 'warning' });
   });
 });

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
 import { MANIFEST } from '../helpers/manifest';
+import { ALL_RULES } from '../helpers/rules';
+import { parseSarif } from '../helpers/sarif-log';
 
 const OUTSIDE_SPEC = fileURLToPath(new URL('../fixtures/outside-spec', import.meta.url));
 
@@ -47,5 +49,25 @@ describe('tool version', () => {
     const { stdout } = await runIn(['check', '--format', 'sarif']);
 
     expect(JSON.parse(stdout).runs[0].tool.driver.informationUri).toBe(MANIFEST.homepage);
+  });
+});
+
+const ruleReference = (ruleId: string): string => {
+  const reference = new URL(MANIFEST.homepage);
+  reference.hash = ruleId;
+  return reference.href;
+};
+
+const byId = (left: { readonly id: string }, right: { readonly id: string }): number => left.id.localeCompare(right.id);
+
+describe('SARIF rule reference links', () => {
+  it('links every SARIF rule to its entry in the package rule reference', async () => {
+    const { stdout } = await runIn(['check', '--format', 'sarif']);
+
+    const rules = parseSarif(stdout).runs.flatMap((sarifRun) => sarifRun.tool.driver.rules);
+
+    expect(rules.map((rule) => ({ id: rule.id, helpUri: rule.helpUri })).sort(byId)).toEqual(
+      ALL_RULES.map((rule) => ({ id: rule.id, helpUri: ruleReference(rule.id) })).sort(byId),
+    );
   });
 });
