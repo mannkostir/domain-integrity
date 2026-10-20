@@ -6,7 +6,7 @@ import { UsageError } from '../engine/errors';
 import { baselineKeys, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
 import { formatJson } from '../report/json';
 import { formatSarif } from '../report/sarif';
-import { AppliedBaseline, Report, formatText } from '../report/text';
+import { Report, formatText } from '../report/text';
 import { ToolIdentity } from '../report/tool';
 import { guardedRead, writeText } from './files';
 import { reportInternalErrors } from './internal-errors';
@@ -66,11 +66,6 @@ const baselinePathFor = (options: CheckOptions, io: Io): string | undefined => {
 
 const isComplete = ({ problems, failures }: Outcome): boolean => problems.length === 0 && failures.length === 0;
 
-const appliedBaseline = (path: string, baseline: ReadonlySet<string>, outcome: Outcome, io: Io): AppliedBaseline => ({
-  path: relative(io.cwd, path),
-  stale: isComplete(outcome) ? staleEntries(outcome.findings, baseline) : [],
-});
-
 export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyzers: readonly AnalyzerRun[]): number => {
   const format = formatterFor(options);
   const { results } = openSession(paths, analyzers);
@@ -86,8 +81,10 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath)) : new Set<string>();
   const { fresh, known } = partitionByBaseline(outcome.findings, baseline);
   const rules = results.flatMap((result) => result.rules);
-  const applied = baselinePath ? { baseline: appliedBaseline(baselinePath, baseline, outcome, io) } : {};
+  const complete = isComplete(outcome);
+  const stale = complete ? staleEntries(outcome.findings, baseline) : [];
+  const applied = baselinePath ? { baseline: { path: relative(io.cwd, baselinePath), stale } } : {};
   io.out(format({ fresh, known, problems: outcome.problems, rules, root: paths.root, ...applied }, toolIdentity()));
-  if (!isComplete(outcome)) return 2;
+  if (!complete) return 2;
   return fresh.some((finding) => finding.severity === 'error') ? 1 : 0;
 };
