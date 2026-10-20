@@ -25,9 +25,10 @@ const recognisedHandlers = (declaration: DomainDeclaration): string =>
 
 export const noAggregatesFound = (declaration: DomainDeclaration): string => `${NO_AGGREGATES} ${searchedBaseClasses(declaration)}`;
 
-const nothingFoundMessage = (declaration: DomainDeclaration, fileCount: number): string =>
+const nothingFoundMessage = (declaration: DomainDeclaration, fileCount: number, problems: readonly string[]): string =>
   [
     loadedSourceFiles(fileCount),
+    ...problems.map((problem) => `problem: ${problem}`),
     NO_AGGREGATES,
     searchedBaseClasses(declaration),
     SET_BASE_CLASSES,
@@ -54,7 +55,7 @@ export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[]): Se
   const files = analysedSourceFiles(project, configFile);
   const results = runAnalyzers({ declaration, files, root: paths.root, configFile }, analyzers);
   const scope = runScope(results.map((result) => result.scope));
-  if (scope === 'nothing-found') throw new ProjectError(nothingFoundMessage(declaration, files.length));
+  if (scope === 'nothing-found') throw new ProjectError(nothingFoundMessage(declaration, files.length, results.flatMap((result) => result.problems)));
   if (scope === 'nothing-declared') return { kind: 'nothing-declared', results, notice: nothingDeclaredNotice(paths.config, files.length) };
   return { kind: 'checkable', results };
 };

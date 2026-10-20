@@ -7,10 +7,16 @@ const EMPTY_CONFIG = "import { defineDomain } from 'domain-integrity';\nexport d
 
 const NOTHING_DECLARED_CONFIG = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ lifecycles: [] });\n";
 
+const OUTSIDE_EVENT_CONFIG = "import { defineDomain } from 'domain-integrity';\nimport { Paid } from './events/paid';\nexport default defineDomain({ events: { inProcess: [Paid] } });\n";
+
+const OUTSIDE_EVENT_PROBLEM = 'problem: "Paid" is declared in events but is not in the analysed files.';
+
 const PROJECTS = {
   'no source files': () => writeProject({ 'domain.config.ts': EMPTY_CONFIG }),
   'no aggregates and no event handlers': () => writeProject({ 'src/empty.ts': 'export const nothing = 1;\n', 'domain.config.ts': EMPTY_CONFIG }),
   'nothing declared': () => writeProject({ ...TICKET_SOURCES, 'domain.config.ts': NOTHING_DECLARED_CONFIG }),
+  'an event declared outside the analysed files': () =>
+    writeProject({ 'src/empty.ts': 'export const nothing = 1;\n', 'events/paid.ts': 'export class Paid {}\n', 'domain.config.ts': OUTSIDE_EVENT_CONFIG }),
 } satisfies Readonly<Record<string, () => string>>;
 
 type ProjectName = keyof typeof PROJECTS;
@@ -61,6 +67,37 @@ describe('a project with nothing to check', () => {
         '',
       ].join('\n'),
     );
+  });
+
+  it('names the problems of the analysers when it finds nothing', async () => {
+    const { io, stderr } = captureIo(projectFor('an event declared outside the analysed files'));
+    await run(['check'], io);
+
+    expect(stderr()).toBe(
+      [
+        'Loaded 1 source file.',
+        OUTSIDE_EVENT_PROBLEM,
+        'No aggregates found.',
+        'Searched for classes extending or implementing: AggregateRoot, Entity.',
+        `Set "aggregateBaseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregateBaseClasses: ['MyAggregateBase'] })`,
+        'No event handlers were found either.',
+        'Recognised handlers use the decorators EventsHandler, OnEvent (set "events.handlerDecorators" for your own), the methods register (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it.each(['check', 'show', 'context'])('exits 2 for %s when it finds nothing but an analyser problem', async (command) => {
+    const { io } = captureIo(projectFor('an event declared outside the analysed files'));
+
+    expect(await run([command], io)).toBe(2);
+  });
+
+  it.each(['check', 'show', 'context'])('names the analyser problem for %s when it finds nothing', async (command) => {
+    const { io, stderr } = captureIo(projectFor('an event declared outside the analysed files'));
+    await run([command], io);
+
+    expect(stderr()).toContain(OUTSIDE_EVENT_PROBLEM);
   });
 
   it('notices that the config declares nothing to check', async () => {
