@@ -1,8 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { EventFlowFinding, Finding } from '../../src/analyzer';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
+
+const PACKAGE_VERSION: string = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+
+const withoutPackageVersion = (report: string): string => report.replace(`"version": "${PACKAGE_VERSION}"`, '"version": "<package version>"');
 
 const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
@@ -110,7 +115,7 @@ describe('fixture projects', () => {
   });
 
   it('event-flows: sarif report', async () => {
-    expect(await output('event-flows', ['check', '--format', 'sarif'])).toMatchSnapshot();
+    expect(withoutPackageVersion(await output('event-flows', ['check', '--format', 'sarif']))).toMatchSnapshot();
   });
 
   it('event-flows: diagram', async () => {

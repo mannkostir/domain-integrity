@@ -1,8 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ToolIdentity } from '../report/tool';
 
 const PACKAGE_NAME = 'domain-integrity';
+
+const HOMEPAGE = 'https://github.com/mannkostir/domain-integrity#readme';
 
 const UNKNOWN_VERSION = 'unknown version';
 
@@ -33,3 +36,5 @@ const versionAbove = (directory: string): string => {
 };
 
 export const packageVersion = (): string => versionAbove(dirname(fileURLToPath(import.meta.url)));
+
+export const toolIdentity = (): ToolIdentity => ({ name: PACKAGE_NAME, version: packageVersion(), informationUri: HOMEPAGE });

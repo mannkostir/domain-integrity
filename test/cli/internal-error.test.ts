@@ -6,10 +6,12 @@ import { AnalysisInput, Analyzer, analyse } from '../../src/analyzer';
 import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
 import { UsageError } from '../../src/engine/errors';
-import { packageVersion } from '../../src/cli/version';
+import { packageVersion, toolIdentity } from '../../src/cli/version';
 import { TICKET_PROJECT, captureIo, writeProject } from '../helpers/disk';
 
-const PACKAGE_VERSION: string = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+const MANIFEST: { readonly version: string; readonly homepage: string } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+
+const PACKAGE_VERSION = MANIFEST.version;
 
 const REPORT = `internal error in broken, please report (domain-integrity ${PACKAGE_VERSION})`;
 
@@ -150,5 +152,11 @@ describe('an analyzer that throws', () => {
 describe('packageVersion', () => {
   it('reads the version of the domain-integrity package', () => {
     expect(packageVersion()).toBe(PACKAGE_VERSION);
+  });
+});
+
+describe('toolIdentity', () => {
+  it('identifies the package by name, version and homepage', () => {
+    expect(toolIdentity()).toEqual({ name: 'domain-integrity', version: PACKAGE_VERSION, informationUri: MANIFEST.homepage });
   });
 });

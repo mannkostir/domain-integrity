@@ -6,10 +6,12 @@ import { partitionByBaseline, readBaseline, serializeBaseline } from '../report/
 import { formatJson } from '../report/json';
 import { formatSarif } from '../report/sarif';
 import { Report, formatText } from '../report/text';
+import { ToolIdentity } from '../report/tool';
 import { guardedRead, writeText } from './files';
 import { reportInternalErrors } from './internal-errors';
 import { Io, Paths } from './io';
 import { openSession } from './session';
+import { toolIdentity } from './version';
 
 export type CheckOptions = {
   readonly format: string;
@@ -17,7 +19,7 @@ export type CheckOptions = {
   readonly updateBaseline?: boolean;
 };
 
-const FORMATTERS: Readonly<Record<string, (report: Report) => string>> = {
+const FORMATTERS: Readonly<Record<string, (report: Report, tool: ToolIdentity) => string>> = {
   text: formatText,
   json: formatJson,
   sarif: formatSarif,
@@ -25,7 +27,7 @@ const FORMATTERS: Readonly<Record<string, (report: Report) => string>> = {
 
 const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
 
-const formatterFor = (format: string): ((report: Report) => string) => {
+const formatterFor = (format: string): ((report: Report, tool: ToolIdentity) => string) => {
   const formatter = FORMATTERS[format];
   if (!formatter) throw new UsageError(`Unknown format "${format}". Use one of: ${Object.keys(FORMATTERS).join(', ')}.`);
   return formatter;
@@ -66,7 +68,7 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   const baselinePath = options.baseline ? resolve(io.cwd, options.baseline) : undefined;
   const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath)) : new Set<string>();
   const { fresh, known } = partitionByBaseline(outcome.findings, baseline);
-  io.out(format({ fresh, known, problems: outcome.problems, rules: results.flatMap((result) => result.rules), root: paths.root }));
+  io.out(format({ fresh, known, problems: outcome.problems, rules: results.flatMap((result) => result.rules), root: paths.root }, toolIdentity()));
   if (outcome.problems.length > 0 || outcome.failures.length > 0) return 2;
   return fresh.some((finding) => finding.severity === 'error') ? 1 : 0;
 };

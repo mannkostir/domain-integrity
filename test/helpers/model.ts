@@ -11,6 +11,7 @@ import {
   Visibility,
   WrittenAlongside,
 } from '../../src/analyzers/lifecycle/model';
+import { ToolIdentity } from '../../src/report/tool';
 
 export const stateField = (name: string, kind: StateFieldKind, tokens: readonly string[]): StateField => ({
   name,
@@ -144,3 +145,5 @@ export const bufferFinding = (overrides: Partial<EventBufferFinding> = {}): Even
 
 export const lifecycleFindings = (findings: readonly Finding[]): LifecycleFinding[] =>
   findings.filter((candidate): candidate is LifecycleFinding => candidate.analyzer === 'lifecycle');
+
+export const TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.3', informationUri: 'https://example.test' };
