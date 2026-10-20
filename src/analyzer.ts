@@ -21,8 +21,11 @@ type FindingCore = {
   readonly fix: string;
 };
 
+export type LifecycleCheckId = 'terminal-state-leak' | 'unreachable-state' | 'outside-mutation' | 'transition-drift' | 'transition-missing';
+
 export type LifecycleFinding = FindingCore & {
   readonly analyzer: 'lifecycle';
+  readonly checkId: LifecycleCheckId;
   readonly aggregate: string;
   readonly aggregateId: string;
   readonly method: string | undefined;
@@ -73,11 +76,15 @@ export type DiagramOutcome = AnalyzerDiagram | AnalyzerFailure;
 
 export type SummaryOutcome = { readonly kind: 'summary'; readonly text: string } | AnalyzerFailure;
 
-export type RuleDescription = { readonly id: string; readonly description: string };
+export type RuleDescription<Id extends string = string> = { readonly id: Id; readonly severity: Severity; readonly description: string };
+
+export type ReportedRule<Id extends string> = { readonly checkId: Id; readonly severity: Severity };
+
+export const reportedUnder = <Id extends string>(rule: RuleDescription<Id>): ReportedRule<Id> => ({ checkId: rule.id, severity: rule.severity });
 
 export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
   readonly id: string;
-  readonly rules: readonly RuleDescription[];
+  readonly rules: readonly RuleDescription<Produced['checkId']>[];
   readonly extract: (input: AnalysisInput) => Model;
   readonly problems: (model: Model) => readonly string[];
   readonly suggest: (model: Model) => readonly Suggestion[];

@@ -1,6 +1,7 @@
-import { HandlerFinding } from '../../../analyzer';
+import { HandlerFinding, reportedUnder } from '../../../analyzer';
 import { EventClassModel, EventFlowModel, Registration } from '../model';
 import { handlerLabel, nameOf } from './handler-label';
+import { DEAD_HANDLER } from './rules';
 
 const isDead = (event: EventClassModel): boolean =>
   event.constructions.length === 0 && !event.abstract && !event.subclassed && !event.escaped;
@@ -10,8 +11,7 @@ const toFinding = (model: EventFlowModel, registration: Registration): HandlerFi
   const handler = handlerLabel(registration);
   return {
     analyzer: 'event-flow',
-    checkId: 'dead-handler',
-    severity: 'error',
+    ...reportedUnder(DEAD_HANDLER),
     event,
     eventId: registration.event,
     handler,

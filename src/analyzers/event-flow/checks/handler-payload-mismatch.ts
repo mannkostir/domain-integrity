@@ -1,6 +1,7 @@
-import { HandlerFinding } from '../../../analyzer';
+import { HandlerFinding, reportedUnder } from '../../../analyzer';
 import { EventFlowModel, Registration } from '../model';
 import { acceptedIds, handlerLabel, nameOf } from './handler-label';
+import { HANDLER_PAYLOAD_MISMATCH } from './rules';
 
 export const handlerPayloadMismatch = (model: EventFlowModel): HandlerFinding[] =>
   model.registrations.flatMap((registration: Registration): HandlerFinding[] => {
@@ -14,8 +15,7 @@ export const handlerPayloadMismatch = (model: EventFlowModel): HandlerFinding[] 
     return [
       {
         analyzer: 'event-flow',
-        checkId: 'handler-payload-mismatch',
-        severity: 'error',
+        ...reportedUnder(HANDLER_PAYLOAD_MISMATCH),
         event,
         eventId: registration.event,
         handler,

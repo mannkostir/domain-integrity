@@ -1,6 +1,7 @@
-import { HandlerFinding } from '../../../analyzer';
+import { HandlerFinding, reportedUnder } from '../../../analyzer';
 import { EventClassModel, EventFlowModel, Location, UnresolvedSite } from '../model';
 import { acceptedIds, nameOf } from './handler-label';
+import { UNHANDLED_EVENT } from './rules';
 
 const byPosition = (a: Location, b: Location): number => a.file.localeCompare(b.file) || a.line - b.line;
 
@@ -31,8 +32,7 @@ export const unhandledEvent = (model: EventFlowModel): HandlerFinding[] => {
     return [
       {
         analyzer: 'event-flow',
-        checkId: 'unhandled-event',
-        severity: 'error',
+        ...reportedUnder(UNHANDLED_EVENT),
         event: name,
         eventId: id,
         handler: undefined,

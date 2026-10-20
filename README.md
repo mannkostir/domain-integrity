@@ -146,7 +146,10 @@ In an existing config the names are added: to `AggregateRoot` and `Entity` when 
 | `terminal-state-leak` | A public method that can still change the aggregate after it reached a terminal state |
 | `unreachable-state` | A state your type declares but no code ever assigns |
 | `outside-mutation` | State assigned from outside the aggregate, for example from a service, mapper or specification. A write through the aggregate's own setter is not one. Assignments in test files are not reported by default. |
-| `transition-drift` | A method that can run from states you did not declare (error), or no longer from states you did (warning) |
+| `transition-drift` | A method that can run from states you did not declare, or that sets the state field without an entry in `transitions` |
+| `transition-missing` | A method that can no longer run from a state you declared for it. A warning. |
+
+All lifecycle checks are errors except `transition-missing`, which is a warning.
 
 Five more checks cover in-process event flows. All of them are errors:
 
@@ -157,6 +160,8 @@ Five more checks cover in-process event flows. All of them are errors:
 | `unhandled-event` | A declared in-process event is constructed but has no handler |
 | `saga-missing-failure-path` | A saga handles the success event of a declared outcome but not its failure event |
 | `undispatched-events` | An event method stores events in a buffer that production code never reads or drains |
+
+Every check has one severity. An error is a broken rule: any error finding not in the baseline makes `check` exit `1`. A warning is a declaration that no longer matches the code, such as a transition no method can take any more: it is reported in every format, but a run whose only new findings are warnings still exits `0`. SARIF results carry the severity as their `level`.
 
 `dead-handler` and `handler-payload-mismatch` always run, and so does `undispatched-events` while `eventMethods` is non-empty. `unhandled-event` runs only for the classes listed in `events.inProcess`, and `saga-missing-failure-path` only for sagas declared with `saga()`. See "The declaration".
 
@@ -194,7 +199,7 @@ In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.sp
 | Command | What it does |
 |---|---|
 | `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. `--base-class` is repeatable and records each name in `aggregateBaseClasses`. In a new config the names replace `AggregateRoot` and `Entity`; to keep one, pass it too. In an existing config they are added to the defaults when it lists no base classes yet, to its list otherwise. |
-| `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean, `1` findings, `2` config, project or usage error, or an internal error. |
+| `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean or warnings only, `1` error findings, `2` config, project or usage error, or an internal error. |
 | `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents. |
 
@@ -227,7 +232,9 @@ npx domain-integrity check --baseline domain-integrity.baseline.json
 
 Baseline entries for lifecycle findings are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
 
-Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
+Each entry has the form `check|aggregate|method|field|subject`. The aggregate is its class name. When several aggregate classes share a class name, whether or not they are declared, each of them is written as `path:Class` instead, with the path relative to the tsconfig directory; a file outside that directory, such as a library reached through `paths`, appears as `../libs/…`, for example `terminal-state-leak|src/orders/order.ts:Order|annotate|status|CANCELLED`. A `transition-drift` entry ends in `extra` or `undeclared`, such as `transition-drift|Order|cancel|status|extra`, and a `transition-missing` entry in `missing`, such as `transition-missing|Order|place|status|missing`. An undeclared class counts too, such as a test double that extends your aggregate base class inside the tsconfig `include`. The JSON output carries the same identifier in `aggregateId`, next to the plain class name in `aggregate`. Adding such a class changes the existing aggregate's keys, and its known findings come back as new until you run `--update-baseline` again.
+
+Before 0.3.0, `transition-missing` findings were reported as `transition-drift` with the subject `missing`. A baseline written by an earlier version lists them under the old key, so they come back as new; run `--update-baseline` again to regenerate it.
 
 Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|` and carry `owner`, `ownerId`, `buffer`, `method` and `raisers` instead.
 

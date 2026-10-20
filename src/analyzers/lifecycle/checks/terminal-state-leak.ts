@@ -1,6 +1,7 @@
-import { LifecycleFinding } from '../../../analyzer';
+import { LifecycleFinding, reportedUnder } from '../../../analyzer';
 import { AggregateModel, FieldDeclaration, MethodModel, StateField } from '../model';
 import { fieldOf, quoted } from './format';
+import { TERMINAL_STATE_LEAK } from './rules';
 
 const leakFinding = (
   aggregate: AggregateModel,
@@ -9,8 +10,7 @@ const leakFinding = (
   leaked: readonly string[],
 ): LifecycleFinding => ({
   analyzer: 'lifecycle',
-  checkId: 'terminal-state-leak',
-  severity: 'error',
+  ...reportedUnder(TERMINAL_STATE_LEAK),
   aggregate: aggregate.name,
   aggregateId: aggregate.id,
   method: method.name,

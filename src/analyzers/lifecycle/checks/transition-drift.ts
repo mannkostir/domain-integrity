@@ -1,21 +1,33 @@
-import { LifecycleFinding, Severity } from '../../../analyzer';
+import { LifecycleFinding, RuleDescription, reportedUnder } from '../../../analyzer';
 import { AggregateModel, FieldBehaviour, MethodModel, StateField } from '../model';
 import { writesField } from '../values';
 import { fieldOf, quoted } from './format';
+import { TRANSITION_DRIFT, TRANSITION_MISSING } from './rules';
 
-type Drift = { readonly severity: Severity; readonly subject: string; readonly message: string; readonly fix: string };
+type Drift = {
+  readonly rule: RuleDescription<'transition-drift' | 'transition-missing'>;
+  readonly subject: string;
+  readonly message: string;
+  readonly fix: string;
+};
 
-const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodModel, drift: Drift): LifecycleFinding => ({
-  analyzer: 'lifecycle',
-  checkId: 'transition-drift',
-  aggregate: aggregate.name,
-  aggregateId: aggregate.id,
-  method: method.name,
-  field: field.name,
-  file: method.file,
-  line: method.line,
-  ...drift,
-});
+const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodModel, drift: Drift): LifecycleFinding => {
+  const { checkId, severity } = reportedUnder(drift.rule);
+  return {
+    analyzer: 'lifecycle',
+    checkId,
+    aggregate: aggregate.name,
+    aggregateId: aggregate.id,
+    method: method.name,
+    field: field.name,
+    file: method.file,
+    line: method.line,
+    severity,
+    subject: drift.subject,
+    message: drift.message,
+    fix: drift.fix,
+  };
+};
 
 const comparedWithDeclaration = (
   field: StateField,
@@ -31,7 +43,7 @@ const comparedWithDeclaration = (
     ...(extra.length > 0
       ? [
           {
-            severity: 'error' as const,
+            rule: TRANSITION_DRIFT,
             subject: 'extra',
             message: `${method.name}() can run from ${quoted(field, extra)}, which the declaration does not allow.`,
             fix: `Add a guard that excludes ${quoted(field, extra)}, or add ${extra.length === 1 ? 'it' : 'them'} to transitions.${method.name}.`,
@@ -41,7 +53,7 @@ const comparedWithDeclaration = (
     ...(missing.length > 0
       ? [
           {
-            severity: 'warning' as const,
+            rule: TRANSITION_MISSING,
             subject: 'missing',
             message: `${method.name}() cannot run from ${quoted(field, missing)}, although the declaration allows it.`,
             fix: `Remove ${quoted(field, missing)} from transitions.${method.name}, or relax the guard.`,
@@ -59,7 +71,7 @@ const driftOf = (field: StateField, method: MethodModel, transitions: ReadonlyMa
   if (!writesField(behaviour.sets)) return [];
   return [
     {
-      severity: 'error',
+      rule: TRANSITION_DRIFT,
       subject: 'undeclared',
       message: `${method.name}() sets ${field.name} but has no entry in transitions.`,
       fix: `Add transitions.${method.name} to the declaration.`,

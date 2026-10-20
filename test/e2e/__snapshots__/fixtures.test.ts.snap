@@ -52,7 +52,7 @@ error transition-drift  Order.place()  src/order.ts:26
   place() can run from 'confirmed', which the declaration does not allow.
   Fix: Add a guard that excludes 'confirmed', or add it to transitions.place.
 
-warning transition-drift  Order.place()  src/order.ts:26
+warning transition-missing  Order.place()  src/order.ts:26
   place() cannot run from 'paid', although the declaration allows it.
   Fix: Remove 'paid' from transitions.place, or relax the guard.
 
@@ -118,7 +118,13 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             {
               "id": "transition-drift",
               "shortDescription": {
-                "text": "A method's allowed source states differ from its declared transition."
+                "text": "A method can run from states its declared transition does not allow, or sets the state field without a declared transition."
+              }
+            },
+            {
+              "id": "transition-missing",
+              "shortDescription": {
+                "text": "A method cannot run from a state its declared transition allows."
               }
             },
             {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AnalysisInput, Analyzer, analyse } from '../src/analyzer';
+import { AnalysisInput, Analyzer, LifecycleFinding, analyse, reportedUnder } from '../src/analyzer';
 import { DEFAULT_DECLARATION } from '../src/engine/declaration';
 import { ConfigError } from '../src/engine/errors';
 
@@ -13,7 +13,7 @@ const fail = (): never => {
 
 const healthy: Analyzer<string, never> = {
   id: 'fake',
-  rules: [{ id: 'fake-rule', description: 'a fake rule' }],
+  rules: [{ id: 'terminal-state-leak', severity: 'error', description: 'a fake rule' }],
   extract: () => 'model',
   problems: (model) => [`problem in ${model}`],
   suggest: () => [],
@@ -26,6 +26,17 @@ const healthy: Analyzer<string, never> = {
 const FAILURE = { kind: 'failed', analyzer: 'fake', error: BOOM };
 
 describe('analyse', () => {
+  it('rejects a rule whose id the analyzer never reports', () => {
+    const lifecycleOnly: Analyzer<string, never, LifecycleFinding> = {
+      ...healthy,
+      // @ts-expect-error
+      rules: [{ id: 'dead-handler', severity: 'error', description: 'an event-flow rule' }],
+      check: () => [],
+    };
+
+    expect(lifecycleOnly.rules).toHaveLength(1);
+  });
+
   it('lets a typed user-facing error through', () => {
     const misconfigured: Analyzer<string, never> = {
       ...healthy,
@@ -92,5 +103,11 @@ describe('analyse', () => {
 
   it('reports a failure when summarising throws', () => {
     expect(analyse({ ...healthy, summarize: fail }, INPUT).summary('/')).toEqual(FAILURE);
+  });
+});
+
+describe('reportedUnder', () => {
+  it('takes the check id and severity of a finding from its rule', () => {
+    expect(reportedUnder({ id: 'fake-rule', severity: 'warning', description: 'a fake rule' })).toEqual({ checkId: 'fake-rule', severity: 'warning' });
   });
 });

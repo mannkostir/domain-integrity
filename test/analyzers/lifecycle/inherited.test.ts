@@ -53,7 +53,7 @@ describe('methods inherited from a project base class', () => {
         ]),
         allowAfterTerminal: [],
       }),
-    ).toEqual({ problems: [], findings: ['transition-drift pay missing'] });
+    ).toEqual({ problems: [], findings: ['transition-missing pay missing'] });
   });
 
   it('are judged for terminal-state leaks on the subclass, with subclass overrides taking precedence', () => {

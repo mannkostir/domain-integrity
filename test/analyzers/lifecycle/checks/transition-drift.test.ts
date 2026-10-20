@@ -23,13 +23,15 @@ describe('transitionDrift', () => {
     ]);
   });
 
-  it('flags declared sources the code no longer allows as a warning', () => {
+  it('flags declared sources the code no longer allows as a transition-missing warning', () => {
     const methods = [method('cancel', true, { status: { sources: known('PENDING'), sets: assigned('CANCELLED') } })];
 
     expect(
       transitionDrift(aggregate({ methods, declarations: withTransitions({ cancel: ['PENDING', 'CONFIRMED'] }) })),
     ).toEqual([
       expect.objectContaining({
+        analyzer: 'lifecycle',
+        checkId: 'transition-missing',
         severity: 'warning',
         subject: 'missing',
         message: "cancel() cannot run from 'confirmed', although the declaration allows it.",
@@ -43,6 +45,7 @@ describe('transitionDrift', () => {
 
     expect(transitionDrift(aggregate({ methods, declarations: withTransitions({}) }))).toEqual([
       expect.objectContaining({
+        checkId: 'transition-drift',
         severity: 'error',
         method: 'confirm',
         subject: 'undeclared',

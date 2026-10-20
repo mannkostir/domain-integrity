@@ -1,10 +1,10 @@
-import { EventBufferFinding } from '../../../analyzer';
+import { EventBufferFinding, reportedUnder } from '../../../analyzer';
 import { EventFlowModel, UndispatchedBuffer } from '../model';
+import { UNDISPATCHED_EVENTS } from './rules';
 
 const toFinding = (buffer: UndispatchedBuffer): EventBufferFinding => ({
   analyzer: 'event-flow',
-  checkId: 'undispatched-events',
-  severity: 'error',
+  ...reportedUnder(UNDISPATCHED_EVENTS),
   owner: buffer.owner,
   ownerId: buffer.ownerId,
   buffer: buffer.buffer,
