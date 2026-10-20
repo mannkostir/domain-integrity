@@ -292,7 +292,7 @@ npx domain-integrity check --update-baseline
 npx domain-integrity check
 ```
 
-`--update-baseline` writes `domain-integrity.baseline.json` in the current working directory and reports how many entries it wrote, such as `Baseline written to domain-integrity.baseline.json with 12 entries.` Each run rewrites the file from the current findings, so entries that no longer match a finding are removed. A plain `check` loads the same file from the current working directory when it exists, and runs without a baseline when it does not. `--baseline <path>` applies another file instead and wins over the default one; `check` exits `2` when that file is missing.
+`--update-baseline` writes `domain-integrity.baseline.json` in the current working directory, or the file given with `--baseline`, and reports how many entries it wrote, such as `Baseline written to domain-integrity.baseline.json with 12 entries.` Each run rewrites the file from the current findings, so entries that no longer match a finding are removed. A plain `check` loads the same file from the current working directory when it exists, and runs without a baseline when it does not. `--baseline <path>` applies another file instead and wins over the default one; `check` exits `2` when that file is missing.
 
 In the text output, known findings collapse into the summary line, which names the baseline applied:
 
