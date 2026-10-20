@@ -30,11 +30,13 @@ const scanLine = (scan: Scan, line: string, index: number): Scan => {
 
 const HEADINGS = LINES.reduce<Scan>(scanLine, { fenced: false, headings: [] }).headings;
 
+const withoutCodeSpans = (text: string): string => text.replace(/`/g, '');
+
 const sectionOf = (id: string): string => {
   const start = HEADINGS.findIndex((heading) => heading.slug === id);
   const heading = HEADINGS[start];
   const end = HEADINGS[start + 1]?.line ?? LINES.length;
-  return heading === undefined ? '' : LINES.slice(heading.line + 1, end).join('\n');
+  return heading === undefined ? '' : withoutCodeSpans(LINES.slice(heading.line + 1, end).join('\n'));
 };
 
 describe('README rule reference', () => {

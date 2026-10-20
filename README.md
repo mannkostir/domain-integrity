@@ -200,7 +200,7 @@ In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.sp
 
 A public method has no guard that stops it once a state field holds a declared terminal value, so it can still change an aggregate that is meant to be finished. A cancelled order that can still be shipped, or a closed account that still takes deposits, is a broken business rule.
 
-Guard the method with an early return or throw on the state field so it cannot run from the terminal value. If changing a finished aggregate is intended, as for a remove method, list the method in allowAfterTerminal in domain.config.ts. Accept the finding into the baseline only while it is a known defect you mean to fix.
+Guard the method with an early return or throw on the state field so it cannot run from the terminal value. If changing a finished aggregate is intended, as for a remove method, list the method in `allowAfterTerminal` in `domain.config.ts`. Accept the finding into the baseline only while it is a known defect you mean to fix.
 
 #### unreachable-state
 
@@ -210,21 +210,21 @@ Add the method that moves the aggregate into that value, or remove the value fro
 
 #### outside-mutation
 
-A state field is assigned from code outside the aggregate, such as a service, mapper or specification, so the aggregate's guards and transitions are bypassed. A write through the aggregate's own setter is not reported, and neither are assignments in test files unless reportTestFileMutations is true.
+A state field is assigned from code outside the aggregate, such as a service, mapper or specification, so the aggregate's guards and transitions are bypassed. A write through the aggregate's own setter is not reported, and neither are assignments in test files unless `reportTestFileMutations` is true.
 
 Move the change into a method on the aggregate so its guards apply, and call that method instead. Accept the finding into the baseline only if the assignment honestly has to stay where it is, such as a persistence mapper that rebuilds a stored aggregate.
 
 #### transition-drift
 
-A method can run from states that its entry in transitions does not list, or it sets the state field while transitions has no entry for it. The code then allows more than the declared lifecycle, so the declaration no longer describes what the aggregate does.
+A method can run from states that its entry in `transitions` does not list, or it sets the state field while `transitions` has no entry for it. The code then allows more than the declared lifecycle, so the declaration no longer describes what the aggregate does.
 
-Add a guard that excludes the extra states, or, if the code is right, add those states to the method's entry in transitions in domain.config.ts, or add an entry for a method that has none. Accept the finding into the baseline only while it is a known defect you mean to fix.
+Add a guard that excludes the extra states, or, if the code is right, add those states to the method's entry in `transitions` in `domain.config.ts`, or add an entry for a method that has none. Accept the finding into the baseline only while it is a known defect you mean to fix.
 
 #### transition-missing
 
-A method's guard keeps it from running in a state that its entry in transitions lists, so the declaration promises a transition the code no longer offers. It is a warning: the code is not breaking a rule, but the declaration has drifted from it.
+A method's guard keeps it from running in a state that its entry in `transitions` lists, so the declaration promises a transition the code no longer offers. It is a warning: the code is not breaking a rule, but the declaration has drifted from it.
 
-Remove the state from the method's entry in transitions in domain.config.ts, or relax the guard if the method should still run from it. Accept the finding into the baseline only while it is a known gap you mean to resolve.
+Remove the state from the method's entry in `transitions` in `domain.config.ts`, or relax the guard if the method should still run from it. Accept the finding into the baseline only while it is a known gap you mean to resolve.
 
 #### dead-handler
 
@@ -240,15 +240,15 @@ Type the parameter as the registered event class, or register the handler for th
 
 #### unhandled-event
 
-An event class listed in events.inProcess is constructed in production code, but no handler is registered for it, so the event is raised and nothing reacts to it. It runs only for the classes declared in events.inProcess.
+An event class listed in `events.inProcess` is constructed in production code, but no handler is registered for it, so the event is raised and nothing reacts to it. It runs only for the classes declared in `events.inProcess`.
 
-Add a handler for the event, or, if it is consumed elsewhere, such as by another process, remove it from events.inProcess in domain.config.ts. Accept the finding into the baseline only while it is a known gap you mean to close.
+Add a handler for the event, or, if it is consumed elsewhere, such as by another process, remove it from `events.inProcess` in `domain.config.ts`. Accept the finding into the baseline only while it is a known gap you mean to close.
 
 #### saga-missing-failure-path
 
-A saga declared with saga() handles the success event of a declared outcome but not its failure event, so a failure leaves the process stuck halfway with nothing to compensate. It runs only for sagas and outcomes declared in events.sagas.
+A saga declared with `saga()` handles the success event of a declared outcome but not its failure event, so a failure leaves the process stuck halfway with nothing to compensate. It runs only for sagas and outcomes declared in `events.sagas`.
 
-Handle the failure event in the saga, for example with a compensating command. If the outcome is declared wrongly, correct it in events.sagas in domain.config.ts. Accept the finding into the baseline only if the failure is honestly handled somewhere the analysis cannot see.
+Handle the failure event in the saga, for example with a compensating command. If the outcome is declared wrongly, correct it in `events.sagas` in `domain.config.ts`. Accept the finding into the baseline only if the failure is honestly handled somewhere the analysis cannot see.
 
 #### undispatched-events
 
