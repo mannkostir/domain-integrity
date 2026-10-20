@@ -155,6 +155,32 @@ export class Account {
     expect(outsideMutationFiles(true)).toEqual(['/src/order-service.ts', '/src/order.spec.ts']);
   });
 
+  it('finds nothing in a project without aggregates', () => {
+    const emptyProject = inMemoryProject({ '/src/util.ts': 'export const add = (a: number, b: number): number => a + b;' });
+    const model = lifecycleAnalyzer.extract({ declaration: DEFAULT_DECLARATION, files: emptyProject.getSourceFiles(), root: '/' });
+
+    expect(lifecycleAnalyzer.scope(model)).toBe('nothing-found');
+  });
+
+  it('has nothing declared when aggregates are found but no lifecycle is declared', () => {
+    const model = lifecycleAnalyzer.extract({ declaration: DEFAULT_DECLARATION, files: project.getSourceFiles(), root: '/' });
+
+    expect(lifecycleAnalyzer.scope(model)).toBe('nothing-declared');
+  });
+
+  it('is checkable when a lifecycle is declared', () => {
+    const model = lifecycleAnalyzer.extract({
+      declaration: {
+        ...DEFAULT_DECLARATION,
+        lifecycles: [{ target: ticket, fields: [{ name: 'status', terminal: ['CLOSED'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
+      },
+      files: project.getSourceFiles(),
+      root: '/',
+    });
+
+    expect(lifecycleAnalyzer.scope(model)).toBe('checkable');
+  });
+
   it('describes its five rules', () => {
     expect(lifecycleAnalyzer.rules.map((rule) => rule.id)).toEqual([
       'terminal-state-leak',

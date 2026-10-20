@@ -88,7 +88,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   const config = startingConfig(project, paths.config, options.baseClass);
   const declaration = config ? readDeclaration(config) : DEFAULT_DECLARATION;
   const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, config), root: paths.root, configFile: config });
-  if (lifecycleAnalyzer.isEmpty(model)) {
+  if (lifecycleAnalyzer.scope(model) === 'nothing-found') {
     throw new ProjectError(noAggregatesForInitMessage(declaration, initRetryCommand(paths, io.cwd, options.yes === true)));
   }
   const suggestions = lifecycleAnalyzer.suggest(model);

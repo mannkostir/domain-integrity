@@ -24,7 +24,7 @@ const broken: Analyzer<string, never> = {
   },
   diagram: () => ({ kind: 'diagram', text: '' }),
   summarize: () => '',
-  isEmpty: () => false,
+  scope: () => 'checkable',
 };
 
 const failingRun: AnalyzerRun = (input: AnalysisInput) => analyse(broken, input);

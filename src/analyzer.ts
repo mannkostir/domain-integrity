@@ -88,6 +88,8 @@ export type ReportedRule<Id extends string> = { readonly checkId: Id; readonly s
 
 export const reportedUnder = <Id extends string>(rule: RuleDescription<Id>): ReportedRule<Id> => ({ checkId: rule.id, severity: rule.severity });
 
+export type CheckScope = 'nothing-found' | 'nothing-declared' | 'checkable';
+
 export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
   readonly id: string;
   readonly rules: readonly RuleDescription<Produced['checkId']>[];
@@ -97,7 +99,7 @@ export type Analyzer<Model, Suggestion, Produced extends Finding = Finding> = {
   readonly check: (model: Model) => readonly Produced[];
   readonly diagram: (model: Model, only: string | undefined) => AnalyzerDiagram;
   readonly summarize: (model: Model, root: string) => string;
-  readonly isEmpty: (model: Model) => boolean;
+  readonly scope: (model: Model) => CheckScope;
 };
 
 export type AnalysisResult = {
@@ -107,7 +109,7 @@ export type AnalysisResult = {
   readonly failures: readonly AnalyzerFailure[];
   readonly diagram: (only: string | undefined) => DiagramOutcome;
   readonly summary: (root: string) => SummaryOutcome;
-  readonly isEmpty: boolean;
+  readonly scope: CheckScope;
 };
 
 const guarded = <T>(analyzer: string, compute: () => T): T | AnalyzerFailure => {
@@ -126,14 +128,14 @@ const failedResult = (rules: readonly RuleDescription[], failure: AnalyzerFailur
   failures: [failure],
   diagram: () => failure,
   summary: () => failure,
-  isEmpty: false,
+  scope: 'checkable',
 });
 
 type Evaluation<Model> = {
   readonly model: Model;
   readonly problems: readonly string[];
   readonly findings: readonly Finding[];
-  readonly isEmpty: boolean;
+  readonly scope: CheckScope;
 };
 
 const isFailure = <Model>(value: Evaluation<Model> | AnalyzerFailure): value is AnalyzerFailure => 'kind' in value;
@@ -145,10 +147,10 @@ export const analyse = <Model, Suggestion>(
   const guard = <T>(compute: () => T): T | AnalyzerFailure => guarded(analyzer.id, compute);
   const evaluated = guard((): Evaluation<Model> => {
     const model = analyzer.extract(input);
-    return { model, problems: analyzer.problems(model), findings: analyzer.check(model), isEmpty: analyzer.isEmpty(model) };
+    return { model, problems: analyzer.problems(model), findings: analyzer.check(model), scope: analyzer.scope(model) };
   });
   if (isFailure(evaluated)) return failedResult(analyzer.rules, evaluated);
-  const { model, problems, findings, isEmpty } = evaluated;
+  const { model, problems, findings, scope } = evaluated;
   return {
     rules: analyzer.rules,
     problems,
@@ -156,6 +158,6 @@ export const analyse = <Model, Suggestion>(
     failures: [],
     diagram: (only) => guard(() => analyzer.diagram(model, only)),
     summary: (root) => guard(() => ({ kind: 'summary', text: analyzer.summarize(model, root) })),
-    isEmpty,
+    scope,
   };
 };

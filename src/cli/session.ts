@@ -22,6 +22,6 @@ export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[]): Se
   const configFile = configSourceFile(project, paths.config);
   const declaration = readDeclaration(configFile);
   const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, configFile), root: paths.root, configFile }, analyzers);
-  if (results.every((result) => result.isEmpty)) throw new ProjectError(nothingToAnalyseMessage(declaration));
+  if (results.every((result) => result.scope === 'nothing-found')) throw new ProjectError(nothingToAnalyseMessage(declaration));
   return { results };
 };

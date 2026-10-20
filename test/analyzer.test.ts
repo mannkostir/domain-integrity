@@ -20,7 +20,7 @@ const healthy: Analyzer<string, never> = {
   check: () => [],
   diagram: (model) => ({ kind: 'diagram', text: `diagram of ${model}` }),
   summarize: (model, root) => `summary of ${model} at ${root}`,
-  isEmpty: () => true,
+  scope: () => 'nothing-found',
 };
 
 const FAILURE = { kind: 'failed', analyzer: 'fake', error: BOOM };
@@ -51,10 +51,10 @@ describe('analyse', () => {
   it('keeps the results of a healthy analyzer', () => {
     const result = analyse(healthy, INPUT);
 
-    expect({ problems: result.problems, findings: result.findings, isEmpty: result.isEmpty, failures: result.failures }).toEqual({
+    expect({ problems: result.problems, findings: result.findings, scope: result.scope, failures: result.failures }).toEqual({
       problems: ['problem in model'],
       findings: [],
-      isEmpty: true,
+      scope: 'nothing-found',
       failures: [],
     });
   });
@@ -85,8 +85,12 @@ describe('analyse', () => {
     });
   });
 
-  it('treats a failed analyzer as not empty', () => {
-    expect(analyse({ ...healthy, isEmpty: fail }, INPUT).isEmpty).toBe(false);
+  it('treats a failed analyzer as checkable', () => {
+    expect(analyse({ ...healthy, check: fail }, INPUT).scope).toBe('checkable');
+  });
+
+  it('reports a failure when computing the scope throws', () => {
+    expect(analyse({ ...healthy, scope: fail }, INPUT).failures).toEqual([FAILURE]);
   });
 
   it('returns the failure as the diagram of a failed analyzer', () => {
