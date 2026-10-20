@@ -56,7 +56,7 @@ describe('fixture projects', () => {
         'error transition-drift Order.place status extra',
         'error undispatched-events AggregateRoot.events Order',
         'error unreachable-state Order.- status PAID',
-        'warning transition-drift Order.place status missing',
+        'warning transition-missing Order.place status missing',
       ],
     });
   });

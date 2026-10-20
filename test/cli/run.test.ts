@@ -126,7 +126,7 @@ describe('check exit codes', () => {
   it('exits 0 when the only finding is a warning', async () => {
     const { io, stdout } = captureIo(writeProject(WARNING_ONLY_PROJECT));
 
-    expect({ code: await run(['check'], io), warned: stdout().includes('transition-drift') }).toEqual({ code: 0, warned: true });
+    expect({ code: await run(['check'], io), warned: stdout().includes('transition-missing') }).toEqual({ code: 0, warned: true });
   });
 
   it('exits 2 when problems and error findings both exist', async () => {

@@ -3,11 +3,16 @@ import { AggregateModel, FieldBehaviour, MethodModel, StateField } from '../mode
 import { writesField } from '../values';
 import { fieldOf, quoted } from './format';
 
-type Drift = { readonly severity: Severity; readonly subject: string; readonly message: string; readonly fix: string };
+type Drift = {
+  readonly checkId: 'transition-drift' | 'transition-missing';
+  readonly severity: Severity;
+  readonly subject: string;
+  readonly message: string;
+  readonly fix: string;
+};
 
 const toFinding = (aggregate: AggregateModel, field: StateField, method: MethodModel, drift: Drift): LifecycleFinding => ({
   analyzer: 'lifecycle',
-  checkId: 'transition-drift',
   aggregate: aggregate.name,
   aggregateId: aggregate.id,
   method: method.name,
@@ -31,6 +36,7 @@ const comparedWithDeclaration = (
     ...(extra.length > 0
       ? [
           {
+            checkId: 'transition-drift' as const,
             severity: 'error' as const,
             subject: 'extra',
             message: `${method.name}() can run from ${quoted(field, extra)}, which the declaration does not allow.`,
@@ -41,6 +47,7 @@ const comparedWithDeclaration = (
     ...(missing.length > 0
       ? [
           {
+            checkId: 'transition-missing' as const,
             severity: 'warning' as const,
             subject: 'missing',
             message: `${method.name}() cannot run from ${quoted(field, missing)}, although the declaration allows it.`,
@@ -59,6 +66,7 @@ const driftOf = (field: StateField, method: MethodModel, transitions: ReadonlyMa
   if (!writesField(behaviour.sets)) return [];
   return [
     {
+      checkId: 'transition-drift',
       severity: 'error',
       subject: 'undeclared',
       message: `${method.name}() sets ${field.name} but has no entry in transitions.`,

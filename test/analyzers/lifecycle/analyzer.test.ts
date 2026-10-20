@@ -120,7 +120,7 @@ export class Meter {
       root: '/',
     });
 
-    expect(result.findings.filter((finding) => finding.checkId === 'transition-drift')).toEqual([]);
+    expect(result.findings.filter((finding) => ['transition-drift', 'transition-missing'].includes(finding.checkId))).toEqual([]);
   });
 
   it('reports a terminal leak when a falsy exit on a string field lets set values through', () => {
@@ -155,12 +155,13 @@ export class Account {
     expect(outsideMutationFiles(true)).toEqual(['/src/order-service.ts', '/src/order.spec.ts']);
   });
 
-  it('describes its four rules', () => {
+  it('describes its five rules', () => {
     expect(lifecycleAnalyzer.rules.map((rule) => rule.id)).toEqual([
       'terminal-state-leak',
       'unreachable-state',
       'outside-mutation',
       'transition-drift',
+      'transition-missing',
     ]);
   });
 });
