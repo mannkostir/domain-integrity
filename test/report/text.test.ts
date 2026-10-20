@@ -48,7 +48,7 @@ describe('formatText', () => {
 
   it('prints a single summary line when the baseline covers every finding', () => {
     const text = formatText(
-      { fresh: [], known: [knownFinding, knownFinding, knownFinding], problems: [], rules: [], root: '/app', baseline: appliedBaseline },
+      { fresh: [], known: [knownFinding, finding({ line: 5 }), finding({ method: 'close', line: 7 })], problems: [], rules: [], root: '/app', baseline: appliedBaseline },
       { showKnown: false },
     );
 
