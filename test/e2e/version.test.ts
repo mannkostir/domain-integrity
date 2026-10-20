@@ -1,10 +1,16 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks/rules';
+import { LIFECYCLE_RULES } from '../../src/analyzers/lifecycle/checks/rules';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
 import { MANIFEST } from '../helpers/manifest';
 
 const OUTSIDE_SPEC = fileURLToPath(new URL('../fixtures/outside-spec', import.meta.url));
+
+const ALL_RULES = [...LIFECYCLE_RULES, ...EVENT_FLOW_RULES];
+
+type SarifRule = { readonly id: string; readonly helpUri?: string };
 
 const runIn = async (argv: readonly string[]) => {
   const { io, stdout } = captureIo(OUTSIDE_SPEC);
@@ -47,5 +53,15 @@ describe('tool version', () => {
     const { stdout } = await runIn(['check', '--format', 'sarif']);
 
     expect(JSON.parse(stdout).runs[0].tool.driver.informationUri).toBe(MANIFEST.homepage);
+  });
+
+  it('links every SARIF rule to its entry in the package rule reference', async () => {
+    const { stdout } = await runIn(['check', '--format', 'sarif']);
+
+    const rules: readonly SarifRule[] = JSON.parse(stdout).runs[0].tool.driver.rules;
+
+    expect(rules.map((rule) => ({ id: rule.id, helpUri: rule.helpUri }))).toEqual(
+      ALL_RULES.map((rule) => ({ id: rule.id, helpUri: `https://github.com/mannkostir/domain-integrity#${rule.id}` })),
+    );
   });
 });

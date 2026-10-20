@@ -1,6 +1,25 @@
+import { RuleDescription } from '../analyzer';
 import { toPosixRelative } from '../engine/path';
 import { Report } from './text';
 import { ToolIdentity } from './tool';
+
+const ruleReference = (informationUri: string, ruleId: string): string => {
+  const url = new URL(informationUri);
+  url.hash = ruleId;
+  return url.href;
+};
+
+const sarifRule = (rule: RuleDescription, tool: ToolIdentity) => {
+  const helpUri = tool.informationUri === undefined ? undefined : ruleReference(tool.informationUri, rule.id);
+  return {
+    id: rule.id,
+    shortDescription: { text: rule.description },
+    fullDescription: { text: rule.explanation },
+    help: { text: rule.remedy, markdown: helpUri === undefined ? rule.remedy : `${rule.remedy}\n\n[Rule reference](${helpUri})` },
+    ...(helpUri === undefined ? {} : { helpUri }),
+    defaultConfiguration: { level: rule.severity },
+  };
+};
 
 export const formatSarif = (report: Report, tool: ToolIdentity): string =>
   `${JSON.stringify(
@@ -14,7 +33,7 @@ export const formatSarif = (report: Report, tool: ToolIdentity): string =>
               name: tool.name,
               version: tool.version,
               informationUri: tool.informationUri,
-              rules: report.rules.map((rule) => ({ id: rule.id, shortDescription: { text: rule.description } })),
+              rules: report.rules.map((rule) => sarifRule(rule, tool)),
             },
           },
           results: report.fresh.map((finding) => ({

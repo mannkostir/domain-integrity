@@ -15,7 +15,7 @@ export const HANDLER_PAYLOAD_MISMATCH: RuleDescription<'handler-payload-mismatch
   severity: 'error',
   description: 'A handler is registered for one event class but declares its event as an unrelated class.',
   explanation:
-    'A handler is registered for one event class but types its event parameter as an unrelated class. The handler then reads fields the delivered event does not have.',
+    'A handler is registered for one event class but types its event parameter as an unrelated class. The handler is then handed an event of a different class than it expects.',
   remedy:
     'Type the parameter as the registered event class, or register the handler for the class it declares. Accept the finding into the baseline only while it is a known defect you mean to fix.',
 };
