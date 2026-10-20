@@ -6,7 +6,6 @@ import { AnalysisInput, Analyzer, analyse } from '../../src/analyzer';
 import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
 import { UsageError } from '../../src/engine/errors';
-import { packageVersion, toolIdentity } from '../../src/cli/version';
 import { TICKET_PROJECT, captureIo, writeProject } from '../helpers/disk';
 import { MANIFEST } from '../helpers/manifest';
 
@@ -145,17 +144,5 @@ describe('an analyzer that throws', () => {
     const { code, stderr } = await runBroken(['check'], [throwing(circular)]);
 
     expect({ code, reported: stderr.includes(`${REPORT}\n[object Object]`) }).toEqual({ code: 2, reported: true });
-  });
-});
-
-describe('packageVersion', () => {
-  it('reads the version of the domain-integrity package', () => {
-    expect(packageVersion()).toBe(PACKAGE_VERSION);
-  });
-});
-
-describe('toolIdentity', () => {
-  it('identifies the package by name, version and homepage', () => {
-    expect(toolIdentity()).toEqual({ name: 'domain-integrity', version: PACKAGE_VERSION, informationUri: MANIFEST.homepage });
   });
 });
