@@ -66,4 +66,30 @@ describe('formatJson', () => {
   it('writes known findings through the same envelope', () => {
     expect(parse({ known: [bufferFinding()] }).known[0].key).toBe('undispatched-events|AggregateRoot|_domainEvents|');
   });
+
+  it('keeps an extra property of a finding\'s details off the wire', () => {
+    const details = { ...finding().details, leaked: 'x' };
+
+    expect(parse({ fresh: [finding({ details })] }).findings[0].details).not.toHaveProperty('leaked');
+  });
+
+  it('writes a finding\'s details in the documented order whatever the order they were built in', () => {
+    const { values, field, method, aggregateId, aggregate } = finding().details;
+
+    const reversed = parse({ fresh: [finding({ details: { values, field, method, aggregateId, aggregate } })] }).findings[0].details;
+
+    expect(Object.keys(reversed)).toEqual(['aggregate', 'aggregateId', 'method', 'field', 'values']);
+  });
+
+  it('keeps an extra property of a problem\'s details off the wire', () => {
+    const details = { ...MISSING_FIELD.details, leaked: 'x' };
+
+    expect(parse({ problems: [{ ...MISSING_FIELD, details }] }).problems[0].details).not.toHaveProperty('leaked');
+  });
+
+  it('writes a problem\'s details in the documented order whatever the order they were built in', () => {
+    const problem: Problem = { code: 'unknown-state-value', analyzer: 'lifecycle', message: 'M', details: { known: ['A'], value: 'B', field: 'status', aggregate: 'Order' } };
+
+    expect(Object.keys(parse({ problems: [problem] }).problems[0].details)).toEqual(['aggregate', 'field', 'value', 'known']);
+  });
 });
