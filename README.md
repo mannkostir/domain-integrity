@@ -187,7 +187,7 @@ To leave tests out of every analysis, give `check` a tsconfig that excludes them
 npx domain-integrity check -p tsconfig.domain.json
 ```
 
-In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.spec.json`, which brings its tests in. Pass a tsconfig that references only the `tsconfig.lib.json` and `tsconfig.app.json` files to leave them out.
+In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.spec.json`, which brings its tests in. Keeping it no longer produces `outside-mutation` findings by default, since its tests only count as evidence. Pass a tsconfig that references only the `tsconfig.lib.json` and `tsconfig.app.json` files to leave them out entirely.
 
 ## Commands
 
@@ -336,7 +336,7 @@ Lifecycle declarations and the other top-level options:
 | `inertDecorators` | Class decorator names you assert neither install nor rewrite instance members, matched by name like `events.handlerDecorators`. They add to the built-in list and never replace it. A wrong entry for a decorator that does install members can produce a false finding. Default: `[]`. |
 | `inertEventMethods` | Event methods you assert never read aggregate state, such as an `addDomainEvent` that also registers `this` in a static `DomainEvents` registry or logs it. Every entry must also be in `eventMethods`, or `check` exits with code 2. The assertion covers every method of that name in the project, including overrides in subclasses. A listed method's body is not traced, and `this.addDomainEvent(new UserLoggedIn(this))` and `super.addDomainEvent(new UserLoggedIn(this))` count as event handoffs. The assertion holds only while every declaration of the name is a method, no project class declares a non-method instance member of that name, nothing in the project writes it, every base type in the aggregate's heritage resolves, and no class in the aggregate's family or class expression anywhere in the project has a class decorator other than an inert one or calls `Object.assign(this, …)`; see "Asserted event methods". A wrong entry for an event method that reads the state field, or calls code that does, can produce a false finding. Default: `[]`. |
 | `inertMembers` | Library getters, methods and properties that never read aggregate state, such as `id` or `clearDomainEvents`. A listed name counts as not reading the state field unless a `.ts` file in your project declares a member of that name; a `super.` call to it counts only the declarations above the class that makes the call; declarations in `.d.ts` files, including your own, count as library code. List only members whose library code never reads aggregate state and never calls back into your overrides: a wrong entry turns a guard through that member into no guard and can produce a false finding. Default: `[]`. |
-| `reportTestFileMutations` | Report assignments in test files as `outside-mutation`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`. Must be `true` or `false`, or `check` exits with code 2. A test-file assignment counts as evidence for `unreachable-state` either way. Default: `false`. |
+| `reportTestFileMutations` | Report assignments in test files as `outside-mutation`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`, relative to the tsconfig directory. Must be `true` or `false`, or `check` exits with code 2. A test-file assignment counts as evidence for `unreachable-state` either way. Default: `false`. |
 
 ## Quiet by design
 
