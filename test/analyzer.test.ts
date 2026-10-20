@@ -119,7 +119,7 @@ describe('analyse', () => {
 });
 
 describe('reportedUnder', () => {
-  it('takes the check id and severity of a finding from its rule', () => {
+  it('takes the rule id and severity of a finding from its rule', () => {
     expect(reportedUnder({ id: 'fake-rule', severity: 'warning', description: 'a fake rule', explanation: 'E', remedy: 'R' })).toEqual({ ruleId: 'fake-rule', severity: 'warning' });
   });
 });
