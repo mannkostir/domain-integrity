@@ -269,7 +269,7 @@ Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfi
 
 `--version`, or `-V`, prints the version and exits `0`.
 
-The JSON report of `check` has a top-level `tool` with `name` and `version`, next to `findings`, `known` and `problems`. The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`. Each SARIF result names its rule by `ruleId` and `ruleIndex`, carries the finding's message as `message.text` and its fix in `properties.fix`, and has a `partialFingerprints` entry `domainIntegrity/v1` holding its baseline key. With `--baseline`, known findings follow the new ones as results with an `external` suppression; they never affect the exit code.
+The JSON report of `check` has a top-level `tool` with `name` and `version`, next to `findings`, `known` and `problems`. The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`. Each SARIF result names its rule by `ruleId` and `ruleIndex`, carries the finding's message as `message.text` and its fix in `properties.fix`, and has a `partialFingerprints` entry `domainIntegrity/v1` holding its baseline key. When a baseline is applied, whether given with `--baseline` or loaded from `domain-integrity.baseline.json`, known findings follow the new ones as results with an `external` suppression; they never affect the exit code.
 
 If one analyzer crashes, the command prints `internal error in <analyzer>, please report (domain-integrity <version>)` with a short stack trace, still prints the other analyzers' results, and exits `2`; `--update-baseline` and `context --write` then write nothing.
 
@@ -289,8 +289,27 @@ You don't have to fix everything first. Record today's findings and fail only on
 
 ```bash
 npx domain-integrity check --update-baseline
-npx domain-integrity check --baseline domain-integrity.baseline.json
+npx domain-integrity check
 ```
+
+`--update-baseline` writes `domain-integrity.baseline.json` in the current working directory and reports how many entries it wrote, such as `Baseline written to domain-integrity.baseline.json with 12 entries.` Each run rewrites the file from the current findings, so entries that no longer match a finding are removed. A plain `check` loads the same file from the current working directory when it exists, and runs without a baseline when it does not. `--baseline <path>` applies another file instead and wins over the default one; `check` exits `2` when that file is missing.
+
+In the text output, known findings collapse into the summary line, which names the baseline applied:
+
+```text
+0 errors, 0 warnings, 12 known from baseline domain-integrity.baseline.json
+```
+
+`--show-known` lists them in full after the new ones, each marked `(baseline)`. The JSON and SARIF reports always carry them.
+
+A stale entry is a baseline key that matches no current finding. The text output lists stale entries before the summary line, with their count and keys:
+
+```text
+1 stale baseline entry, remove with --update-baseline:
+  terminal-state-leak|Order|annotate|status|CANCELLED
+```
+
+Stale entries never change the exit code. They are not reported when the run has problems or an internal error, because its findings are then incomplete.
 
 Baseline entries for lifecycle findings are keyed by check, aggregate, method and field, not by line number, so unrelated edits don't break the baseline.
 
@@ -329,7 +348,7 @@ jobs:
 
 Findings appear as code-scanning alerts on the pull request, and the job fails when `check` does.
 
-Every result carries the `domainIntegrity/v1` fingerprint, its baseline key, which identifies a finding across runs without its line number; a change to the key format would come with a new fingerprint version. GitHub code scanning itself matches alerts by the `primaryLocationLineHash` fingerprint that the upload step adds. With `baseline` set, known findings are uploaded as suppressed results instead of being left out, so code scanning does not close their alerts as fixed; they never fail the job.
+Every result carries the `domainIntegrity/v1` fingerprint, its baseline key, which identifies a finding across runs without its line number; a change to the key format would come with a new fingerprint version. GitHub code scanning itself matches alerts by the `primaryLocationLineHash` fingerprint that the upload step adds. When a baseline is applied, from the `baseline` input or from a `domain-integrity.baseline.json` that `check` loads by default, known findings are uploaded as suppressed results instead of being left out, so code scanning does not close their alerts as fixed; they never fail the job.
 
 GitHub's SARIF reference does not list `suppressions` among the properties code scanning uses, and uploaded suppressed results have been reported to appear as open alerts, so on GitHub baselined findings may show as open. Tools that honour SARIF suppressions treat them as suppressed. To dismiss them on GitHub, add the [`advanced-security/dismiss-alerts`](https://github.com/advanced-security/dismiss-alerts) action after the upload; it reads the suppressions from the SARIF report.
 
@@ -337,7 +356,7 @@ GitHub's SARIF reference does not list `suppressions` among the properties code 
 | --- | --- | --- |
 | `project` | `tsconfig.json` | path to the project's `tsconfig.json` |
 | `config` | `domain.config.ts` | path to the declaration |
-| `baseline` | none | baseline file to apply |
+| `baseline` | none | baseline file to apply; without it, `check` still loads `domain-integrity.baseline.json` from the job's working directory, the repository root after checkout, if it exists |
 | `upload` | `true` | upload the SARIF report to code scanning; set `false` when code scanning is unavailable |
 
 In a monorepo, point `project` at the root solution tsconfig: reported paths are relative to that tsconfig's folder, and code scanning cannot place the `../` paths a per-app tsconfig yields.
