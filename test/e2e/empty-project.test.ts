@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
@@ -171,5 +172,19 @@ describe('a project with nothing to check', () => {
     await run(['context'], io);
 
     expect(stderr()).toContain('Nothing to check: ');
+  });
+
+  it('prints no context when nothing is declared', async () => {
+    const { io, stdout } = captureIo(projectFor('nothing declared'));
+    await run(['context'], io);
+
+    expect(stdout()).toBe('');
+  });
+
+  it('writes an empty context section when nothing is declared', async () => {
+    const dir = projectFor('nothing declared');
+    await run(['context', '--write', 'AGENTS.md'], captureIo(dir).io);
+
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toBe('<!-- domain-integrity:start -->\n\n<!-- domain-integrity:end -->\n');
   });
 });

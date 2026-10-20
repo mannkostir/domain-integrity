@@ -49,9 +49,8 @@ const aggregateSection = (aggregate: AggregateModel, root: string): string[] => 
     : []),
 ];
 
-export const lifecycleSummary = (model: LifecycleModel, root: string): string =>
-  [
-    ...RULES,
-    ...model.aggregates.filter((aggregate) => aggregate.declared).flatMap((aggregate) => ['', ...aggregateSection(aggregate, root)]),
-    '',
-  ].join('\n');
+export const lifecycleSummary = (model: LifecycleModel, root: string): string => {
+  const declared = model.aggregates.filter((aggregate) => aggregate.declared);
+  if (declared.length === 0) return '';
+  return [...RULES, ...declared.flatMap((aggregate) => ['', ...aggregateSection(aggregate, root)]), ''].join('\n');
+};

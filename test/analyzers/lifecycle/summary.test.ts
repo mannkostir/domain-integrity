@@ -26,6 +26,10 @@ describe('lifecycleSummary', () => {
   const summaryOf = (model: ReturnType<typeof aggregate>): string =>
     lifecycleSummary({ aggregates: [model], problems: [], reportTestFileMutations: false }, '/app');
 
+  it('is empty when no aggregate is declared', () => {
+    expect(summaryOf(aggregate({ declared: false }))).toBe('');
+  });
+
   it('prints terminal none when the terminal set is empty', () => {
     expect(summaryOf(aggregate({ declarations: new Map([['status', declared([])]]) }))).toContain('  - terminal: none\n');
   });
