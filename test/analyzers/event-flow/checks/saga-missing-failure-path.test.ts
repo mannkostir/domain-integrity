@@ -19,17 +19,14 @@ describe('sagaMissingFailurePath', () => {
   it('reports a saga that handles the success but not the failure', () => {
     expect(sagaMissingFailurePath(sagaModel([handles('Paid')]))).toEqual([
       {
-        analyzer: 'event-flow',
-        checkId: 'saga-missing-failure-path',
+        ruleId: 'saga-missing-failure-path',
         severity: 'error',
-        event: 'Failed',
-        eventId: 'Failed',
-        handler: 'OrderSaga',
-        subject: 'Paid',
+        analyzer: 'event-flow',
         file: '/app/src/OrderSaga.ts',
         line: 1,
         message: 'OrderSaga handles Paid but not its declared failure Failed.',
         fix: 'Handle Failed in OrderSaga, for example with a compensating command.',
+        details: { saga: 'OrderSaga', sagaId: 'OrderSaga', success: 'Paid', successId: 'Paid', failure: 'Failed', failureId: 'Failed' },
       },
     ]);
   });

@@ -24,7 +24,7 @@ describe('formatJson', () => {
   it('serialises the buffer fields of an undispatched-events finding', () => {
     const parsed = JSON.parse(formatJson({ fresh: [bufferFinding()], known: [], problems: [], rules: [], root: '/app' }, TOOL));
 
-    expect(parsed.findings[0]).toMatchObject({
+    expect(parsed.findings[0].details).toMatchObject({
       owner: 'AggregateRoot',
       ownerId: 'AggregateRoot',
       buffer: '_domainEvents',

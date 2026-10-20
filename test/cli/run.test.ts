@@ -19,7 +19,7 @@ describe('check', () => {
     const { io, stdout } = captureIo(writeProject(TICKET_PROJECT));
     await run(['check', '--format', 'json'], io);
 
-    expect(JSON.parse(stdout()).findings.map((finding: { method: string }) => finding.method)).toEqual(['rename']);
+    expect(JSON.parse(stdout()).findings.map((finding: { details: { method: string } }) => finding.details.method)).toEqual(['rename']);
   });
 
   it('exits 0 for findings already in the baseline', async () => {
@@ -481,7 +481,7 @@ describe('same-named aggregates', () => {
     await run(['check', '--format', 'json'], io);
 
     expect(
-      JSON.parse(stdout()).findings.map((finding: { aggregate: string; aggregateId: string }) => [finding.aggregate, finding.aggregateId]),
+      JSON.parse(stdout()).findings.map((finding: { details: { aggregate: string; aggregateId: string } }) => [finding.details.aggregate, finding.details.aggregateId]),
     ).toEqual([
       ['Ticket', 'src/a/ticket.ts:Ticket'],
       ['Ticket', 'src/b/ticket.ts:Ticket'],

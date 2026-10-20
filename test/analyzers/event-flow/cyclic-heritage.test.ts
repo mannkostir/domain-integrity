@@ -22,7 +22,7 @@ const checkIds = (events: string): readonly string[] => {
   const config = project.getSourceFileOrThrow('/app/domain.config.ts');
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
   const result = analyse(eventFlowAnalyzer, { declaration: readDeclaration(config), files, root: '/app' });
-  return result.findings.map((finding) => finding.checkId);
+  return result.findings.map((finding) => finding.ruleId);
 };
 
 describe('event-flow on looping event heritage', () => {

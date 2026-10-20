@@ -28,18 +28,14 @@ describe('terminalStateLeak', () => {
 
     expect(findings).toEqual([
       {
-        analyzer: 'lifecycle',
-        checkId: 'terminal-state-leak',
+        ruleId: 'terminal-state-leak',
         severity: 'error',
-        aggregate: 'Order',
-        aggregateId: 'Order',
-        method: 'annotate',
-        field: 'status',
-        subject: 'CANCELLED',
+        analyzer: 'lifecycle',
         file: '/app/src/order.ts',
         line: 10,
         message: "annotate() can run after status is 'cancelled'.",
         fix: "Guard annotate() so it cannot run when status is 'cancelled', or list it in allowAfterTerminal if that is intended.",
+        details: { aggregate: 'Order', aggregateId: 'Order', method: 'annotate', field: 'status', values: ['CANCELLED'] },
       },
     ]);
   });
@@ -47,7 +43,7 @@ describe('terminalStateLeak', () => {
   it('flags a public method that can run in a terminal state', () => {
     const methods = [method('annotate', true, { status: { sources: ALL, sets: assigned() } }, 'public')];
 
-    expect(terminalStateLeak(aggregate({ methods }))).toEqual([expect.objectContaining({ method: 'annotate' })]);
+    expect(terminalStateLeak(aggregate({ methods }))).toEqual([expect.objectContaining({ details: expect.objectContaining({ method: 'annotate' }) })]);
   });
 
   it('ignores a private method that can run in a terminal state', () => {
@@ -81,11 +77,11 @@ describe('terminalStateLeak', () => {
   });
 
   it('flags a method on every terminal field when no list exempts it', () => {
-    expect(terminalStateLeak(twoFields([], [])).map((finding) => finding.field)).toEqual(['status', 'phase']);
+    expect(terminalStateLeak(twoFields([], [])).map((finding) => finding.details.field)).toEqual(['status', 'phase']);
   });
 
   it('exempts a method only for the field whose own list names it', () => {
-    expect(terminalStateLeak(twoFields(['archive'], [])).map((finding) => finding.field)).toEqual(['phase']);
+    expect(terminalStateLeak(twoFields(['archive'], [])).map((finding) => finding.details.field)).toEqual(['phase']);
   });
 
   it('exempts a method for every field when the aggregate list names it', () => {
@@ -115,7 +111,7 @@ describe('terminalStateLeak', () => {
     expect(
       terminalStateLeak(
         aggregate({ id: QUALIFIED, methods: [method('annotate', true, { status: { sources: ALL, sets: assigned() } })] }),
-      ).map((finding) => finding.aggregateId),
+      ).map((finding) => finding.details.aggregateId),
     ).toEqual([QUALIFIED]);
   });
 });

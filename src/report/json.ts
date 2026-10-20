@@ -1,5 +1,5 @@
 import { toPosixRelative } from '../engine/path';
-import { Finding } from '../analyzer';
+import { Finding } from '../finding';
 import { Report } from './text';
 import { ToolIdentity } from './tool';
 

@@ -1,7 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { EventFlowFinding, Finding } from '../../src/analyzer';
 import { run } from '../../src/cli/run';
+import { Finding } from '../../src/finding';
+import { findingKey } from '../../src/report/key';
 import { captureIo } from '../helpers/disk';
 
 type SarifRun = { readonly tool: { readonly driver: Readonly<Record<string, unknown>> } };
@@ -20,15 +21,7 @@ const withoutPackageVersion = (report: string): string => {
 
 const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
-const describeEventFlowFinding = (finding: EventFlowFinding): string =>
-  finding.checkId === 'undispatched-events'
-    ? `${finding.severity} ${finding.checkId} ${finding.owner}.${finding.buffer} ${finding.raisers.join(',')}`
-    : `${finding.severity} ${finding.checkId} ${finding.event} ${finding.handler ?? '-'} ${finding.subject}`;
-
-const describeFinding = (finding: Finding): string =>
-  finding.analyzer === 'lifecycle'
-    ? `${finding.severity} ${finding.checkId} ${finding.aggregate}.${finding.method ?? '-'} ${finding.field} ${finding.subject}`
-    : describeEventFlowFinding(finding);
+const describeFinding = (finding: Finding): string => `${finding.severity} ${findingKey(finding)}`;
 
 const checkJson = async (name: string) => {
   const { io, stdout } = captureIo(fixture(name));
@@ -51,12 +44,12 @@ describe('fixture projects', () => {
     expect(await checkJson('enum-inline')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak Order.annotate status CANCELLED',
-        'error transition-drift Order.cancel status extra',
-        'error transition-drift Order.place status extra',
-        'error undispatched-events AggregateRoot.events Order',
-        'error unreachable-state Order.- status PAID',
-        'warning transition-missing Order.place status missing',
+        'error terminal-state-leak|Order|annotate|status|CANCELLED',
+        'error transition-drift|Order|cancel|status|extra',
+        'error transition-drift|Order|place|status|extra',
+        'error undispatched-events|AggregateRoot|events|',
+        'error unreachable-state|Order||status|PAID',
+        'warning transition-missing|Order|place|status|missing',
       ],
     });
   });
@@ -65,9 +58,9 @@ describe('fixture projects', () => {
     expect(await checkJson('boolean-rule')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak Todo.complete deleted true',
-        'error terminal-state-leak Todo.delete deleted true',
-        'error undispatched-events AggregateRoot.events Todo',
+        'error terminal-state-leak|Todo|complete|deleted|true',
+        'error terminal-state-leak|Todo|delete|deleted|true',
+        'error undispatched-events|AggregateRoot|events|',
       ],
     });
   });
@@ -76,10 +69,10 @@ describe('fixture projects', () => {
     expect(await checkJson('nullable-timestamp')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak Account.close closedAt set',
-        'error terminal-state-leak Account.deposit closedAt set',
-        'error terminal-state-leak Account.lock closedAt set',
-        'error terminal-state-leak Account.withdraw closedAt set',
+        'error terminal-state-leak|Account|close|closedAt|set',
+        'error terminal-state-leak|Account|deposit|closedAt|set',
+        'error terminal-state-leak|Account|lock|closedAt|set',
+        'error terminal-state-leak|Account|withdraw|closedAt|set',
       ],
     });
   });
@@ -88,8 +81,8 @@ describe('fixture projects', () => {
     expect(await checkJson('outside-spec')).toEqual({
       code: 1,
       findings: [
-        'error outside-mutation Invitation.- status InvitationService.accept',
-        'error outside-mutation Invitation.- status WithStatus.mutate',
+        'error outside-mutation|Invitation||status|InvitationService.accept',
+        'error outside-mutation|Invitation||status|WithStatus.mutate',
       ],
     });
   });
@@ -110,11 +103,11 @@ describe('fixture projects', () => {
     expect(await checkJson('event-flows')).toEqual({
       code: 1,
       findings: [
-        'error dead-handler RefundIssued RefundHandler.handle ',
-        'error handler-payload-mismatch OrderPlaced OrderPlacedHandler.handle PaymentCaptured',
-        'error saga-missing-failure-path PaymentFailed OrderSaga PaymentCaptured',
-        'error undispatched-events Undispatched.events Undispatched',
-        'error unhandled-event Shipped - ',
+        'error dead-handler|RefundIssued|RefundHandler.handle|',
+        'error handler-payload-mismatch|OrderPlaced|OrderPlacedHandler.handle|PaymentCaptured',
+        'error saga-missing-failure-path|PaymentFailed|OrderSaga|PaymentCaptured',
+        'error undispatched-events|Undispatched|events|',
+        'error unhandled-event|Shipped||',
       ],
     });
   });

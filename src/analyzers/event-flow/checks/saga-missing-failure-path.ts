@@ -1,4 +1,5 @@
-import { HandlerFinding, reportedUnder } from '../../../analyzer';
+import { reportedUnder } from '../../../analyzer';
+import { FindingOf } from '../../../finding';
 import { EventClassModel, EventFlowModel, SagaModel } from '../model';
 import { acceptedIds, nameOf, refOf } from './handler-label';
 import { SAGA_MISSING_FAILURE_PATH } from './rules';
@@ -33,24 +34,22 @@ const judged = (model: EventFlowModel): readonly { readonly saga: SagaModel; rea
     .flatMap((saga) => saga.outcomes.map((outcome) => ({ saga, outcome })))
     .filter(({ saga, outcome }) => !isOutcomeSilenced(model, saga, outcome));
 
-export const sagaMissingFailurePath = (model: EventFlowModel): HandlerFinding[] =>
+export const sagaMissingFailurePath = (model: EventFlowModel): FindingOf<'saga-missing-failure-path'>[] =>
   judged(model)
     .filter(({ saga, outcome: [success, failure] }) => handles(model, saga, success) && !handles(model, saga, failure))
-    .map(({ saga, outcome: [success, failure] }): HandlerFinding => {
+    .map(({ saga, outcome: [success, failure] }): FindingOf<'saga-missing-failure-path'> => {
       const sagaRef = refOf(model, saga.id);
       const sagaName = sagaRef.name;
+      const successName = nameOf(model, success);
       const failureName = nameOf(model, failure);
       return {
-        analyzer: 'event-flow',
         ...reportedUnder(SAGA_MISSING_FAILURE_PATH),
-        event: failureName,
-        eventId: failure,
-        handler: saga.id,
-        subject: success,
+        analyzer: 'event-flow',
         file: sagaRef.file,
         line: sagaRef.line,
-        message: `${sagaName} handles ${nameOf(model, success)} but not its declared failure ${failureName}.`,
+        message: `${sagaName} handles ${successName} but not its declared failure ${failureName}.`,
         fix: `Handle ${failureName} in ${sagaName}, for example with a compensating command.`,
+        details: { saga: sagaName, sagaId: saga.id, success: successName, successId: success, failure: failureName, failureId: failure },
       };
     });
 

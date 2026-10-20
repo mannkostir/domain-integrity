@@ -146,8 +146,8 @@ const leaks = (target: ClassDeclaration, inertMembers: readonly string[]) => {
   });
   return lifecycleAnalyzer
     .check(model)
-    .filter((finding) => finding.checkId === 'terminal-state-leak')
-    .map((finding) => finding.method)
+    .filter((finding) => finding.ruleId === 'terminal-state-leak')
+    .map((finding) => finding.details.method)
     .sort();
 };
 

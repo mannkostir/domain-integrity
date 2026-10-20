@@ -1,4 +1,4 @@
-import { EventBufferFinding, Finding, HandlerFinding, LifecycleFinding } from '../../src/analyzer';
+import { DetailsByRule, Finding, FindingOf, LifecycleFinding } from '../../src/finding';
 import {
   AggregateModel,
   AssignedValues,
@@ -95,55 +95,92 @@ export const DECLARED_ORDER = aggregate({
   ],
 });
 
-export const finding = (overrides: Partial<LifecycleFinding>): LifecycleFinding => ({
-  analyzer: 'lifecycle',
-  checkId: 'terminal-state-leak',
+export const finding = (overrides: Partial<FindingOf<'terminal-state-leak'>> = {}): FindingOf<'terminal-state-leak'> => ({
+  ruleId: 'terminal-state-leak',
   severity: 'error',
-  aggregate: 'Order',
-  aggregateId: 'Order',
-  method: 'annotate',
-  field: 'status',
-  subject: 'CANCELLED',
+  analyzer: 'lifecycle',
   file: '/app/src/order.ts',
   line: 10,
   message: 'M1',
   fix: 'F1',
+  details: { aggregate: 'Order', aggregateId: 'Order', method: 'annotate', field: 'status', values: ['CANCELLED'] },
   ...overrides,
 });
 
-export const flowFinding = (overrides: Partial<HandlerFinding>): HandlerFinding => ({
-  analyzer: 'event-flow',
-  checkId: 'dead-handler',
+export const flowFinding = (overrides: Partial<FindingOf<'dead-handler'>> = {}): FindingOf<'dead-handler'> => ({
+  ruleId: 'dead-handler',
   severity: 'error',
-  event: 'RefundIssued',
-  eventId: 'RefundIssued',
-  handler: 'RefundHandler.handle',
-  subject: '',
+  analyzer: 'event-flow',
   file: '/app/src/handlers.ts',
   line: 4,
   message: 'M3',
   fix: 'F3',
+  details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: 'RefundHandler.handle' },
   ...overrides,
 });
 
-export const bufferFinding = (overrides: Partial<EventBufferFinding> = {}): EventBufferFinding => ({
-  analyzer: 'event-flow',
-  checkId: 'undispatched-events',
+export const bufferFinding = (overrides: Partial<FindingOf<'undispatched-events'>> = {}): FindingOf<'undispatched-events'> => ({
+  ruleId: 'undispatched-events',
   severity: 'error',
-  owner: 'AggregateRoot',
-  ownerId: 'AggregateRoot',
-  buffer: '_domainEvents',
-  method: 'addDomainEvent',
-  raisers: ['Booking', 'Payment'],
-  subject: '',
+  analyzer: 'event-flow',
   file: '/app/src/aggregate-root.ts',
   line: 3,
   message: 'M4',
   fix: 'F4',
+  details: { owner: 'AggregateRoot', ownerId: 'AggregateRoot', buffer: '_domainEvents', method: 'addDomainEvent', raisers: ['Booking', 'Payment'] },
   ...overrides,
+});
+
+export const leakWith = (details: Partial<DetailsByRule['terminal-state-leak']>, overrides: Partial<FindingOf<'terminal-state-leak'>> = {}): FindingOf<'terminal-state-leak'> =>
+  finding({ ...overrides, details: { ...finding().details, ...details } });
+
+export const unreachableFinding = (): FindingOf<'unreachable-state'> => ({
+  ruleId: 'unreachable-state',
+  severity: 'error',
+  analyzer: 'lifecycle',
+  file: '/app/src/order.ts',
+  line: 3,
+  message: 'M2',
+  fix: 'F2',
+  details: { aggregate: 'Order', aggregateId: 'Order', field: 'status', value: 'CANCELLED' },
+});
+
+export const missingFinding = (): FindingOf<'transition-missing'> => ({
+  ruleId: 'transition-missing',
+  severity: 'warning',
+  analyzer: 'lifecycle',
+  file: '/app/src/order.ts',
+  line: 10,
+  message: 'M1',
+  fix: 'F1',
+  details: { aggregate: 'Order', aggregateId: 'Order', method: 'annotate', field: 'status', values: ['PAID'] },
+});
+
+export const unhandledFinding = (): FindingOf<'unhandled-event'> => ({
+  ruleId: 'unhandled-event',
+  severity: 'error',
+  analyzer: 'event-flow',
+  file: '/app/src/handlers.ts',
+  line: 4,
+  message: 'M3',
+  fix: 'F3',
+  details: { event: 'RefundIssued', eventId: 'RefundIssued' },
+});
+
+export const mismatchFinding = (): FindingOf<'handler-payload-mismatch'> => ({
+  ruleId: 'handler-payload-mismatch',
+  severity: 'error',
+  analyzer: 'event-flow',
+  file: '/app/src/handlers.ts',
+  line: 4,
+  message: 'M3',
+  fix: 'F3',
+  details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: 'RefundHandler.handle', declared: ['PaymentCaptured'], declaredIds: ['PaymentCaptured'] },
 });
 
 export const lifecycleFindings = (findings: readonly Finding[]): LifecycleFinding[] =>
   findings.filter((candidate): candidate is LifecycleFinding => candidate.analyzer === 'lifecycle');
+
+export const methodOf = (finding: LifecycleFinding): string | undefined => ('method' in finding.details ? finding.details.method : undefined);
 
 export const TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.3', informationUri: 'https://example.test' };

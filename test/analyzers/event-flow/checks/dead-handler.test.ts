@@ -8,17 +8,14 @@ describe('deadHandler', () => {
   it('reports a handler whose event is never constructed', () => {
     expect(deadHandler(withPaid({ constructions: [] }))).toEqual([
       {
-        analyzer: 'event-flow',
-        checkId: 'dead-handler',
+        ruleId: 'dead-handler',
         severity: 'error',
-        event: 'Paid',
-        eventId: 'Paid',
-        handler: 'PaidHandler.handle',
-        subject: '',
+        analyzer: 'event-flow',
         file: '/app/src/handlers.ts',
         line: 4,
         message: 'PaidHandler.handle handles Paid, but no production code constructs Paid.',
         fix: 'Publish Paid where it happens, or delete the handler.',
+        details: { event: 'Paid', eventId: 'Paid', handler: 'PaidHandler.handle' },
       },
     ]);
   });
@@ -42,7 +39,7 @@ describe('deadHandler', () => {
       ],
     });
 
-    expect(deadHandler(model).map((finding) => finding.handler)).toEqual(['PaidHandler', 'onPaid', undefined]);
+    expect(deadHandler(model).map((finding) => finding.details.handler)).toEqual(['PaidHandler', 'onPaid', null]);
   });
 
   it('skips a handler registered in a test file', () => {

@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { AnalyzerRun } from '../analysis';
-import { AnalyzerFailure, Finding } from '../analyzer';
+import { AnalyzerFailure } from '../analyzer';
+import { Finding } from '../finding';
 import { UsageError } from '../engine/errors';
 import { baselineKeys, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
 import { formatJson } from '../report/json';

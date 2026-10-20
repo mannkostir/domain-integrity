@@ -28,11 +28,11 @@ describe('init for a timestamp set only alongside a terminal status', () => {
       findings: [
         {
           severity: 'error',
-          checkId: 'terminal-state-leak',
+          ruleId: 'terminal-state-leak',
           aggregate: 'Ticket',
           method: 'rename',
           field: 'status',
-          subject: 'CLOSED',
+          values: ['CLOSED'],
         },
       ],
     });

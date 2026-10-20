@@ -1,4 +1,5 @@
-import { Analyzer, CheckScope, EventFlowFinding } from '../../analyzer';
+import { Analyzer, CheckScope } from '../../analyzer';
+import { EventFlowFinding } from '../../finding';
 import { EVENT_FLOW_RULES, runEventFlowChecks } from './checks';
 import { sagaProblems } from './checks/saga-missing-failure-path';
 import { eventFlowDiagram } from './diagram';

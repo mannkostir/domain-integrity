@@ -1,4 +1,6 @@
-import { Finding, RuleDescription, findingKey } from '../analyzer';
+import { RuleDescription } from '../analyzer';
+import { Finding } from '../finding';
+import { findingKey } from './key';
 import { toPosixRelative } from '../engine/path';
 import { Report } from './text';
 import { ToolIdentity } from './tool';
@@ -32,8 +34,8 @@ const ruleIndexOf = (rules: readonly RuleDescription[], ruleId: string): number 
 };
 
 const sarifResult = (finding: Finding, report: Report) => ({
-  ruleId: finding.checkId,
-  ruleIndex: ruleIndexOf(report.rules, finding.checkId),
+  ruleId: finding.ruleId,
+  ruleIndex: ruleIndexOf(report.rules, finding.ruleId),
   level: finding.severity,
   message: { text: finding.message },
   locations: [

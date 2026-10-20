@@ -71,11 +71,11 @@ describe('init in a project whose aggregates extend their own base class', () =>
       findings: [
         {
           severity: 'error',
-          checkId: 'terminal-state-leak',
+          ruleId: 'terminal-state-leak',
           aggregate: 'Subscription',
           method: 'changePlan',
           field: 'state',
-          subject: 'cancelled',
+          values: ['cancelled'],
         },
       ],
     });

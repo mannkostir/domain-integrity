@@ -1,4 +1,5 @@
-import { HandlerFinding, reportedUnder } from '../../../analyzer';
+import { reportedUnder } from '../../../analyzer';
+import { FindingOf } from '../../../finding';
 import { EventClassModel, EventFlowModel, Registration } from '../model';
 import { handlerLabel, nameOf } from './handler-label';
 import { DEAD_HANDLER } from './rules';
@@ -6,20 +7,17 @@ import { DEAD_HANDLER } from './rules';
 const isDead = (event: EventClassModel): boolean =>
   event.constructions.length === 0 && !event.abstract && !event.subclassed && !event.escaped;
 
-const toFinding = (model: EventFlowModel, registration: Registration): HandlerFinding => {
+const toFinding = (model: EventFlowModel, registration: Registration): FindingOf<'dead-handler'> => {
   const event = nameOf(model, registration.event);
   const handler = handlerLabel(registration);
   return {
-    analyzer: 'event-flow',
     ...reportedUnder(DEAD_HANDLER),
-    event,
-    eventId: registration.event,
-    handler,
-    subject: '',
+    analyzer: 'event-flow',
     file: registration.file,
     line: registration.line,
     message: `${handler ?? 'A handler'} handles ${event}, but no production code constructs ${event}.`,
     fix: `Publish ${event} where it happens, or delete the handler.`,
+    details: { event, eventId: registration.event, handler: handler ?? null },
   };
 };
 
@@ -28,7 +26,7 @@ const hasDeadEvent = (model: EventFlowModel, registration: Registration): boolea
   return event !== undefined && isDead(event);
 };
 
-export const deadHandler = (model: EventFlowModel): HandlerFinding[] =>
+export const deadHandler = (model: EventFlowModel): FindingOf<'dead-handler'>[] =>
   model.registrations
     .filter((registration) => !registration.inTest && hasDeadEvent(model, registration))
     .map((registration) => toFinding(model, registration));

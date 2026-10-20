@@ -1,4 +1,5 @@
-import { LifecycleFinding, reportedUnder } from '../../../analyzer';
+import { reportedUnder } from '../../../analyzer';
+import { FindingOf } from '../../../finding';
 import { AggregateModel, AssignedValues, StateField } from '../model';
 import { hasUnknownWrite } from '../values';
 import { fieldOf } from './format';
@@ -11,7 +12,7 @@ const assignmentsOf = (aggregate: AggregateModel, field: StateField): AssignedVa
     ...aggregate.outside.filter((assignment) => assignment.field === field.name).map((assignment) => assignment.value),
   ].filter((value): value is AssignedValues => value !== undefined);
 
-const unreachableValues = (aggregate: AggregateModel, field: StateField): LifecycleFinding[] => {
+const unreachableValues = (aggregate: AggregateModel, field: StateField): FindingOf<'unreachable-state'>[] => {
   const assignments = assignmentsOf(aggregate, field);
   if (assignments.some(hasUnknownWrite)) return [];
   const reached = new Set([
@@ -20,22 +21,18 @@ const unreachableValues = (aggregate: AggregateModel, field: StateField): Lifecy
   ]);
   return field.values
     .filter((value) => !reached.has(value.token))
-    .map((value) => ({
-      analyzer: 'lifecycle',
+    .map((value): FindingOf<'unreachable-state'> => ({
       ...reportedUnder(UNREACHABLE_STATE),
-      aggregate: aggregate.name,
-      aggregateId: aggregate.id,
-      method: undefined,
-      field: field.name,
-      subject: value.token,
+      analyzer: 'lifecycle',
       file: aggregate.file,
       line: aggregate.line,
       message: `${field.name} value '${value.label}' is never assigned.`,
       fix: `Add the method that moves ${aggregate.name} into '${value.label}', or remove the value from the type.`,
+      details: { aggregate: aggregate.name, aggregateId: aggregate.id, field: field.name, value: value.token },
     }));
 };
 
-export const unreachableState = (aggregate: AggregateModel): LifecycleFinding[] =>
+export const unreachableState = (aggregate: AggregateModel): FindingOf<'unreachable-state'>[] =>
   [...aggregate.declarations.keys()]
     .map((name) => fieldOf(aggregate, name))
     .filter((field) => field.kind === 'enum' || field.kind === 'union')

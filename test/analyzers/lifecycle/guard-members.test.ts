@@ -87,6 +87,6 @@ describe('guards that call members whose body cannot be traced', () => {
       root: '/',
     });
 
-    expect(lifecycleAnalyzer.check(model).filter((finding) => finding.checkId === 'terminal-state-leak')).toEqual([]);
+    expect(lifecycleAnalyzer.check(model).filter((finding) => finding.ruleId === 'terminal-state-leak')).toEqual([]);
   });
 });

@@ -39,11 +39,11 @@ describe('init in a NodeNext ESM project', () => {
       findings: [
         {
           severity: 'error',
-          checkId: 'terminal-state-leak',
+          ruleId: 'terminal-state-leak',
           aggregate: 'Shipment',
           method: 'redirect',
           field: 'status',
-          subject: 'DELIVERED',
+          values: ['DELIVERED'],
         },
       ],
     });

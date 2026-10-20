@@ -1,4 +1,5 @@
-import { HandlerFinding, reportedUnder } from '../../../analyzer';
+import { reportedUnder } from '../../../analyzer';
+import { FindingOf } from '../../../finding';
 import { EventClassModel, EventFlowModel, Location, UnresolvedSite } from '../model';
 import { acceptedIds, nameOf } from './handler-label';
 import { UNHANDLED_EVENT } from './rules';
@@ -23,24 +24,21 @@ const isHandled = (model: EventFlowModel, event: EventClassModel): boolean => {
   return model.registrations.some((registration) => accepted.has(registration.event));
 };
 
-export const unhandledEvent = (model: EventFlowModel): HandlerFinding[] => {
-  return model.inProcess.flatMap((id): HandlerFinding[] => {
+export const unhandledEvent = (model: EventFlowModel): FindingOf<'unhandled-event'>[] => {
+  return model.inProcess.flatMap((id): FindingOf<'unhandled-event'>[] => {
     const event = model.events.get(id);
     const [first] = [...(event?.constructions ?? [])].sort(byPosition);
     if (event === undefined || first === undefined || mightBeHandledUnseen(model, event) || mightBeHandledByUnresolvedSite(model, event) || isHandled(model, event)) return [];
     const name = nameOf(model, id);
     return [
       {
-        analyzer: 'event-flow',
         ...reportedUnder(UNHANDLED_EVENT),
-        event: name,
-        eventId: id,
-        handler: undefined,
-        subject: '',
+        analyzer: 'event-flow',
         file: first.file,
         line: first.line,
         message: `${name} is declared in-process and constructed, but no handler is registered for it.`,
         fix: `Add a handler, or remove ${name} from events.inProcess if it is consumed elsewhere.`,
+        details: { event: name, eventId: id },
       },
     ];
   });

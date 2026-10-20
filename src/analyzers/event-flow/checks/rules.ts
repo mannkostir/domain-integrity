@@ -1,4 +1,5 @@
-import { EventFlowFinding, RuleDescription } from '../../../analyzer';
+import { RuleDescription } from '../../../analyzer';
+import { EventFlowFinding } from '../../../finding';
 
 export const DEAD_HANDLER: RuleDescription<'dead-handler'> = {
   id: 'dead-handler',
@@ -50,7 +51,7 @@ export const UNDISPATCHED_EVENTS: RuleDescription<'undispatched-events'> = {
     'Dispatch the events in the buffer after saving the aggregate and clear it, or stop raising them. Accept the finding into the baseline only if the buffer is honestly read by code the analysis cannot see, such as reflection or library code.',
 };
 
-export const EVENT_FLOW_RULES: readonly RuleDescription<EventFlowFinding['checkId']>[] = [
+export const EVENT_FLOW_RULES: readonly RuleDescription<EventFlowFinding['ruleId']>[] = [
   DEAD_HANDLER,
   HANDLER_PAYLOAD_MISMATCH,
   UNHANDLED_EVENT,

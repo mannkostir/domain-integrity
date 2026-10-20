@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { LifecycleFinding } from '../../src/analyzer';
+import { FindingOf } from '../../src/finding';
 import { run } from '../../src/cli/run';
 import { captureIo } from './disk';
 
@@ -14,18 +14,18 @@ export const pointHelpersAtRepo = (tsconfigPath: string): void => {
   writeFileSync(tsconfigPath, JSON.stringify({ ...tsconfig, compilerOptions: { ...tsconfig.compilerOptions, paths } }));
 };
 
-const describeFinding = ({ severity, checkId, aggregate, method, field, subject }: LifecycleFinding) => ({
+const describeFinding = ({ severity, ruleId, details }: FindingOf<'terminal-state-leak'>) => ({
   severity,
-  checkId,
-  aggregate,
-  method,
-  field,
-  subject,
+  ruleId,
+  aggregate: details.aggregate,
+  method: details.method,
+  field: details.field,
+  values: details.values,
 });
 
 export const checkJson = async (dir: string) => {
   const { io, stdout } = captureIo(dir);
   const code = await run(['check', '--format', 'json'], io);
-  const findings = (JSON.parse(stdout()) as { findings: LifecycleFinding[] }).findings;
+  const findings = (JSON.parse(stdout()) as { findings: FindingOf<'terminal-state-leak'>[] }).findings;
   return { code, findings: findings.map(describeFinding) };
 };

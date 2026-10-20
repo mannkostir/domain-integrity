@@ -9,17 +9,14 @@ describe('unhandledEvent', () => {
   it('reports a declared, constructed event with no handler at its first construction', () => {
     expect(unhandledEvent(declared({ constructions: [{ file: '/app/src/b.ts', line: 2 }, { file: '/app/src/a.ts', line: 9 }] }))).toEqual([
       {
-        analyzer: 'event-flow',
-        checkId: 'unhandled-event',
+        ruleId: 'unhandled-event',
         severity: 'error',
-        event: 'Failed',
-        eventId: 'Failed',
-        handler: undefined,
-        subject: '',
+        analyzer: 'event-flow',
         file: '/app/src/a.ts',
         line: 9,
         message: 'Failed is declared in-process and constructed, but no handler is registered for it.',
         fix: 'Add a handler, or remove Failed from events.inProcess if it is consumed elsewhere.',
+        details: { event: 'Failed', eventId: 'Failed' },
       },
     ]);
   });

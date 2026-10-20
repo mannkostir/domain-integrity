@@ -12,11 +12,10 @@ describe('transitionDrift', () => {
 
     expect(transitionDrift(aggregate({ methods, declarations: withTransitions({ cancel: ['PENDING'] }) }))).toEqual([
       expect.objectContaining({
-        analyzer: 'lifecycle',
-        checkId: 'transition-drift',
+        ruleId: 'transition-drift',
         severity: 'error',
-        method: 'cancel',
-        subject: 'extra',
+        analyzer: 'lifecycle',
+        details: expect.objectContaining({ method: 'cancel', kind: 'extra' }),
         message: "cancel() can run from 'confirmed', which the declaration does not allow.",
         fix: "Add a guard that excludes 'confirmed', or add it to transitions.cancel.",
       }),
@@ -30,10 +29,10 @@ describe('transitionDrift', () => {
       transitionDrift(aggregate({ methods, declarations: withTransitions({ cancel: ['PENDING', 'CONFIRMED'] }) })),
     ).toEqual([
       expect.objectContaining({
-        analyzer: 'lifecycle',
-        checkId: 'transition-missing',
+        ruleId: 'transition-missing',
         severity: 'warning',
-        subject: 'missing',
+        analyzer: 'lifecycle',
+        details: expect.objectContaining({ values: ['CONFIRMED'] }),
         message: "cancel() cannot run from 'confirmed', although the declaration allows it.",
         fix: "Remove 'confirmed' from transitions.cancel, or relax the guard.",
       }),
@@ -45,10 +44,9 @@ describe('transitionDrift', () => {
 
     expect(transitionDrift(aggregate({ methods, declarations: withTransitions({}) }))).toEqual([
       expect.objectContaining({
-        checkId: 'transition-drift',
+        ruleId: 'transition-drift',
         severity: 'error',
-        method: 'confirm',
-        subject: 'undeclared',
+        details: expect.objectContaining({ method: 'confirm', kind: 'undeclared' }),
         message: 'confirm() sets status but has no entry in transitions.',
         fix: 'Add transitions.confirm to the declaration.',
       }),
@@ -65,7 +63,7 @@ describe('transitionDrift', () => {
     const methods = [method('confirm', true, { status: { sources: known('PENDING'), sets: assigned('CONFIRMED') } }, 'public')];
 
     expect(transitionDrift(aggregate({ methods, declarations: withTransitions({}) }))).toEqual([
-      expect.objectContaining({ method: 'confirm', subject: 'undeclared' }),
+      expect.objectContaining({ details: expect.objectContaining({ method: 'confirm', kind: 'undeclared' }) }),
     ]);
   });
 
@@ -101,7 +99,7 @@ describe('transitionDrift', () => {
           methods: [method('cancel', true, { status: { sources: known('PENDING', 'CONFIRMED'), sets: assigned('CANCELLED') } })],
           declarations: withTransitions({ cancel: ['PENDING'] }),
         }),
-      ).map((finding) => finding.aggregateId),
+      ).map((finding) => finding.details.aggregateId),
     ).toEqual([QUALIFIED]);
   });
 });

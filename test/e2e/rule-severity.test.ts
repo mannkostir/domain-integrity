@@ -1,9 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { Finding, Severity } from '../../src/analyzer';
 import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks/rules';
 import { LIFECYCLE_RULES } from '../../src/analyzers/lifecycle/checks/rules';
 import { run } from '../../src/cli/run';
+import { Finding, Severity } from '../../src/finding';
 import { captureIo } from '../helpers/disk';
 
 const RULE_SEVERITY: ReadonlyMap<string, Severity> = new Map(
@@ -18,10 +18,10 @@ const reportedFindings = async (name: string): Promise<readonly Finding[]> => {
   return (JSON.parse(stdout()) as { findings: Finding[] }).findings;
 };
 
-const severities = (findings: readonly Finding[]) => findings.map(({ checkId, severity }) => ({ checkId, severity }));
+const severities = (findings: readonly Finding[]) => findings.map(({ ruleId, severity }) => ({ ruleId, severity }));
 
 const ruleSeverities = (findings: readonly Finding[]) =>
-  findings.map(({ checkId }) => ({ checkId, severity: RULE_SEVERITY.get(checkId) }));
+  findings.map(({ ruleId }) => ({ ruleId, severity: RULE_SEVERITY.get(ruleId) }));
 
 describe('finding severity', () => {
   it('matches the rule of each lifecycle finding', async () => {

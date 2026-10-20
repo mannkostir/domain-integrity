@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
 import { DEFAULT_DECLARATION, DeclaredField } from '../../../src/engine/declaration';
 import { inMemoryProject } from '../../helpers/in-memory';
+import { methodOf } from '../../helpers/model';
 
 const project = inMemoryProject({
   '/src/aggregate-root.ts': `
@@ -37,7 +38,7 @@ const analyse = (field: DeclaredField) => {
   });
   return {
     problems: model.problems,
-    findings: lifecycleAnalyzer.check(model).map((finding) => `${finding.checkId} ${finding.method} ${finding.subject}`),
+    findings: lifecycleAnalyzer.check(model).map((finding) => `${finding.ruleId} ${methodOf(finding)} ${'values' in finding.details ? finding.details.values.join(',') : ''}`),
   };
 };
 
@@ -53,7 +54,7 @@ describe('methods inherited from a project base class', () => {
         ]),
         allowAfterTerminal: [],
       }),
-    ).toEqual({ problems: [], findings: ['transition-missing pay missing'] });
+    ).toEqual({ problems: [], findings: ['transition-missing pay paid'] });
   });
 
   it('are judged for terminal-state leaks on the subclass, with subclass overrides taking precedence', () => {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { AnalysisInput, Analyzer, LifecycleFinding, analyse, reportedUnder } from '../src/analyzer';
+import { AnalysisInput, Analyzer, analyse, reportedUnder } from '../src/analyzer';
 import { DEFAULT_DECLARATION } from '../src/engine/declaration';
 import { ConfigError } from '../src/engine/errors';
+import { LifecycleFinding } from '../src/finding';
 
 const INPUT: AnalysisInput = { declaration: DEFAULT_DECLARATION, files: [], root: '/' };
 
@@ -112,6 +113,6 @@ describe('analyse', () => {
 
 describe('reportedUnder', () => {
   it('takes the check id and severity of a finding from its rule', () => {
-    expect(reportedUnder({ id: 'fake-rule', severity: 'warning', description: 'a fake rule', explanation: 'E', remedy: 'R' })).toEqual({ checkId: 'fake-rule', severity: 'warning' });
+    expect(reportedUnder({ id: 'fake-rule', severity: 'warning', description: 'a fake rule', explanation: 'E', remedy: 'R' })).toEqual({ ruleId: 'fake-rule', severity: 'warning' });
   });
 });
