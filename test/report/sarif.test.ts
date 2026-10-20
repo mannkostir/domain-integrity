@@ -19,7 +19,7 @@ describe('formatSarif', () => {
         fresh: [finding({ severity: 'warning' })],
         known: [],
         problems: [],
-        rules: [{ id: 'terminal-state-leak', severity: 'error', description: 'D' }],
+        rules: [{ id: 'terminal-state-leak', severity: 'error', description: 'D', explanation: 'E', remedy: 'R' }],
         root: '/app',
       }, TOOL),
     );
