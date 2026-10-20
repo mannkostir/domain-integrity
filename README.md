@@ -300,7 +300,7 @@ Before 0.3.0, `transition-missing` findings were reported as `transition-drift` 
 
 Event-flow findings have the key `checkId|eventId|handler|subject`. Event ids are plain class names, qualified as `path:Class` only when two classes in the analysed files share a name, test classes included, so adding such a class changes the keys. Every JSON finding carries `analyzer`, either `lifecycle` or `event-flow`. Event-flow findings use `event`, `eventId` and `handler` in place of the aggregate fields. `undispatched-events` findings have the key `undispatched-events|ownerId|buffer|` and carry `owner`, `ownerId`, `buffer`, `method` and `raisers` instead.
 
-The SARIF report carries baselined findings as suppressed results, so code scanning keeps them as suppressed alerts.
+The SARIF report still carries baselined findings, as results with an `external` suppression, so code scanning does not see them disappear and close their alerts as fixed.
 
 ## CI
 
@@ -329,7 +329,7 @@ jobs:
 
 Findings appear as code-scanning alerts on the pull request, and the job fails when `check` does.
 
-Code scanning matches alerts across runs by the `domainIntegrity/v1` fingerprint, built from the baseline key, so an alert survives when its lines move. A change to the key format would come with a new fingerprint version. With `baseline` set, known findings are uploaded as suppressed results, so code scanning keeps their alerts as suppressed instead of closing them as fixed; they never fail the job.
+Every result carries the `domainIntegrity/v1` fingerprint, its baseline key, which identifies a finding across runs without its line number; a change to the key format would come with a new fingerprint version. GitHub code scanning itself matches alerts by the `primaryLocationLineHash` fingerprint that the upload step adds. With `baseline` set, known findings are uploaded as suppressed results instead of being left out, so code scanning does not close their alerts as fixed; they never fail the job.
 
 | Input | Default | Meaning |
 | --- | --- | --- |

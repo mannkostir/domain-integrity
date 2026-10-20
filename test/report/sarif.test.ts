@@ -126,11 +126,7 @@ describe('formatSarif', () => {
   });
 
   it('fingerprints a result by the baseline key of its finding', () => {
-    expect(leakResult().partialFingerprints).toEqual({ [FINGERPRINT]: 'terminal-state-leak|Order|annotate|status|CANCELLED' });
-  });
-
-  it('names the fingerprint after the tool and its key format version', () => {
-    expect(FINGERPRINT).toBe('domainIntegrity/v1');
+    expect(leakResult().partialFingerprints).toEqual({ 'domainIntegrity/v1': 'terminal-state-leak|Order|annotate|status|CANCELLED' });
   });
 
   it('leaves a fresh result unsuppressed', () => {
@@ -148,7 +144,7 @@ describe('formatSarif', () => {
   });
 
   it('fingerprints a known finding like a fresh one', () => {
-    expect(knownLeakResult().partialFingerprints).toEqual({ [FINGERPRINT]: 'terminal-state-leak|Order|annotate|status|CANCELLED' });
+    expect(knownLeakResult().partialFingerprints).toEqual({ 'domainIntegrity/v1': 'terminal-state-leak|Order|annotate|status|CANCELLED' });
   });
 
   it('refuses a finding whose rule the report does not declare', () => {
