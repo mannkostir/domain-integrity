@@ -5,19 +5,17 @@ import { ToolIdentity } from '../report/tool';
 
 const PACKAGE_NAME = 'domain-integrity';
 
-const HOMEPAGE = 'https://github.com/mannkostir/domain-integrity#readme';
-
 const UNKNOWN_VERSION = 'unknown version';
 
-const ownVersion = (manifest: unknown): string | undefined =>
-  typeof manifest === 'object' &&
-  manifest !== null &&
-  'name' in manifest &&
-  manifest.name === PACKAGE_NAME &&
-  'version' in manifest &&
-  typeof manifest.version === 'string'
-    ? manifest.version
-    : undefined;
+type OwnManifest = { readonly version: string; readonly homepage?: string };
+
+const ownManifest = (manifest: unknown): OwnManifest | undefined => {
+  if (typeof manifest !== 'object' || manifest === null) return undefined;
+  if (!('name' in manifest) || manifest.name !== PACKAGE_NAME) return undefined;
+  if (!('version' in manifest) || typeof manifest.version !== 'string') return undefined;
+  const homepage = 'homepage' in manifest && typeof manifest.homepage === 'string' ? manifest.homepage : undefined;
+  return homepage === undefined ? { version: manifest.version } : { version: manifest.version, homepage };
+};
 
 const readManifest = (path: string): unknown => {
   try {
@@ -27,14 +25,22 @@ const readManifest = (path: string): unknown => {
   }
 };
 
-const versionAbove = (directory: string): string => {
-  const manifest = join(directory, 'package.json');
-  const version = existsSync(manifest) ? ownVersion(readManifest(manifest)) : undefined;
-  if (version !== undefined) return version;
+const manifestAbove = (directory: string): OwnManifest | undefined => {
+  const path = join(directory, 'package.json');
+  const manifest = existsSync(path) ? ownManifest(readManifest(path)) : undefined;
+  if (manifest !== undefined) return manifest;
   const parent = dirname(directory);
-  return parent === directory ? UNKNOWN_VERSION : versionAbove(parent);
+  return parent === directory ? undefined : manifestAbove(parent);
 };
 
-export const packageVersion = (): string => versionAbove(dirname(fileURLToPath(import.meta.url)));
+export const toolIdentityAt = (directory: string): ToolIdentity => {
+  const manifest = manifestAbove(directory);
+  const version = manifest?.version ?? UNKNOWN_VERSION;
+  return manifest?.homepage === undefined
+    ? { name: PACKAGE_NAME, version }
+    : { name: PACKAGE_NAME, version, informationUri: manifest.homepage };
+};
 
-export const toolIdentity = (): ToolIdentity => ({ name: PACKAGE_NAME, version: packageVersion(), informationUri: HOMEPAGE });
+export const toolIdentity = (): ToolIdentity => toolIdentityAt(dirname(fileURLToPath(import.meta.url)));
+
+export const packageVersion = (): string => toolIdentity().version;

@@ -49,6 +49,12 @@ describe('formatSarif', () => {
     expect({ version, informationUri }).toEqual({ version: '1.2.3', informationUri: 'https://example.test' });
   });
 
+  it('leaves out the information uri when the tool has none', () => {
+    const driver = JSON.parse(formatSarif({ fresh: [], known: [], problems: [], rules: [], root: '/app' }, { name: 'domain-integrity', version: '1.2.3' })).runs[0].tool.driver;
+
+    expect('informationUri' in driver).toBe(false);
+  });
+
   it('declares the undispatched-events rule with its description', () => {
     expect(undispatchedRun().tool.driver.rules).toEqual([
       { id: 'undispatched-events', shortDescription: { text: 'An event method stores events in a buffer that production code never reads or drains.' } },
