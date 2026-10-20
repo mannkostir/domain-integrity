@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTestFile } from '../../../src/analyzers/event-flow/test-files';
+import { isTestFile } from '../../../src/analyzers/shared/test-files';
 import { inMemoryProject } from '../../helpers/in-memory';
 
 const PATHS = [

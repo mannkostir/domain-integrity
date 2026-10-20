@@ -7,7 +7,7 @@ import { SourceIndex } from '../../shared/source-index';
 import { hierarchyOf } from '../hierarchy';
 import { ProjectClasses } from '../keys';
 import { UndispatchedBuffer } from '../model';
-import { isTestFile } from '../test-files';
+import { isTestFile } from '../../shared/test-files';
 import { BufferCandidate } from './buffer-candidate';
 import { candidatesIn, declaringClassOf } from './candidates';
 import { isUndrained } from './drains';
