@@ -84,7 +84,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   if (!options.yes && !io.isInteractive) {
     throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
   }
-  const project = loadProject(paths.tsconfig);
+  const project = loadProject(paths.tsconfig, paths.config);
   const config = startingConfig(project, paths.config, options.baseClass);
   const declaration = config ? readDeclaration(config) : DEFAULT_DECLARATION;
   const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, config), root: paths.root, configFile: config });

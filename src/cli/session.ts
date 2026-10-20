@@ -18,7 +18,7 @@ export const nothingToAnalyseMessage = (declaration: DomainDeclaration): string 
   `${noAggregatesMessage(declaration)} No event handlers were found either. Recognised handlers use the decorators ${declaration.events.handlerDecorators.join(', ')} (set "events.handlerDecorators" for your own), the methods ${declaration.events.registerMethods.join(', ')} (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().`;
 
 export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[]): Session => {
-  const project = loadProject(paths.tsconfig);
+  const project = loadProject(paths.tsconfig, paths.config);
   const configFile = configSourceFile(project, paths.config);
   const declaration = readDeclaration(configFile);
   const results = runAnalyzers({ declaration, files: analysedSourceFiles(project, configFile), root: paths.root, configFile }, analyzers);

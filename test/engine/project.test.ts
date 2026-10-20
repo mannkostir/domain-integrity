@@ -22,7 +22,7 @@ const projectWithRootConfig = (): string => {
 
 describe('loadProject', () => {
   it('fails with a ProjectError when the tsconfig does not exist', () => {
-    expect(() => loadProject('/definitely/missing/tsconfig.json')).toThrow(ProjectError);
+    expect(() => loadProject('/definitely/missing/tsconfig.json', '/definitely/missing/domain.config.ts')).toThrow(ProjectError);
   });
 
   it('loads the files of every referenced tsconfig', () => {
@@ -35,7 +35,7 @@ describe('loadProject', () => {
       'libs/orders/src/order.ts': 'export class Order {}\n',
     });
 
-    expect(fileNames(loadProject(join(dir, 'tsconfig.json')), dir)).toEqual(['apps/api/src/main.ts', 'libs/orders/src/order.ts']);
+    expect(fileNames(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), dir)).toEqual(['apps/api/src/main.ts', 'libs/orders/src/order.ts']);
   });
 
   it('leaves out referenced files of a kind the entry compiler options do not support', () => {
@@ -46,13 +46,13 @@ describe('loadProject', () => {
       'app/src/legacy.js': "export class Legacy { status = 'open'; }\n",
     });
 
-    expect(fileNames(loadProject(join(dir, 'tsconfig.json')), dir)).toEqual(['app/src/order.ts']);
+    expect(fileNames(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), dir)).toEqual(['app/src/order.ts']);
   });
 
   it('fails with a ProjectError naming the referrer of a missing reference', () => {
     const dir = writeTree({ 'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './gone' }] }) });
 
-    expect(() => loadProject(join(dir, 'tsconfig.json'))).toThrow(
+    expect(() => loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'))).toThrow(
       new ProjectError(`tsconfig not found: ${join(dir, 'gone/tsconfig.json')} (referenced from ${join(dir, 'tsconfig.json')})`),
     );
   });
@@ -60,9 +60,9 @@ describe('loadProject', () => {
   it('says a tsconfig without references includes no source files', () => {
     const dir = writeTree({ 'tsconfig.json': JSON.stringify({ files: [] }) });
 
-    expect(() => loadProject(join(dir, 'tsconfig.json'))).toThrow(
+    expect(() => loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'))).toThrow(
       new ProjectError(
-        `${join(dir, 'tsconfig.json')} includes no source files. Pass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.`,
+        `Loaded 0 source files.\n${join(dir, 'tsconfig.json')} includes no source files.\nPass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.`,
       ),
     );
   });
@@ -73,23 +73,69 @@ describe('loadProject', () => {
       'a/tsconfig.json': JSON.stringify({ files: [] }),
     });
 
-    expect(() => loadProject(join(dir, 'tsconfig.json'))).toThrow(
-      new ProjectError(`${join(dir, 'tsconfig.json')} and the tsconfigs it references include no source files.`),
+    expect(() => loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'))).toThrow(
+      new ProjectError(`Loaded 0 source files.\n${join(dir, 'tsconfig.json')} and the tsconfigs it references include no source files.`),
     );
+  });
+
+  it('says a tsconfig without references includes no source files other than the config', () => {
+    const dir = writeTree({
+      'tsconfig.json': JSON.stringify({ include: ['domain.config.ts'] }),
+      'domain.config.ts': 'export default {};\n',
+    });
+
+    expect(() => loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'))).toThrow(
+      new ProjectError(
+        `Loaded 0 source files.\n${join(dir, 'tsconfig.json')} includes no source files other than ${join(dir, 'domain.config.ts')}.\nPass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.`,
+      ),
+    );
+  });
+
+  it('says a tsconfig and its references include no source files other than the config', () => {
+    const dir = writeTree({
+      'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './a' }] }),
+      'a/tsconfig.json': JSON.stringify({ files: ['../domain.config.ts'] }),
+      'domain.config.ts': 'export default {};\n',
+    });
+
+    expect(() => loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'))).toThrow(
+      new ProjectError(
+        `Loaded 0 source files.\n${join(dir, 'tsconfig.json')} and the tsconfigs it references include no source files other than ${join(dir, 'domain.config.ts')}.`,
+      ),
+    );
+  });
+
+  it('recognises the config through a path that is not normalised', () => {
+    const dir = writeTree({
+      'tsconfig.json': JSON.stringify({ include: ['domain.config.ts'] }),
+      'domain.config.ts': 'export default {};\n',
+    });
+
+    expect(() => loadProject(join(dir, 'tsconfig.json'), `${dir}/./src/../domain.config.ts`)).toThrow(/includes no source files other than/);
+  });
+
+  it('loads a project that includes a source besides the config', () => {
+    const dir = writeTree({
+      'tsconfig.json': JSON.stringify({ include: ['domain.config.ts', 'src'] }),
+      'domain.config.ts': 'export default {};\n',
+      'src/a.ts': 'export const a = 1;\n',
+    });
+
+    expect(fileNames(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), dir)).toEqual(['domain.config.ts', 'src/a.ts']);
   });
 });
 
 describe('configSourceFile', () => {
   it('loads a config that lives outside the tsconfig include globs', () => {
     const dir = projectWithRootConfig();
-    const project = loadProject(join(dir, 'tsconfig.json'));
+    const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'));
 
     expect(configSourceFile(project, join(dir, 'domain.config.ts')).getFilePath()).toBe(join(dir, 'domain.config.ts'));
   });
 
   it('fails with a ConfigError that suggests init when the config does not exist', () => {
     const dir = projectWithRootConfig();
-    const project = loadProject(join(dir, 'tsconfig.json'));
+    const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'));
 
     expect(() => configSourceFile(project, join(dir, 'missing.config.ts'))).toThrow(/domain-integrity init/);
   });
