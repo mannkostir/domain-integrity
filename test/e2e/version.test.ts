@@ -52,6 +52,12 @@ describe('tool version', () => {
   });
 });
 
+const ruleReference = (ruleId: string): string => {
+  const reference = new URL(MANIFEST.homepage);
+  reference.hash = ruleId;
+  return reference.href;
+};
+
 const byId = (left: { readonly id: string }, right: { readonly id: string }): number => left.id.localeCompare(right.id);
 
 describe('SARIF rule reference links', () => {
@@ -61,7 +67,7 @@ describe('SARIF rule reference links', () => {
     const rules: readonly SarifRule[] = JSON.parse(stdout).runs[0].tool.driver.rules;
 
     expect(rules.map((rule) => ({ id: rule.id, helpUri: rule.helpUri })).sort(byId)).toEqual(
-      ALL_RULES.map((rule) => ({ id: rule.id, helpUri: `https://github.com/mannkostir/domain-integrity#${rule.id}` })).sort(byId),
+      ALL_RULES.map((rule) => ({ id: rule.id, helpUri: ruleReference(rule.id) })).sort(byId),
     );
   });
 });
