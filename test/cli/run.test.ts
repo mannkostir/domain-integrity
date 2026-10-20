@@ -247,6 +247,28 @@ describe('check with a baseline', () => {
     expect(await run(['check', '--baseline', 'empty.json'], captureIo(dir).io)).toBe(1);
   });
 
+  it('exits 2 when the default baseline file is not valid JSON', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeFileSync(join(dir, DEFAULT_BASELINE), 'not json');
+    const { io, stderr } = captureIo(dir);
+
+    expect({ code: await run(['check'], io), invalid: stderr().includes('domain-integrity.baseline.json is not valid JSON.') }).toEqual({
+      code: 2,
+      invalid: true,
+    });
+  });
+
+  it('exits 2 when the default baseline file is not a baseline', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeFileSync(join(dir, DEFAULT_BASELINE), '{"nope": true}');
+    const { io, stderr } = captureIo(dir);
+
+    expect({ code: await run(['check'], io), rejected: stderr().includes('domain-integrity.baseline.json is not a domain-integrity baseline.') }).toEqual({
+      code: 2,
+      rejected: true,
+    });
+  });
+
   it('exits 2 when an explicit baseline is missing even if the default file exists', async () => {
     const dir = writeProject(TICKET_PROJECT);
     writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
