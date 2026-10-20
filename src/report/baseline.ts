@@ -28,8 +28,15 @@ const parse = (path: string): unknown => {
   }
 };
 
+export const baselineKeys = (findings: readonly Finding[]): readonly string[] => [...new Set(findings.map(findingKey))].sort();
+
+export const staleEntries = (findings: readonly Finding[], baseline: ReadonlySet<string>): readonly string[] => {
+  const current = new Set(findings.map(findingKey));
+  return [...baseline].filter((key) => !current.has(key)).sort();
+};
+
 export const serializeBaseline = (findings: readonly Finding[]): string =>
-  `${JSON.stringify({ version: 1, findings: [...new Set(findings.map(findingKey))].sort() }, null, 2)}\n`;
+  `${JSON.stringify({ version: 1, findings: baselineKeys(findings) }, null, 2)}\n`;
 
 export const readBaseline = (path: string): ReadonlySet<string> => {
   if (!existsSync(path)) throw new UsageError(`Baseline ${path} not found. Create it with --update-baseline.`);

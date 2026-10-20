@@ -20,7 +20,7 @@ export type CheckOptions = {
 };
 
 const FORMATTERS: Readonly<Record<string, (report: Report, tool: ToolIdentity) => string>> = {
-  text: formatText,
+  text: (report) => formatText(report, { showKnown: false }),
   json: formatJson,
   sarif: formatSarif,
 };

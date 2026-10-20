@@ -24,7 +24,7 @@ describe('check', () => {
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
     const { io, stdout } = captureIo(dir);
 
-    expect({ code: await run(['check', '--baseline', 'baseline.json'], io), known: stdout().includes('(baseline)') }).toEqual({ code: 0, known: true });
+    expect({ code: await run(['check', '--baseline', 'baseline.json'], io), stdout: stdout() }).toEqual({ code: 0, stdout: '0 errors, 0 warnings\n' });
   });
 
   it('exits 0 with SARIF when every error finding is in the baseline', async () => {
