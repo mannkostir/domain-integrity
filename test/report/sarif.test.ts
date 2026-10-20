@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { formatSarif } from '../../src/report/sarif';
 import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks';
-import { bufferFinding, finding } from '../helpers/model';
+import { TOOL, bufferFinding, finding } from '../helpers/model';
 
 const UNDISPATCHED_RULE = EVENT_FLOW_RULES.filter((rule) => rule.id === 'undispatched-events');
 
-type SarifRun = { readonly tool: { readonly driver: { readonly rules: unknown } }; readonly results: unknown };
+type SarifDriver = { readonly name: string; readonly version: string; readonly informationUri: string; readonly rules: unknown };
+
+type SarifRun = { readonly tool: { readonly driver: SarifDriver }; readonly results: unknown };
 
 const undispatchedRun = (): SarifRun =>
-  JSON.parse(formatSarif({ fresh: [bufferFinding()], known: [], problems: [], rules: UNDISPATCHED_RULE, root: '/app' })).runs[0];
+  JSON.parse(formatSarif({ fresh: [bufferFinding()], known: [], problems: [], rules: UNDISPATCHED_RULE, root: '/app' }, TOOL)).runs[0];
 
 describe('formatSarif', () => {
   it('produces a SARIF 2.1.0 run with rules and located results', () => {
@@ -19,7 +21,7 @@ describe('formatSarif', () => {
         problems: [],
         rules: [{ id: 'terminal-state-leak', description: 'D' }],
         root: '/app',
-      }),
+      }, TOOL),
     );
 
     expect(parsed).toEqual({
@@ -27,7 +29,7 @@ describe('formatSarif', () => {
       version: '2.1.0',
       runs: [
         {
-          tool: { driver: { name: 'domain-integrity', rules: [{ id: 'terminal-state-leak', shortDescription: { text: 'D' } }] } },
+          tool: { driver: { name: 'domain-integrity', version: '1.2.3', informationUri: 'https://example.test', rules: [{ id: 'terminal-state-leak', shortDescription: { text: 'D' } }] } },
           results: [
             {
               ruleId: 'terminal-state-leak',
@@ -39,6 +41,18 @@ describe('formatSarif', () => {
         },
       ],
     });
+  });
+
+  it('identifies the driver by version and information uri', () => {
+    const { version, informationUri } = undispatchedRun().tool.driver;
+
+    expect({ version, informationUri }).toEqual({ version: '1.2.3', informationUri: 'https://example.test' });
+  });
+
+  it('leaves out the information uri when the tool has none', () => {
+    const driver = JSON.parse(formatSarif({ fresh: [], known: [], problems: [], rules: [], root: '/app' }, { name: 'domain-integrity', version: '1.2.3' })).runs[0].tool.driver;
+
+    expect('informationUri' in driver).toBe(false);
   });
 
   it('declares the undispatched-events rule with its description', () => {

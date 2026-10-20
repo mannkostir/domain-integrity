@@ -196,6 +196,10 @@ In an Nx workspace a library's `tsconfig.json` usually references a `tsconfig.sp
 
 Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. The config is read statically and never executed.
 
+`--version`, or `-V`, prints the version and exits `0`.
+
+The JSON report of `check` has a top-level `tool` with `name` and `version`, next to `findings`, `known` and `problems`. The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`.
+
 If one analyzer crashes, the command prints `internal error in <analyzer>, please report (domain-integrity <version>)` with a short stack trace, still prints the other analyzers' results, and exits `2`; `--update-baseline` and `context --write` then write nothing.
 
 ## Built for codebases that agents write

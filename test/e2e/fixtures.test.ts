@@ -4,6 +4,20 @@ import { EventFlowFinding, Finding } from '../../src/analyzer';
 import { run } from '../../src/cli/run';
 import { captureIo } from '../helpers/disk';
 
+type SarifRun = { readonly tool: { readonly driver: Readonly<Record<string, unknown>> } };
+
+type SarifLog = { readonly runs: readonly [SarifRun, ...SarifRun[]] };
+
+const withoutPackageVersion = (report: string): string => {
+  const sarif: SarifLog = JSON.parse(report);
+  const [first, ...rest] = sarif.runs;
+  const masked: SarifLog = {
+    ...sarif,
+    runs: [{ ...first, tool: { ...first.tool, driver: { ...first.tool.driver, version: '<package version>' } } }, ...rest],
+  };
+  return `${JSON.stringify(masked, null, 2)}\n`;
+};
+
 const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
 const describeEventFlowFinding = (finding: EventFlowFinding): string =>
@@ -110,7 +124,7 @@ describe('fixture projects', () => {
   });
 
   it('event-flows: sarif report', async () => {
-    expect(await output('event-flows', ['check', '--format', 'sarif'])).toMatchSnapshot();
+    expect(withoutPackageVersion(await output('event-flows', ['check', '--format', 'sarif']))).toMatchSnapshot();
   });
 
   it('event-flows: diagram', async () => {
