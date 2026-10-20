@@ -331,6 +331,8 @@ Findings appear as code-scanning alerts on the pull request, and the job fails w
 
 Every result carries the `domainIntegrity/v1` fingerprint, its baseline key, which identifies a finding across runs without its line number; a change to the key format would come with a new fingerprint version. GitHub code scanning itself matches alerts by the `primaryLocationLineHash` fingerprint that the upload step adds. With `baseline` set, known findings are uploaded as suppressed results instead of being left out, so code scanning does not close their alerts as fixed; they never fail the job.
 
+GitHub's SARIF reference does not list `suppressions` among the properties code scanning uses, and uploaded suppressed results have been reported to appear as open alerts, so on GitHub baselined findings may show as open. Tools that honour SARIF suppressions treat them as suppressed. To dismiss them on GitHub, add the [`advanced-security/dismiss-alerts`](https://github.com/advanced-security/dismiss-alerts) action after the upload; it reads the suppressions from the SARIF report.
+
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `project` | `tsconfig.json` | path to the project's `tsconfig.json` |
