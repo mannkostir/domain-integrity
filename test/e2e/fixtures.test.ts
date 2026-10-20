@@ -1,8 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
-import { Finding } from '../../src/finding';
-import { findingKey } from '../../src/report/key';
 import { captureIo } from '../helpers/disk';
 
 type SarifRun = { readonly tool: { readonly driver: Readonly<Record<string, unknown>> } };
@@ -21,15 +19,13 @@ const withoutPackageVersion = (report: string): string => {
 
 const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
-const describeFinding = (finding: Finding): string => `${finding.severity} ${findingKey(finding)}`;
-
 const checkJson = async (name: string) => {
   const { io, stdout } = captureIo(fixture(name));
   const code = await run(['check', '--format', 'json'], io);
-  const findings = (JSON.parse(stdout()) as { findings: Finding[] }).findings;
+  const findings = (JSON.parse(stdout()) as { findings: { severity: string; key: string }[] }).findings;
   return {
     code,
-    findings: findings.map(describeFinding).sort(),
+    findings: findings.map((finding) => `${finding.severity} ${finding.key}`).sort(),
   };
 };
 

@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
-import { FindingOf } from '../../src/finding';
 import { captureIo } from '../helpers/disk';
 import { pointHelpersAtRepo } from '../helpers/init-project';
 
@@ -14,9 +13,15 @@ const BASELINE_KEYS = [
   'outside-mutation|../../libs/orders/src/order.ts:Order||status|OrderMapper.reopen',
 ];
 
-const located = (finding: FindingOf<'outside-mutation'>) => ({
+type WireOutsideMutation = {
+  readonly ruleId: string;
+  readonly location: { readonly file: string };
+  readonly details: { readonly aggregateId: string; readonly scope: string };
+};
+
+const located = (finding: WireOutsideMutation) => ({
   ruleId: finding.ruleId,
-  file: finding.file,
+  file: finding.location.file,
   aggregateId: finding.details.aggregateId,
   scope: finding.details.scope,
 });
@@ -24,7 +29,7 @@ const located = (finding: FindingOf<'outside-mutation'>) => ({
 const checkFrom = async (cwd: string, tsconfig: string) => {
   const { io, stdout } = captureIo(cwd);
   const code = await run(['check', '--format', 'json', '-p', tsconfig], io);
-  return { code, findings: (JSON.parse(stdout()) as { findings: FindingOf<'outside-mutation'>[] }).findings.map(located) };
+  return { code, findings: (JSON.parse(stdout()) as { findings: WireOutsideMutation[] }).findings.map(located) };
 };
 
 const baselineFrom = async (cwd: string, tsconfig: string): Promise<unknown> => {
