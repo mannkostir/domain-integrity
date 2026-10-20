@@ -176,10 +176,10 @@ A project with event handlers and no aggregates is accepted. A project with noth
 | Project | Exit | Message |
 |---|---|---|
 | The tsconfig, and the tsconfigs it references, include no source files other than the config | `2` | Says so and points you to `-p` or `references` |
-| No aggregates are found for `aggregateBaseClasses`, and there are no event handlers or event flows | `2` | "No aggregates found", with the base classes and handler shapes it searched for |
+| No aggregates are found for `aggregateBaseClasses`, and there are no event handlers or event flows | `2` | "No aggregates found", with the base classes and handler shapes it searched for, preceded by a `problem:` line for each problem an analyzer met, such as a declared event outside the analysed files |
 | Aggregates are found, but the config declares no lifecycles and there are no event handlers or event flows | `0` | A notice on stderr pointing you to `init` |
 
-In the last case stdout keeps the normal output, so JSON and SARIF reports stay valid: `check` reports no findings, `show` prints nothing, and `context` still prints or writes its summary.
+In the last case stdout keeps the normal output, so JSON and SARIF reports stay valid: `check` reports no findings, `show` prints nothing, and `context` prints nothing; `context --write` still writes its marked section, with nothing between the markers.
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
 
