@@ -3,13 +3,15 @@ import { escapeLabel } from '../mermaid-label';
 import { handlerLabel } from './checks/handler-label';
 import { ClassRef, EventFlowModel } from './model';
 
+const byNameThenId = (left: ClassRef, right: ClassRef): number => left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
+
 const handledEvents = (model: EventFlowModel): readonly ClassRef[] =>
   [...new Set(model.registrations.map((registration) => registration.event))]
-    .sort()
     .flatMap((id) => {
       const ref = model.classes.get(id);
       return ref === undefined ? [] : [ref];
-    });
+    })
+    .sort(byNameThenId);
 
 const isNamed = (ref: ClassRef, only: string): boolean => ref.id === only || ref.name === only || ref.qualifiedName === only;
 
