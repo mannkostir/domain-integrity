@@ -7,7 +7,6 @@ const buffer = {
   owner: 'AggregateRoot',
   buffer: '_domainEvents',
   method: 'addDomainEvent',
-  raisers: ['src/booking.ts:Booking', 'src/payment.ts:Payment'],
   raiserNames: ['Booking', 'Payment'],
   file: '/app/src/aggregate-root.ts',
   line: 3,

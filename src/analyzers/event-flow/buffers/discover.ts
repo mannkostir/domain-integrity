@@ -64,17 +64,18 @@ const bufferOf = (candidate: BufferCandidate, owner: ClassDeclaration, raisers: 
     owner: name,
     buffer: buffer.getName(),
     method: firstPusherName(candidate),
-    raisers: raisers.map((raiser) => raiser.id),
     raiserNames: raisers.map((raiser) => raiser.name),
     file: buffer.getSourceFile().getFilePath(),
     line: buffer.getStartLineNumber(),
   };
 };
 
+const byNameThenId = (left: ClassIdentity, right: ClassIdentity): number =>
+  left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
+
 const raiserIdentities = (candidate: BufferCandidate, context: BufferContext, scope: Scope): readonly ClassIdentity[] => {
   const identities = raisingClasses(candidate, scope.production, context.isProject).map((cls) => context.identity(cls));
-  const ids = [...new Set(identities.map((identity) => identity.id))].sort();
-  return ids.flatMap((id) => identities.filter((identity) => identity.id === id).slice(0, 1));
+  return [...new Map(identities.map((identity) => [identity.id, identity])).values()].sort(byNameThenId);
 };
 
 const undispatched = (candidate: BufferCandidate, context: BufferContext, scope: Scope): UndispatchedBuffer | undefined => {
