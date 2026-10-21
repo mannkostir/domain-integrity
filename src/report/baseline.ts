@@ -42,6 +42,14 @@ const fieldKinds = (rule: RuleId): readonly (readonly [string, IdentityFieldKind
   return IDENTITY_FIELDS[rule].map((field): readonly [string, IdentityFieldKind] => [field, kinds[field] as IdentityFieldKind]);
 };
 
+const canonicalValue = (kind: IdentityFieldKind, value: unknown): unknown =>
+  kind === 'strings' && Array.isArray(value) ? [...(value as readonly string[])].sort() : value;
+
+const describeVersion = (version: unknown): string => {
+  if (version === undefined) return 'none';
+  return typeof version === 'number' ? String(version) : JSON.stringify(version);
+};
+
 const readEntry = (value: unknown): EntryReading => {
   if (!isRecord(value)) return invalid('not an object');
   if (!('rule' in value)) return invalid('missing field "rule"');
@@ -58,7 +66,7 @@ const readEntry = (value: unknown): EntryReading => {
   if (mistyped) return invalid(`field "${mistyped[0]}" must be ${KIND_CHECKS[mistyped[1]].expected}`);
   const count = value.count;
   if (!isPositiveInteger(count)) return invalid('count must be a positive integer');
-  const identity = Object.fromEntries([['rule', rule], ...kinds.map(([field]) => [field, value[field]])]) as Identity;
+  const identity = Object.fromEntries([['rule', rule], ...kinds.map(([field, kind]) => [field, canonicalValue(kind, value[field])])]) as Identity;
   return { kind: 'entry', entry: { identity, count } };
 };
 
@@ -83,7 +91,7 @@ const versionError = (path: string, version: unknown, toolVersion: string): Usag
     ? new UsageError(
         `Baseline ${path} uses format version 1, which domain-integrity ${toolVersion} no longer reads. Regenerate it with check --update-baseline; that accepts every current finding, so review the report first.`,
       )
-    : new UsageError(`Baseline ${path} has format version ${version === undefined ? 'none' : String(version)}; this version reads ${BASELINE_VERSION}.`);
+    : new UsageError(`Baseline ${path} has format version ${describeVersion(version)}; this version reads ${BASELINE_VERSION}.`);
 
 const entriesOf = (path: string, findings: readonly unknown[]): Baseline => {
   const entries = new Map<string, BaselineEntry>();

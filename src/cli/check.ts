@@ -4,7 +4,7 @@ import { AnalyzerRun } from '../analysis';
 import { AnalyzerFailure } from '../analyzer';
 import { Finding, Problem } from '../finding';
 import { UsageError } from '../engine/errors';
-import { baselineEntries, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
+import { BaselineEntry, baselineEntries, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
 import { formatJson } from '../report/json';
 import { formatSarif } from '../report/sarif';
 import { Report, formatText } from '../report/text';
@@ -81,7 +81,7 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   reportInternalErrors(outcome.failures, io);
   if (options.updateBaseline) return updateBaseline(outcome, options, io, paths.repositoryRoot);
   const baselinePath = baselinePathFor(options, io);
-  const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath, packageVersion())) : new Map();
+  const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath, packageVersion())) : new Map<string, BaselineEntry>();
   const { fresh, known, exceeded } = partitionByBaseline(outcome.findings, baseline, paths.repositoryRoot);
   const rules = results.flatMap((result) => result.rules);
   const complete = isComplete(outcome);

@@ -78,6 +78,10 @@ describe('parseBaseline', () => {
     expect(failure(fileWith([], 3))).toBe('Baseline b.json has format version 3; this version reads 2.');
   });
 
+  it('prints a string version in quotes', () => {
+    expect(failure(fileWith([], '2'))).toBe('Baseline b.json has format version "2"; this version reads 2.');
+  });
+
   it('rejects a file without a findings array', () => {
     expect(failure(JSON.stringify({ version: 2 }))).toBe('Baseline b.json is not a domain-integrity baseline.');
   });
@@ -132,6 +136,23 @@ describe('parseBaseline', () => {
 
   it('rejects a repeated identity', () => {
     expect(failure(fileWith([ENTRY, ENTRY]))).toBe('Baseline b.json entry 1 repeats entry 0.');
+  });
+
+  it('matches an entry whose list fields are in another order than the finding', () => {
+    const leak = leakWith({ values: ['A', 'B'] });
+    const entry = { ...identityOf(leak, ROOT), values: ['B', 'A'], count: 1 };
+
+    const result = partitionByBaseline([leak], parse(fileWith([entry])), ROOT);
+
+    expect(result.known).toEqual([leak]);
+  });
+
+  it('rejects an entry that repeats another with its list fields reordered', () => {
+    const base = identityOf(leakWith({ values: ['A', 'B'] }), ROOT);
+
+    expect(failure(fileWith([{ ...base, values: ['A', 'B'], count: 1 }, { ...base, values: ['B', 'A'], count: 1 }]))).toBe(
+      'Baseline b.json entry 1 repeats entry 0.',
+    );
   });
 
   it('reads an entry into its identity and count', () => {
