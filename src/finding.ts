@@ -6,17 +6,22 @@ type AggregateTarget = { readonly aggregate: string; readonly aggregateId: strin
 
 type MethodTarget = AggregateTarget & { readonly method: string; readonly field: string };
 
+type HandlerTarget = {
+  readonly event: string;
+  readonly eventId: string;
+  readonly handler: string | null;
+  readonly handlerClassId: string | null;
+  readonly handlerMethod: string | null;
+};
+
 export type DetailsByRule = {
   readonly 'terminal-state-leak': MethodTarget & { readonly values: readonly string[] };
   readonly 'unreachable-state': AggregateTarget & { readonly field: string; readonly value: string };
   readonly 'outside-mutation': AggregateTarget & { readonly field: string; readonly scope: string };
   readonly 'transition-drift': MethodTarget & { readonly kind: 'extra' | 'undeclared'; readonly values: readonly string[] };
   readonly 'transition-missing': MethodTarget & { readonly values: readonly string[] };
-  readonly 'dead-handler': { readonly event: string; readonly eventId: string; readonly handler: string | null };
-  readonly 'handler-payload-mismatch': {
-    readonly event: string;
-    readonly eventId: string;
-    readonly handler: string | null;
+  readonly 'dead-handler': HandlerTarget;
+  readonly 'handler-payload-mismatch': HandlerTarget & {
     readonly declared: readonly string[];
     readonly declaredIds: readonly string[];
   };

@@ -40,12 +40,12 @@ describe('fixture projects', () => {
     expect(await checkJson('enum-inline')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak|Order|annotate|status|CANCELLED',
-        'error transition-drift|Order|cancel|status|extra',
-        'error transition-drift|Order|place|status|extra',
-        'error undispatched-events|AggregateRoot|events|',
-        'error unreachable-state|Order||status|PAID',
-        'warning transition-missing|Order|place|status|missing',
+        'error terminal-state-leak|test/fixtures/enum-inline/src/order.ts:Order|annotate|status|CANCELLED',
+        'error transition-drift|test/fixtures/enum-inline/src/order.ts:Order|cancel|status|extra',
+        'error transition-drift|test/fixtures/enum-inline/src/order.ts:Order|place|status|extra',
+        'error undispatched-events|test/fixtures/enum-inline/src/aggregate-root.ts:AggregateRoot|events|',
+        'error unreachable-state|test/fixtures/enum-inline/src/order.ts:Order||status|PAID',
+        'warning transition-missing|test/fixtures/enum-inline/src/order.ts:Order|place|status|missing',
       ],
     });
   });
@@ -54,9 +54,9 @@ describe('fixture projects', () => {
     expect(await checkJson('boolean-rule')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak|Todo|complete|deleted|true',
-        'error terminal-state-leak|Todo|delete|deleted|true',
-        'error undispatched-events|AggregateRoot|events|',
+        'error terminal-state-leak|test/fixtures/boolean-rule/src/todo.ts:Todo|complete|deleted|true',
+        'error terminal-state-leak|test/fixtures/boolean-rule/src/todo.ts:Todo|delete|deleted|true',
+        'error undispatched-events|test/fixtures/boolean-rule/src/aggregate-root.ts:AggregateRoot|events|',
       ],
     });
   });
@@ -65,10 +65,10 @@ describe('fixture projects', () => {
     expect(await checkJson('nullable-timestamp')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak|Account|close|closedAt|set',
-        'error terminal-state-leak|Account|deposit|closedAt|set',
-        'error terminal-state-leak|Account|lock|closedAt|set',
-        'error terminal-state-leak|Account|withdraw|closedAt|set',
+        'error terminal-state-leak|test/fixtures/nullable-timestamp/src/account.ts:Account|close|closedAt|set',
+        'error terminal-state-leak|test/fixtures/nullable-timestamp/src/account.ts:Account|deposit|closedAt|set',
+        'error terminal-state-leak|test/fixtures/nullable-timestamp/src/account.ts:Account|lock|closedAt|set',
+        'error terminal-state-leak|test/fixtures/nullable-timestamp/src/account.ts:Account|withdraw|closedAt|set',
       ],
     });
   });
@@ -77,8 +77,8 @@ describe('fixture projects', () => {
     expect(await checkJson('outside-spec')).toEqual({
       code: 1,
       findings: [
-        'error outside-mutation|Invitation||status|InvitationService.accept',
-        'error outside-mutation|Invitation||status|WithStatus.mutate',
+        'error outside-mutation|test/fixtures/outside-spec/src/invitation.ts:Invitation||status|InvitationService.accept',
+        'error outside-mutation|test/fixtures/outside-spec/src/invitation.ts:Invitation||status|WithStatus.mutate',
       ],
     });
   });
@@ -99,11 +99,11 @@ describe('fixture projects', () => {
     expect(await checkJson('event-flows')).toEqual({
       code: 1,
       findings: [
-        'error dead-handler|RefundIssued|RefundHandler.handle|',
-        'error handler-payload-mismatch|OrderPlaced|OrderPlacedHandler.handle|PaymentCaptured',
-        'error saga-missing-failure-path|PaymentFailed|OrderSaga|PaymentCaptured',
-        'error undispatched-events|Undispatched|events|',
-        'error unhandled-event|Shipped||',
+        'error dead-handler|test/fixtures/event-flows/src/events.ts:RefundIssued|RefundHandler.handle|',
+        'error handler-payload-mismatch|test/fixtures/event-flows/src/events.ts:OrderPlaced|OrderPlacedHandler.handle|test/fixtures/event-flows/src/events.ts:PaymentCaptured',
+        'error saga-missing-failure-path|test/fixtures/event-flows/src/events.ts:PaymentFailed|test/fixtures/event-flows/src/saga.ts:OrderSaga|test/fixtures/event-flows/src/events.ts:PaymentCaptured',
+        'error undispatched-events|test/fixtures/event-flows/src/aggregates.ts:Undispatched|events|',
+        'error unhandled-event|test/fixtures/event-flows/src/events.ts:Shipped||',
       ],
     });
   });

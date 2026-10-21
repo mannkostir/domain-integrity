@@ -56,12 +56,12 @@ const receivedBySites = (): readonly (readonly string[] | 'any')[] => {
 describe('unresolved sites sharing an annotation type', () => {
   it('each receive the events comparable with their own annotation, in declaration order', () => {
     expect(receivedBySites()).toEqual([
-      ['Shipped', 'Cancelled', 'Tagged'],
-      ['Paid'],
-      ['Shipped', 'Cancelled', 'Tagged'],
-      ['Tagged'],
-      ['Tagged'],
-      ['Shipped', 'Cancelled', 'Tagged'],
+      ['src/events.ts:Shipped', 'src/events.ts:Cancelled', 'src/events.ts:Tagged'],
+      ['src/events.ts:Paid'],
+      ['src/events.ts:Shipped', 'src/events.ts:Cancelled', 'src/events.ts:Tagged'],
+      ['src/events.ts:Tagged'],
+      ['src/events.ts:Tagged'],
+      ['src/events.ts:Shipped', 'src/events.ts:Cancelled', 'src/events.ts:Tagged'],
     ]);
   });
 });

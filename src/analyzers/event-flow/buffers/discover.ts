@@ -56,7 +56,7 @@ const isCandidateOpen = (candidate: BufferCandidate, owner: ClassDeclaration, co
 const firstPusherName = (candidate: BufferCandidate): string =>
   candidate.pushers.map((pusher) => pusher.getName()).sort()[0] ?? '';
 
-const bufferOf = (candidate: BufferCandidate, owner: ClassDeclaration, raisers: readonly string[], context: BufferContext): UndispatchedBuffer => {
+const bufferOf = (candidate: BufferCandidate, owner: ClassDeclaration, raisers: readonly ClassIdentity[], context: BufferContext): UndispatchedBuffer => {
   const { id, name } = context.identity(owner);
   const { buffer } = candidate;
   return {
@@ -64,20 +64,24 @@ const bufferOf = (candidate: BufferCandidate, owner: ClassDeclaration, raisers: 
     owner: name,
     buffer: buffer.getName(),
     method: firstPusherName(candidate),
-    raisers,
+    raisers: raisers.map((raiser) => raiser.id),
+    raiserNames: raisers.map((raiser) => raiser.name),
     file: buffer.getSourceFile().getFilePath(),
     line: buffer.getStartLineNumber(),
   };
 };
 
-const raiserIds = (candidate: BufferCandidate, context: BufferContext, scope: Scope): readonly string[] =>
-  [...new Set(raisingClasses(candidate, scope.production, context.isProject).map((cls) => context.identity(cls).id))].sort();
+const raiserIdentities = (candidate: BufferCandidate, context: BufferContext, scope: Scope): readonly ClassIdentity[] => {
+  const identities = raisingClasses(candidate, scope.production, context.isProject).map((cls) => context.identity(cls));
+  const ids = [...new Set(identities.map((identity) => identity.id))].sort();
+  return ids.flatMap((id) => identities.filter((identity) => identity.id === id).slice(0, 1));
+};
 
 const undispatched = (candidate: BufferCandidate, context: BufferContext, scope: Scope): UndispatchedBuffer | undefined => {
   const owner = declaringClassOf(candidate.buffer);
   if (owner === undefined || !context.isProject(owner) || !isCandidateOpen(candidate, owner, context, scope)) return undefined;
   if (hasReassignedPusher(candidate, scope.productionIndex, scope.productionWrites) || !isUndrained(candidate, scope.production)) return undefined;
-  const raisers = raiserIds(candidate, context, scope);
+  const raisers = raiserIdentities(candidate, context, scope);
   const reported = raisers.length > 0 && !hasEscapeRoute(scope.productionIndex, familyHolding(candidate.family));
   return reported ? bufferOf(candidate, owner, raisers, context) : undefined;
 };

@@ -96,15 +96,6 @@ describe('formatText', () => {
     expect(formatText({ fresh: [], known: [], problems: [], rules: [], repositoryRoot: '/app' }, { showKnown: false })).toBe('0 errors, 0 warnings\n');
   });
 
-  it('names the aggregate by its id', () => {
-    const text = formatText(
-      { fresh: [leakWith({ aggregateId: 'src/order.ts:Order' })], known: [], problems: [], rules: [], repositoryRoot: '/app' },
-      { showKnown: false },
-    );
-
-    expect(text.startsWith('error terminal-state-leak  src/order.ts:Order.annotate()  src/order.ts:10')).toBe(true);
-  });
-
   it('locates an event-flow finding by event and handler', () => {
     const text = formatText({ fresh: [flowFinding({})], known: [], problems: [], rules: [], repositoryRoot: '/app' }, { showKnown: false });
 
@@ -124,5 +115,23 @@ describe('formatText', () => {
     const text = formatText({ fresh: [bufferFinding()], known: [], problems: [], rules: [], repositoryRoot: '/app' }, { showKnown: false });
 
     expect(text.split('\n')[0]).toBe('error undispatched-events  AggregateRoot._domainEvents  src/aggregate-root.ts:3');
+  });
+
+  it('names the aggregate by its class name', () => {
+    const text = formatText(
+      { fresh: [leakWith({ aggregateId: 'src/order.ts:Order' })], known: [], problems: [], rules: [], repositoryRoot: '/app' },
+      { showKnown: false },
+    );
+
+    expect(text).toContain('terminal-state-leak  Order.annotate()');
+  });
+
+  it('names a dead handler by its event and handler names', () => {
+    const text = formatText(
+      { fresh: [flowFinding({ details: { event: 'RefundIssued', eventId: 'src/events.ts:RefundIssued', handler: 'RefundHandler.handle', handlerClassId: 'src/handlers.ts:RefundHandler', handlerMethod: 'handle' } })], known: [], problems: [], rules: [], repositoryRoot: '/app' },
+      { showKnown: false },
+    );
+
+    expect(text).toContain('dead-handler  RefundIssued → RefundHandler.handle');
   });
 });

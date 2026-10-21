@@ -138,7 +138,7 @@ describe('check', () => {
     const dir = writeProject(TICKET_PROJECT);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
 
-    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual(['terminal-state-leak|Ticket|rename|status|CLOSED']);
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual(['terminal-state-leak|src/ticket.ts:Ticket|rename|status|CLOSED']);
   });
 });
 
@@ -199,7 +199,7 @@ export default defineDomain({ lifecycles: [lifecycle(Ticket, { states: { status:
   });
 });
 
-const TICKET_KEY = 'terminal-state-leak|Ticket|rename|status|CLOSED';
+const TICKET_KEY = 'terminal-state-leak|src/ticket.ts:Ticket|rename|status|CLOSED';
 
 const GHOST_KEY = 'terminal-state-leak|Ghost|vanish|status|CLOSED';
 
@@ -492,7 +492,7 @@ describe('same-named aggregates', () => {
     const dir = writeProject(TICKET_PROJECT);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
 
-    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual(['terminal-state-leak|Ticket|rename|status|CLOSED']);
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual(['terminal-state-leak|src/ticket.ts:Ticket|rename|status|CLOSED']);
   });
 });
 

@@ -48,11 +48,12 @@ const booking = (extra: Readonly<Record<string, string>> = {}, base: string = BA
 });
 
 const BOOKING_BUFFER: UndispatchedBuffer = {
-  ownerId: 'AggregateRoot',
+  ownerId: 'src/aggregate-root.ts:AggregateRoot',
   owner: 'AggregateRoot',
   buffer: '_domainEvents',
   method: 'addDomainEvent',
-  raisers: ['Booking', 'Payment'],
+  raisers: ['src/booking.ts:Booking', 'src/payment.ts:Payment'],
+  raiserNames: ['Booking', 'Payment'],
   file: '/app/src/aggregate-root.ts',
   line: 2,
 };
@@ -75,7 +76,7 @@ const RAISING_BASE = BASE.replace('clearEvents()', 'protected raise(event: objec
 
 const publicEventMethod = (base: string): string => base.replace('protected addDomainEvent', 'addDomainEvent');
 
-const RAISED_BUFFER: UndispatchedBuffer = { ...BOOKING_BUFFER, raisers: ['AggregateRoot'] };
+const RAISED_BUFFER: UndispatchedBuffer = { ...BOOKING_BUFFER, raisers: ['src/aggregate-root.ts:AggregateRoot'], raiserNames: ['AggregateRoot'] };
 
 const raisingBooking = (
   body: string,
@@ -207,8 +208,8 @@ describe('undispatchedBuffers', () => {
     };
 
     expect(buffersOf(sources)).toEqual([
-      { ownerId: 'RootA', owner: 'RootA', buffer: 'events', method: 'addEvent', raisers: ['A'], file: '/app/src/root-a.ts', line: 1 },
-      { ownerId: 'RootB', owner: 'RootB', buffer: 'events', method: 'addEvent', raisers: ['B'], file: '/app/src/root-b.ts', line: 1 },
+      { ownerId: 'src/root-a.ts:RootA', owner: 'RootA', buffer: 'events', method: 'addEvent', raisers: ['src/a.ts:A'], raiserNames: ['A'], file: '/app/src/root-a.ts', line: 1 },
+      { ownerId: 'src/root-b.ts:RootB', owner: 'RootB', buffer: 'events', method: 'addEvent', raisers: ['src/b.ts:B'], raiserNames: ['B'], file: '/app/src/root-b.ts', line: 1 },
     ]);
   });
 
@@ -331,7 +332,7 @@ describe('undispatchedBuffers', () => {
     };
 
     expect(buffersOf(sources)).toEqual([
-      { ownerId: 'AggregateRoot', owner: 'AggregateRoot', buffer: 'events', method: 'addEvent', raisers: ['Booking'], file: '/app/src/aggregate-root.ts', line: 2 },
+      { ownerId: 'src/aggregate-root.ts:AggregateRoot', owner: 'AggregateRoot', buffer: 'events', method: 'addEvent', raisers: ['src/booking.ts:Booking'], raiserNames: ['Booking'], file: '/app/src/aggregate-root.ts', line: 2 },
     ]);
   });
 
@@ -383,7 +384,7 @@ describe('undispatchedBuffers', () => {
       '}',
     ].join('\n');
 
-    expect(buffersOf({ '/app/src/aggregate-root.ts': base, '/app/src/booking.ts': computed })).toEqual([{ ...BOOKING_BUFFER, raisers: ['AggregateRoot'] }]);
+    expect(buffersOf({ '/app/src/aggregate-root.ts': base, '/app/src/booking.ts': computed })).toEqual([{ ...BOOKING_BUFFER, raisers: ['src/aggregate-root.ts:AggregateRoot'], raiserNames: ['AggregateRoot'] }]);
   });
 
   it('stays silent when a subclass overrides the event method under a string-typed computed key', () => {

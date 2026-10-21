@@ -17,26 +17,26 @@ export type Report = {
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-const handledBy = (eventId: string, handler: string | null): string => (handler === null ? eventId : `${eventId} → ${handler}`);
+const handledBy = (event: string, handler: string | null): string => (handler === null ? event : `${event} → ${handler}`);
 
 const location = (finding: Finding): string => {
   switch (finding.ruleId) {
     case 'terminal-state-leak':
     case 'transition-drift':
     case 'transition-missing':
-      return `${finding.details.aggregateId}.${finding.details.method}()`;
+      return `${finding.details.aggregate}.${finding.details.method}()`;
     case 'unreachable-state':
     case 'outside-mutation':
-      return finding.details.aggregateId;
+      return finding.details.aggregate;
     case 'dead-handler':
     case 'handler-payload-mismatch':
-      return handledBy(finding.details.eventId, finding.details.handler);
+      return handledBy(finding.details.event, finding.details.handler);
     case 'unhandled-event':
-      return finding.details.eventId;
+      return finding.details.event;
     case 'saga-missing-failure-path':
-      return handledBy(finding.details.failureId, finding.details.sagaId);
+      return handledBy(finding.details.failure, finding.details.saga);
     case 'undispatched-events':
-      return `${finding.details.ownerId}.${finding.details.buffer}`;
+      return `${finding.details.owner}.${finding.details.buffer}`;
   }
 };
 

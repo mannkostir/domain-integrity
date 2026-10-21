@@ -291,7 +291,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "undispatched-events|Undispatched|events|"
+            "domainIntegrity/v1": "undispatched-events|test/fixtures/event-flows/src/aggregates.ts:Undispatched|events|"
           },
           "properties": {
             "fix": "Dispatch the events in events after saving the aggregate and clear it, or stop raising them."
@@ -317,7 +317,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "dead-handler|RefundIssued|RefundHandler.handle|"
+            "domainIntegrity/v1": "dead-handler|test/fixtures/event-flows/src/events.ts:RefundIssued|RefundHandler.handle|"
           },
           "properties": {
             "fix": "Publish RefundIssued where it happens, or delete the handler."
@@ -343,7 +343,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "handler-payload-mismatch|OrderPlaced|OrderPlacedHandler.handle|PaymentCaptured"
+            "domainIntegrity/v1": "handler-payload-mismatch|test/fixtures/event-flows/src/events.ts:OrderPlaced|OrderPlacedHandler.handle|test/fixtures/event-flows/src/events.ts:PaymentCaptured"
           },
           "properties": {
             "fix": "Type the parameter as OrderPlaced, or register the handler for PaymentCaptured."
@@ -369,7 +369,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "unhandled-event|Shipped||"
+            "domainIntegrity/v1": "unhandled-event|test/fixtures/event-flows/src/events.ts:Shipped||"
           },
           "properties": {
             "fix": "Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere."
@@ -395,7 +395,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "saga-missing-failure-path|PaymentFailed|OrderSaga|PaymentCaptured"
+            "domainIntegrity/v1": "saga-missing-failure-path|test/fixtures/event-flows/src/events.ts:PaymentFailed|test/fixtures/event-flows/src/saga.ts:OrderSaga|test/fixtures/event-flows/src/events.ts:PaymentCaptured"
           },
           "properties": {
             "fix": "Handle PaymentFailed in OrderSaga, for example with a compensating command."

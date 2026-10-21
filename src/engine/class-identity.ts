@@ -5,21 +5,14 @@ export type ClassIdentity = { readonly id: string; readonly name: string; readon
 
 export const className = (cls: ClassDeclaration): string => cls.getName() ?? '<anonymous>';
 
-const sharedNames = (classes: readonly ClassDeclaration[]): ReadonlySet<string> => {
-  const names = classes.map(className);
-  return new Set(names.filter((name, index) => names.indexOf(name) !== index));
-};
-
 export const classIdentities = (
   classes: readonly ClassDeclaration[],
   root: string,
-): ReadonlyMap<ClassDeclaration, ClassIdentity> => {
-  const shared = sharedNames(classes);
-  return new Map(
+): ReadonlyMap<ClassDeclaration, ClassIdentity> =>
+  new Map(
     classes.map((cls) => {
       const name = className(cls);
       const qualifiedName = `${toPosixRelative(root, cls.getSourceFile().getFilePath())}:${name}`;
-      return [cls, { id: shared.has(name) ? qualifiedName : name, name, qualifiedName }];
+      return [cls, { id: qualifiedName, name, qualifiedName }];
     }),
   );
-};

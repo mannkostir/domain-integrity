@@ -68,7 +68,7 @@ export const declared = (
 });
 
 export const aggregate = (overrides: Partial<AggregateModel>): AggregateModel => ({
-  id: 'Order',
+  id: 'src/order.ts:Order',
   name: 'Order',
   qualifiedName: 'src/order.ts:Order',
   file: '/app/src/order.ts',
@@ -115,7 +115,7 @@ export const flowFinding = (overrides: Partial<FindingOf<'dead-handler'>> = {}):
   line: 4,
   message: 'M3',
   fix: 'F3',
-  details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: 'RefundHandler.handle' },
+  details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: 'RefundHandler.handle', handlerClassId: 'src/handlers.ts:RefundHandler', handlerMethod: 'handle' },
   ...overrides,
 });
 
@@ -175,7 +175,7 @@ export const mismatchFinding = (): FindingOf<'handler-payload-mismatch'> => ({
   line: 4,
   message: 'M3',
   fix: 'F3',
-  details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: 'RefundHandler.handle', declared: ['PaymentCaptured'], declaredIds: ['PaymentCaptured'] },
+  details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: 'RefundHandler.handle', handlerClassId: 'src/handlers.ts:RefundHandler', handlerMethod: 'handle', declared: ['PaymentCaptured'], declaredIds: ['PaymentCaptured'] },
 });
 
 export const lifecycleFindings = (findings: readonly Finding[]): LifecycleFinding[] =>

@@ -29,11 +29,11 @@ describe('findingKey', () => {
   });
 
   it('keys a dead handler without a handler as an empty segment', () => {
-    expect(findingKey(of('dead-handler', 'event-flow', { event: 'Refunded', eventId: 'Refunded', handler: null }))).toBe('dead-handler|Refunded||');
+    expect(findingKey(of('dead-handler', 'event-flow', { event: 'Refunded', eventId: 'Refunded', handler: null, handlerClassId: null, handlerMethod: null }))).toBe('dead-handler|Refunded||');
   });
 
   it('keys a payload mismatch by the declared class ids', () => {
-    expect(findingKey(of('handler-payload-mismatch', 'event-flow', { event: 'Placed', eventId: 'Placed', handler: 'H.handle', declared: ['Paid', 'Shipped'], declaredIds: ['Paid', 'src/b.ts:Shipped'] }))).toBe(
+    expect(findingKey(of('handler-payload-mismatch', 'event-flow', { event: 'Placed', eventId: 'Placed', handler: 'H.handle', handlerClassId: 'src/h.ts:H', handlerMethod: 'handle', declared: ['Paid', 'Shipped'], declaredIds: ['Paid', 'src/b.ts:Shipped'] }))).toBe(
       'handler-payload-mismatch|Placed|H.handle|Paid,src/b.ts:Shipped',
     );
   });

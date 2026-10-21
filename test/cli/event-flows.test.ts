@@ -49,7 +49,7 @@ describe('event flows in the CLI', () => {
     expect({
       keys: JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings,
       code: await run(['check', '--baseline', 'baseline.json'], io),
-    }).toEqual({ keys: ['dead-handler|Refunded|RefundHandler.handle|'], code: 0 });
+    }).toEqual({ keys: ['dead-handler|src/events.ts:Refunded|RefundHandler.handle|'], code: 0 });
   });
 
   it('exits 2 for a saga outcome that repeats one class', async () => {

@@ -17,7 +17,7 @@ describe('outsideMutation', () => {
         line: 7,
         message: 'status of Order is assigned outside the aggregate in WithStatus.mutate.',
         fix: 'Move this change into a method on Order so its guards apply.',
-        details: { aggregate: 'Order', aggregateId: 'Order', field: 'status', scope: 'WithStatus.mutate' },
+        details: { aggregate: 'Order', aggregateId: 'src/order.ts:Order', field: 'status', scope: 'WithStatus.mutate' },
       },
     ]);
   });

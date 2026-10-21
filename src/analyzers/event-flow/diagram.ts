@@ -16,7 +16,7 @@ const isNamed = (ref: ClassRef, only: string): boolean => ref.id === only || ref
 const render = (model: EventFlowModel, events: readonly ClassRef[]): string => {
   if (events.length === 0) return '';
   const edges = events.flatMap((event, eventIndex) =>
-    model.registrations.filter((registration) => registration.event === event.id).map((registration) => ({ eventIndex, event, label: handlerLabel(registration) ?? '(inline)' })),
+    model.registrations.filter((registration) => registration.event === event.id).map((registration) => ({ eventIndex, event, label: handlerLabel(model, registration) ?? '(inline)' })),
   );
   const lines = edges.map(
     (edge, handlerIndex) => `  event_${edge.eventIndex}["${escapeLabel(edge.event.name)}"] --> handler_${handlerIndex}["${escapeLabel(edge.label)}"]`,

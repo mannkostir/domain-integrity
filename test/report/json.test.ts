@@ -58,7 +58,7 @@ describe('formatJson', () => {
   });
 
   it('writes an absent handler as null', () => {
-    const details = parse({ fresh: [flowFinding({ details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: null } })] }).findings[0].details;
+    const details = parse({ fresh: [flowFinding({ details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: null, handlerClassId: null, handlerMethod: null } })] }).findings[0].details;
 
     expect(details).toEqual({ event: 'RefundIssued', eventId: 'RefundIssued', handler: null });
   });

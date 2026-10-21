@@ -30,22 +30,22 @@ describe('extractEventFlows', () => {
 
     expect({
       registrations: model.registrations.map((registration) => [registration.event, registration.handlerClass, registration.handlerMethod, registration.payload.kind === 'classes' ? registration.payload.classes : '?', registration.line]),
-      paid: model.events.get('Paid'),
-      failed: { constructions: model.events.get('Failed')?.constructions, ancestors: model.events.get('Failed')?.ancestors },
+      paid: model.events.get('src/events.ts:Paid'),
+      failed: { constructions: model.events.get('src/events.ts:Failed')?.constructions, ancestors: model.events.get('src/events.ts:Failed')?.ancestors },
       inProcess: model.inProcess,
       sagas: model.sagas,
       unresolved: model.unresolved,
       problems: model.problems,
-      saga: model.classes.get('OrderSaga')?.qualifiedName,
+      saga: model.classes.get('src/handlers.ts:OrderSaga')?.qualifiedName,
     }).toEqual({
       registrations: [
-        ['Paid', 'PaidHandler', 'handle', ['Failed'], 3],
-        ['Paid', 'OrderSaga', 'paid', '?', 4],
+        ['src/events.ts:Paid', 'src/handlers.ts:PaidHandler', 'handle', ['src/events.ts:Failed'], 3],
+        ['src/events.ts:Paid', 'src/handlers.ts:OrderSaga', 'paid', '?', 4],
       ],
       paid: {
-        id: 'Paid',
+        id: 'src/events.ts:Paid',
         abstract: false,
-        ancestors: ['BaseEvent'],
+        ancestors: ['src/events.ts:BaseEvent'],
         constructions: [{ file: '/app/src/pay.ts', line: 2 }],
         subclassed: false,
         escaped: false,
@@ -55,9 +55,9 @@ describe('extractEventFlows', () => {
         opaque: false,
         extendsLibrary: false,
       },
-      failed: { constructions: [], ancestors: ['BaseEvent'] },
-      inProcess: ['Failed'],
-      sagas: [{ id: 'OrderSaga', ancestors: [], extendsForeign: false, outcomes: [['Paid', 'Failed']] }],
+      failed: { constructions: [], ancestors: ['src/events.ts:BaseEvent'] },
+      inProcess: ['src/events.ts:Failed'],
+      sagas: [{ id: 'src/handlers.ts:OrderSaga', ancestors: [], extendsForeign: false, outcomes: [['src/events.ts:Paid', 'src/events.ts:Failed']] }],
       unresolved: [],
       problems: [],
       saga: 'src/handlers.ts:OrderSaga',
@@ -83,9 +83,9 @@ describe('extractEventFlows', () => {
     });
 
     expect(model.registrations.map((registration) => [registration.handlerClass, registration.inTest])).toEqual([
-      ['SpecHandler', true],
-      ['PaidHandler', false],
-      ['OrderSaga', false],
+      ['src/handlers.spec.ts:SpecHandler', true],
+      ['src/handlers.ts:PaidHandler', false],
+      ['src/handlers.ts:OrderSaga', false],
     ]);
   });
 
@@ -96,9 +96,9 @@ describe('extractEventFlows', () => {
     });
 
     expect(model.unresolved.map((site) => [site.owner, site.inTest, site.receives, site.line])).toEqual([
-      ['SpecDynamic', true, { kind: 'events', events: ['Failed'] }, 3],
-      ['Dynamic', false, { kind: 'events', events: ['Failed'] }, 3],
-      ['Dynamic', false, { kind: 'any' }, 3],
+      ['src/dynamic.spec.ts:SpecDynamic', true, { kind: 'events', events: ['src/events.ts:Failed'] }, 3],
+      ['src/dynamic.ts:Dynamic', false, { kind: 'events', events: ['src/events.ts:Failed'] }, 3],
+      ['src/dynamic.ts:Dynamic', false, { kind: 'any' }, 3],
     ]);
   });
 
@@ -109,10 +109,10 @@ describe('extractEventFlows', () => {
     });
 
     expect({
-      mixed: [model.events.get('Mixed')?.opaque, model.events.get('Mixed')?.extendsLibrary],
-      wrapped: [model.events.get('Wrapped')?.opaque, model.events.get('Wrapped')?.extendsLibrary],
-      paid: [model.events.get('Paid')?.opaque, model.events.get('Paid')?.extendsLibrary],
+      mixed: [model.events.get('src/more.ts:Mixed')?.opaque, model.events.get('src/more.ts:Mixed')?.extendsLibrary],
+      wrapped: [model.events.get('src/more.ts:Wrapped')?.opaque, model.events.get('src/more.ts:Wrapped')?.extendsLibrary],
+      paid: [model.events.get('src/events.ts:Paid')?.opaque, model.events.get('src/events.ts:Paid')?.extendsLibrary],
       libraryKeyed: model.libraryKeyed,
-    }).toEqual({ mixed: [true, false], wrapped: [false, true], paid: [false, false], libraryKeyed: ['MoreHandler'] });
+    }).toEqual({ mixed: [true, false], wrapped: [false, true], paid: [false, false], libraryKeyed: ['src/more.ts:MoreHandler'] });
   });
 });

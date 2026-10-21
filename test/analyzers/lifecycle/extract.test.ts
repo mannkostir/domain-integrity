@@ -203,8 +203,8 @@ export class Invoice extends AggregateRoot<{ open: boolean }> {}
     ]);
   });
 
-  it('identifies an aggregate with a unique class name by that name', () => {
-    expect(aggregates.find((aggregate) => aggregate.name === 'Invoice')?.id).toBe('Invoice');
+  it('identifies an aggregate with a unique class name by its qualified name', () => {
+    expect(aggregates.find((aggregate) => aggregate.name === 'Invoice')?.id).toBe('src/invoice.ts:Invoice');
   });
 
   it('always gives an aggregate a path qualified name', () => {
