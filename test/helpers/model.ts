@@ -178,6 +178,39 @@ export const mismatchFinding = (): FindingOf<'handler-payload-mismatch'> => ({
   details: { event: 'RefundIssued', eventId: 'RefundIssued', handler: 'RefundHandler.handle', handlerClassId: 'src/handlers.ts:RefundHandler', handlerMethod: 'handle', declared: ['PaymentCaptured'], declaredIds: ['PaymentCaptured'] },
 });
 
+export const mutationFinding = (): FindingOf<'outside-mutation'> => ({
+  ruleId: 'outside-mutation',
+  severity: 'error',
+  analyzer: 'lifecycle',
+  file: '/app/src/mapper.ts',
+  line: 7,
+  message: 'M5',
+  fix: 'F5',
+  details: { aggregate: 'Order', aggregateId: 'src/order.ts:Order', field: 'status', scope: 'Mapper.reopen' },
+});
+
+export const driftFinding = (): FindingOf<'transition-drift'> => ({
+  ruleId: 'transition-drift',
+  severity: 'error',
+  analyzer: 'lifecycle',
+  file: '/app/src/order.ts',
+  line: 12,
+  message: 'M6',
+  fix: 'F6',
+  details: { aggregate: 'Order', aggregateId: 'src/order.ts:Order', method: 'cancel', field: 'status', kind: 'extra', values: ['PAID'] },
+});
+
+export const sagaFinding = (): FindingOf<'saga-missing-failure-path'> => ({
+  ruleId: 'saga-missing-failure-path',
+  severity: 'error',
+  analyzer: 'event-flow',
+  file: '/app/src/saga.ts',
+  line: 2,
+  message: 'M7',
+  fix: 'F7',
+  details: { saga: 'S', sagaId: 'src/s.ts:S', success: 'Ok', successId: 'src/e.ts:Ok', failure: 'Ko', failureId: 'src/e.ts:Ko' },
+});
+
 export const lifecycleFindings = (findings: readonly Finding[]): LifecycleFinding[] =>
   findings.filter((candidate): candidate is LifecycleFinding => candidate.analyzer === 'lifecycle');
 
