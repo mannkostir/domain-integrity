@@ -88,7 +88,7 @@
         "aggregate": { "$ref": "#/$defs/name" },
         "method": { "$ref": "#/$defs/name" },
         "field": { "$ref": "#/$defs/name" },
-        "values": { "type": "array", "items": { "$ref": "#/$defs/name" } }
+        "values": { "$ref": "#/$defs/values" }
       }
     },
     "unreachableStateIdentity": {
@@ -99,7 +99,7 @@
         "rule": { "const": "unreachable-state" },
         "aggregate": { "$ref": "#/$defs/name" },
         "field": { "$ref": "#/$defs/name" },
-        "value": { "$ref": "#/$defs/name" }
+        "value": { "type": "string" }
       }
     },
     "outsideMutationIdentity": {
@@ -123,7 +123,7 @@
         "aggregate": { "$ref": "#/$defs/name" },
         "method": { "$ref": "#/$defs/name" },
         "field": { "$ref": "#/$defs/name" },
-        "kind": { "$ref": "#/$defs/name" }
+        "kind": { "enum": ["extra", "undeclared"] }
       }
     },
     "transitionMissingIdentity": {

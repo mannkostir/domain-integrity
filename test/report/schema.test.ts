@@ -14,7 +14,7 @@ import { formatJson } from '../../src/report/json';
 import { IDENTITY_FIELDS } from '../../src/report/identity';
 import { captureIo } from '../helpers/disk';
 import { JSON_FIXTURES } from '../helpers/fixtures';
-import { TOOL, finding } from '../helpers/model';
+import { TOOL, finding, unreachableFinding } from '../helpers/model';
 import { REPORT_SCHEMA, validateReport } from '../helpers/schema';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -72,6 +72,12 @@ describe('report schema', () => {
 
   it('accepts a report with one problem of every code', () => {
     expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), problems: EVERY_PROBLEM, rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
+  });
+
+  it('accepts a finding whose state value is the empty string', () => {
+    const emptyState = { ...unreachableFinding(), details: { aggregate: 'Order', aggregateId: 'Order', field: 'status', value: '' } };
+
+    expect(validateReport(formatJson({ fresh: [emptyState], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
   });
 
   it('rejects a report with an unknown key', () => {
