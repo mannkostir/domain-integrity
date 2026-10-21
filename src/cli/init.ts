@@ -1,4 +1,3 @@
-import { relative } from 'node:path';
 import { Project, SourceFile, ts } from 'ts-morph';
 import { lifecycleAnalyzer } from '../analyzers/lifecycle/analyzer';
 import { LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
@@ -10,12 +9,13 @@ import { addLifecycles, openConfig, recordBaseClasses } from './config-writer';
 import { initRetryCommand, noAggregatesForInitMessage } from './init-retry';
 import { Io, Paths } from './io';
 import { moduleSpecifiers } from './module-specifier';
+import { toPosixRelative } from '../engine/path';
 
 const describeSuggestion = (suggestion: LifecycleSuggestion, root: string): string => {
   const fields = suggestion.fields
     .map((field) => `${field.field.name} [terminal: ${field.terminal.map((value) => value.label).join(', ') || 'none'}]`)
     .join('; ');
-  return `${suggestion.className} (${relative(root, suggestion.file)}): ${fields}. Declare? [Y/n] `;
+  return `${suggestion.className} (${toPosixRelative(root, suggestion.file)}): ${fields}. Declare? [Y/n] `;
 };
 
 const confirmEach = (suggestions: readonly LifecycleSuggestion[], io: Io, root: string): Promise<readonly LifecycleSuggestion[]> =>
@@ -100,7 +100,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
           ? 'All discovered aggregates are already declared.'
           : 'No state fields found in the discovered aggregates; nothing to declare.',
         options,
-        relative(io.cwd, paths.config),
+        toPosixRelative(io.cwd, paths.config),
         declaration,
       ),
     );
@@ -108,7 +108,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   }
   const accepted = options.yes ? suggestions : await confirmEach(suggestions, io, paths.repositoryRoot);
   if (accepted.length === 0) {
-    io.out(nothingWrittenMessage('Nothing declared.', options, relative(io.cwd, paths.config), declaration));
+    io.out(nothingWrittenMessage('Nothing declared.', options, toPosixRelative(io.cwd, paths.config), declaration));
     return 0;
   }
   try {
@@ -117,7 +117,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
     throw new UsageError(`Cannot write ${paths.config}: ${error instanceof Error ? error.message : String(error)}`);
   }
   io.out(
-    `Declared ${accepted.length} aggregate${accepted.length === 1 ? '' : 's'} in ${relative(io.cwd, paths.config)}. Review the terminal states, then run "domain-integrity check".\n`,
+    `Declared ${accepted.length} aggregate${accepted.length === 1 ? '' : 's'} in ${toPosixRelative(io.cwd, paths.config)}. Review the terminal states, then run "domain-integrity check".\n`,
   );
   return 0;
 };
