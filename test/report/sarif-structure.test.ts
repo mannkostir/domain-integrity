@@ -11,7 +11,7 @@ const RESULT = {
   level: 'error',
   message: { text: 'M' },
   locations: [LOCATION],
-  partialFingerprints: { 'domainIntegrity/v1': 'key' },
+  partialFingerprints: { 'domainIntegrity/v2': 'key' },
 };
 
 const logWith = (result: Readonly<Record<string, unknown>>) => ({
@@ -56,8 +56,8 @@ describe('sarifViolations', () => {
   });
 
   it('rejects a fingerprint that is not a string', () => {
-    expect(sarifViolations(logWith({ ...RESULT, partialFingerprints: { 'domainIntegrity/v1': 1 } }))).toEqual([
-      'runs[0].results[0].partialFingerprints.domainIntegrity/v1 is not a string',
+    expect(sarifViolations(logWith({ ...RESULT, partialFingerprints: { 'domainIntegrity/v2': 1 } }))).toEqual([
+      'runs[0].results[0].partialFingerprints.domainIntegrity/v2 is not a string',
     ]);
   });
 

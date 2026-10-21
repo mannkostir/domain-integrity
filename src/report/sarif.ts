@@ -1,11 +1,13 @@
 import { RuleDescription } from '../analyzer';
 import { Finding } from '../finding';
-import { findingKey } from './key';
+import { identityOf, serializeIdentity } from './identity';
 import { toPosixRelative } from '../engine/path';
 import { Report } from './text';
 import { ToolIdentity } from './tool';
 
-export const FINGERPRINT = 'domainIntegrity/v1';
+export const FINGERPRINT = 'domainIntegrity/v2';
+
+const SOURCE_ROOT = '%SRCROOT%';
 
 const BASELINE_SUPPRESSION = { kind: 'external', justification: 'Recorded in the domain-integrity baseline.' } as const;
 
@@ -41,12 +43,12 @@ const sarifResult = (finding: Finding, report: Report) => ({
   locations: [
     {
       physicalLocation: {
-        artifactLocation: { uri: toPosixRelative(report.repositoryRoot, finding.file) },
+        artifactLocation: { uri: toPosixRelative(report.repositoryRoot, finding.file), uriBaseId: SOURCE_ROOT },
         region: { startLine: finding.line },
       },
     },
   ],
-  partialFingerprints: { [FINGERPRINT]: findingKey(finding) },
+  partialFingerprints: { [FINGERPRINT]: serializeIdentity(identityOf(finding, report.repositoryRoot)) },
   properties: { fix: finding.fix },
 });
 
