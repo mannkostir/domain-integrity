@@ -25,6 +25,18 @@ describe('eventFlowDiagram', () => {
     });
   });
 
+  it('orders events by name rather than path', () => {
+    const model = flowModel({
+      classes: new Map([
+        ['src/a.ts:Zeta', { ...classRef('Zeta'), id: 'src/a.ts:Zeta' }],
+        ['src/z.ts:Alpha', { ...classRef('Alpha'), id: 'src/z.ts:Alpha' }],
+      ]),
+      registrations: [registration({ event: 'src/a.ts:Zeta', handlerClass: undefined, handlerMethod: undefined }), registration({ event: 'src/z.ts:Alpha', handlerClass: undefined, handlerMethod: undefined })],
+    });
+
+    expect(eventFlowDiagram(model, undefined)).toMatchObject({ text: expect.stringContaining('event_0["Alpha"] --> handler_0["(inline)"]\n  event_1["Zeta"]') });
+  });
+
   it('restricts to a named event and contributes nothing for an unknown name', () => {
     expect([eventFlowDiagram(MODEL, 'Failed'), eventFlowDiagram(MODEL, 'Order')]).toEqual([
       { kind: 'diagram', text: ['## Event flows', '', '```mermaid', 'flowchart LR', '  event_0["Failed"] --> handler_0["(inline)"]', '```'].join('\n') },

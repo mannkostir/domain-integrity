@@ -9,7 +9,7 @@ const isDead = (event: EventClassModel): boolean =>
 
 const toFinding = (model: EventFlowModel, registration: Registration): FindingOf<'dead-handler'> => {
   const event = nameOf(model, registration.event);
-  const handler = handlerLabel(registration);
+  const handler = handlerLabel(model, registration);
   return {
     ...reportedUnder(DEAD_HANDLER),
     analyzer: 'event-flow',
@@ -17,7 +17,7 @@ const toFinding = (model: EventFlowModel, registration: Registration): FindingOf
     line: registration.line,
     message: `${handler ?? 'A handler'} handles ${event}, but no production code constructs ${event}.`,
     fix: `Publish ${event} where it happens, or delete the handler.`,
-    details: { event, eventId: registration.event, handler: handler ?? null },
+    details: { event, eventId: registration.event, handler: handler ?? null, handlerClassId: registration.handlerClass ?? null, handlerMethod: registration.handlerMethod ?? null },
   };
 };
 

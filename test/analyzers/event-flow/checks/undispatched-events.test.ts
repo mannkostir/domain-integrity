@@ -3,11 +3,11 @@ import { undispatchedEvents } from '../../../../src/analyzers/event-flow/checks/
 import { flowModel } from '../../../helpers/event-flow-model';
 
 const buffer = {
-  ownerId: 'AggregateRoot',
+  ownerId: 'src/aggregate-root.ts:AggregateRoot',
   owner: 'AggregateRoot',
   buffer: '_domainEvents',
   method: 'addDomainEvent',
-  raisers: ['Booking', 'Payment'],
+  raiserNames: ['Booking', 'Payment'],
   file: '/app/src/aggregate-root.ts',
   line: 3,
 };
@@ -24,7 +24,7 @@ describe('undispatchedEvents', () => {
         message:
           'AggregateRoot._domainEvents collects events from addDomainEvent() raised by Booking, Payment, but no production code reads or drains it, so those events never reach a handler.',
         fix: 'Dispatch the events in _domainEvents after saving the aggregate and clear it, or stop raising them.',
-        details: { owner: 'AggregateRoot', ownerId: 'AggregateRoot', buffer: '_domainEvents', method: 'addDomainEvent', raisers: ['Booking', 'Payment'] },
+        details: { owner: 'AggregateRoot', ownerId: 'src/aggregate-root.ts:AggregateRoot', buffer: '_domainEvents', method: 'addDomainEvent', raisers: ['Booking', 'Payment'] },
       },
     ]);
   });

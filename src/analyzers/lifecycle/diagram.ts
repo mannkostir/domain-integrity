@@ -87,14 +87,20 @@ const selectDeclared = (aggregates: readonly AggregateModel[], only: string | un
     : { kind: 'selected', aggregates: matches };
 };
 
-const aggregateSections = (aggregate: AggregateModel): string[] =>
+const headingName = (aggregate: AggregateModel, declared: readonly AggregateModel[]): string =>
+  declared.filter((other) => other.name === aggregate.name).length > 1 ? aggregate.qualifiedName : aggregate.name;
+
+const aggregateSections = (aggregate: AggregateModel, heading: string): string[] =>
   aggregate.fields
     .filter((field) => aggregate.declarations.has(field.name))
-    .map((field) => `## ${aggregate.id}.${field.name}\n\n\`\`\`mermaid\n${fieldDiagram(aggregate, field)}\n\`\`\``);
+    .map((field) => `## ${heading}.${field.name}\n\n\`\`\`mermaid\n${fieldDiagram(aggregate, field)}\n\`\`\``);
 
 export const lifecycleDiagrams = (model: LifecycleModel, only: string | undefined): AnalyzerDiagram => {
   const selection = selectDeclared(model.aggregates, only);
-  return selection.kind === 'ambiguous'
-    ? selection
-    : { kind: 'diagram', text: selection.aggregates.flatMap(aggregateSections).join('\n\n') };
+  if (selection.kind === 'ambiguous') return selection;
+  const declared = model.aggregates.filter((aggregate) => aggregate.declared);
+  return {
+    kind: 'diagram',
+    text: selection.aggregates.flatMap((aggregate) => aggregateSections(aggregate, headingName(aggregate, declared))).join('\n\n'),
+  };
 };

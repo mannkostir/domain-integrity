@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
+import { Identity, describeIdentity } from '../../src/report/identity';
 import { captureIo } from '../helpers/disk';
 
 type SarifRun = { readonly tool: { readonly driver: Readonly<Record<string, unknown>> } };
@@ -22,10 +23,10 @@ const fixture = (name: string): string => fileURLToPath(new URL(`../fixtures/${n
 const checkJson = async (name: string) => {
   const { io, stdout } = captureIo(fixture(name));
   const code = await run(['check', '--format', 'json'], io);
-  const findings = (JSON.parse(stdout()) as { findings: { severity: string; key: string }[] }).findings;
+  const findings = (JSON.parse(stdout()) as { findings: { severity: string; identity: Identity }[] }).findings;
   return {
     code,
-    findings: findings.map((finding) => `${finding.severity} ${finding.key}`).sort(),
+    findings: findings.map((finding) => `${finding.severity} ${describeIdentity(finding.identity)}`).sort(),
   };
 };
 
@@ -40,12 +41,12 @@ describe('fixture projects', () => {
     expect(await checkJson('enum-inline')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak|Order|annotate|status|CANCELLED',
-        'error transition-drift|Order|cancel|status|extra',
-        'error transition-drift|Order|place|status|extra',
-        'error undispatched-events|AggregateRoot|events|',
-        'error unreachable-state|Order||status|PAID',
-        'warning transition-missing|Order|place|status|missing',
+        'error terminal-state-leak aggregate=test/fixtures/enum-inline/src/order.ts:Order method=annotate field=status values=CANCELLED',
+        'error transition-drift aggregate=test/fixtures/enum-inline/src/order.ts:Order method=cancel field=status kind=extra',
+        'error transition-drift aggregate=test/fixtures/enum-inline/src/order.ts:Order method=place field=status kind=extra',
+        'error undispatched-events owner=test/fixtures/enum-inline/src/aggregate-root.ts:AggregateRoot buffer=events',
+        'error unreachable-state aggregate=test/fixtures/enum-inline/src/order.ts:Order field=status value=PAID',
+        'warning transition-missing aggregate=test/fixtures/enum-inline/src/order.ts:Order method=place field=status',
       ],
     });
   });
@@ -54,9 +55,9 @@ describe('fixture projects', () => {
     expect(await checkJson('boolean-rule')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak|Todo|complete|deleted|true',
-        'error terminal-state-leak|Todo|delete|deleted|true',
-        'error undispatched-events|AggregateRoot|events|',
+        'error terminal-state-leak aggregate=test/fixtures/boolean-rule/src/todo.ts:Todo method=complete field=deleted values=true',
+        'error terminal-state-leak aggregate=test/fixtures/boolean-rule/src/todo.ts:Todo method=delete field=deleted values=true',
+        'error undispatched-events owner=test/fixtures/boolean-rule/src/aggregate-root.ts:AggregateRoot buffer=events',
       ],
     });
   });
@@ -65,10 +66,10 @@ describe('fixture projects', () => {
     expect(await checkJson('nullable-timestamp')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak|Account|close|closedAt|set',
-        'error terminal-state-leak|Account|deposit|closedAt|set',
-        'error terminal-state-leak|Account|lock|closedAt|set',
-        'error terminal-state-leak|Account|withdraw|closedAt|set',
+        'error terminal-state-leak aggregate=test/fixtures/nullable-timestamp/src/account.ts:Account method=close field=closedAt values=set',
+        'error terminal-state-leak aggregate=test/fixtures/nullable-timestamp/src/account.ts:Account method=deposit field=closedAt values=set',
+        'error terminal-state-leak aggregate=test/fixtures/nullable-timestamp/src/account.ts:Account method=lock field=closedAt values=set',
+        'error terminal-state-leak aggregate=test/fixtures/nullable-timestamp/src/account.ts:Account method=withdraw field=closedAt values=set',
       ],
     });
   });
@@ -77,8 +78,8 @@ describe('fixture projects', () => {
     expect(await checkJson('outside-spec')).toEqual({
       code: 1,
       findings: [
-        'error outside-mutation|Invitation||status|InvitationService.accept',
-        'error outside-mutation|Invitation||status|WithStatus.mutate',
+        'error outside-mutation aggregate=test/fixtures/outside-spec/src/invitation.ts:Invitation field=status file=test/fixtures/outside-spec/src/invitation-service.ts scope=InvitationService.accept',
+        'error outside-mutation aggregate=test/fixtures/outside-spec/src/invitation.ts:Invitation field=status file=test/fixtures/outside-spec/src/with-status.ts scope=WithStatus.mutate',
       ],
     });
   });
@@ -99,11 +100,11 @@ describe('fixture projects', () => {
     expect(await checkJson('event-flows')).toEqual({
       code: 1,
       findings: [
-        'error dead-handler|RefundIssued|RefundHandler.handle|',
-        'error handler-payload-mismatch|OrderPlaced|OrderPlacedHandler.handle|PaymentCaptured',
-        'error saga-missing-failure-path|PaymentFailed|OrderSaga|PaymentCaptured',
-        'error undispatched-events|Undispatched|events|',
-        'error unhandled-event|Shipped||',
+        'error dead-handler event=test/fixtures/event-flows/src/events.ts:RefundIssued handlerClass=test/fixtures/event-flows/src/handlers.ts:RefundHandler handlerMethod=handle',
+        'error handler-payload-mismatch event=test/fixtures/event-flows/src/events.ts:OrderPlaced handlerClass=test/fixtures/event-flows/src/handlers.ts:OrderPlacedHandler handlerMethod=handle declared=test/fixtures/event-flows/src/events.ts:PaymentCaptured',
+        'error saga-missing-failure-path saga=test/fixtures/event-flows/src/saga.ts:OrderSaga success=test/fixtures/event-flows/src/events.ts:PaymentCaptured failure=test/fixtures/event-flows/src/events.ts:PaymentFailed',
+        'error undispatched-events owner=test/fixtures/event-flows/src/aggregates.ts:Undispatched buffer=events',
+        'error unhandled-event event=test/fixtures/event-flows/src/events.ts:Shipped',
       ],
     });
   });

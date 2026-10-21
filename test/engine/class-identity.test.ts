@@ -14,13 +14,29 @@ const classes = () => {
 };
 
 describe('classIdentities', () => {
-  it('names a unique class by its name and a shared name by its file', () => {
+  it('qualifies a class whose name is unique', () => {
+    const [order] = classes().slice(2);
+
+    expect(classIdentities([order!], '/app').get(order!)?.id).toBe('src/order.ts:Order');
+  });
+
+  it('qualifies each of two classes that share a name', () => {
     const identities = classIdentities(classes(), '/app');
 
-    expect([...identities.values()]).toEqual([
-      { id: 'src/a/ticket.ts:Ticket', name: 'Ticket', qualifiedName: 'src/a/ticket.ts:Ticket' },
-      { id: 'src/b/ticket.ts:Ticket', name: 'Ticket', qualifiedName: 'src/b/ticket.ts:Ticket' },
-      { id: 'Order', name: 'Order', qualifiedName: 'src/order.ts:Order' },
+    expect([...identities.values()].map((identity) => identity.id)).toEqual([
+      'src/a/ticket.ts:Ticket',
+      'src/b/ticket.ts:Ticket',
+      'src/order.ts:Order',
+    ]);
+  });
+
+  it('uses the qualified name as the id and keeps the plain name', () => {
+    const identities = classIdentities(classes(), '/app');
+
+    expect([...identities.values()].map(({ id, name, qualifiedName }) => [id === qualifiedName, name])).toEqual([
+      [true, 'Ticket'],
+      [true, 'Ticket'],
+      [true, 'Order'],
     ]);
   });
 });

@@ -114,7 +114,7 @@ const leaks = (target: ClassDeclaration, eventMethods: readonly string[] = DEFAU
       lifecycles: [{ target, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
     },
     files: project.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
   return lifecycleAnalyzer
     .check(model)

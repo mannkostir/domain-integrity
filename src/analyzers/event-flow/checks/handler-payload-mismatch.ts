@@ -12,7 +12,7 @@ export const handlerPayloadMismatch = (model: EventFlowModel): FindingOf<'handle
     if (payload.classes.some((id) => accepted.has(id))) return [];
     const event = nameOf(model, registration.event);
     const declared = payload.classes.map((id) => nameOf(model, id));
-    const handler = handlerLabel(registration);
+    const handler = handlerLabel(model, registration);
     return [
       {
         ...reportedUnder(HANDLER_PAYLOAD_MISMATCH),
@@ -21,7 +21,7 @@ export const handlerPayloadMismatch = (model: EventFlowModel): FindingOf<'handle
         line: payload.line,
         message: `${handler ?? 'A handler'} is registered for ${event} but declares its event as ${declared.join(' | ')}.`,
         fix: `Type the parameter as ${event}, or register the handler for ${declared.join(' | ')}.`,
-        details: { event, eventId: registration.event, handler: handler ?? null, declared, declaredIds: payload.classes },
+        details: { event, eventId: registration.event, handler: handler ?? null, handlerClassId: registration.handlerClass ?? null, handlerMethod: registration.handlerMethod ?? null, declared, declaredIds: payload.classes },
       },
     ];
   });

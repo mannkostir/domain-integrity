@@ -47,7 +47,7 @@ const outsideMutationFiles = (reportTestFileMutations: boolean): readonly string
       lifecycles: [{ target: order, fields: [{ name: 'status', terminal: [], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
     },
     files: mutatedProject.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
   return lifecycleFindings(result.findings)
     .filter((finding) => finding.ruleId === 'outside-mutation')
@@ -62,7 +62,7 @@ describe('lifecycleAnalyzer', () => {
         lifecycles: [{ target: ticket, fields: [{ name: 'status', terminal: ['CLOSED'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: project.getSourceFiles(),
-      root: '/',
+      projectRoot: '/', repositoryRoot: '/',
     });
 
     expect(lifecycleFindings(result.findings).map((finding) => `${finding.ruleId} ${methodOf(finding)}`)).toEqual(['terminal-state-leak rename']);
@@ -88,7 +88,7 @@ export class Order extends AggregateRoot<{ status: OrderStatus }> {
         lifecycles: [{ target: order, fields: [{ name: 'status', terminal: ['PAID'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: orderProject.getSourceFiles(),
-      root: '/',
+      projectRoot: '/', repositoryRoot: '/',
     });
 
     expect(lifecycleFindings(result.findings).map((finding) => `${finding.ruleId} ${methodOf(finding)}`)).toEqual(['terminal-state-leak pay']);
@@ -117,7 +117,7 @@ export class Meter {
         ],
       },
       files: meterProject.getSourceFiles(),
-      root: '/',
+      projectRoot: '/', repositoryRoot: '/',
     });
 
     expect(result.findings.filter((finding) => ['transition-drift', 'transition-missing'].includes(finding.ruleId))).toEqual([]);
@@ -141,7 +141,7 @@ export class Account {
         lifecycles: [{ target: account, fields: [{ name: 'label', terminal: ['set'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: accountProject.getSourceFiles(),
-      root: '/',
+      projectRoot: '/', repositoryRoot: '/',
     });
 
     expect(lifecycleFindings(result.findings).map((finding) => `${finding.ruleId} ${methodOf(finding)}`)).toEqual(['terminal-state-leak rename']);
@@ -157,13 +157,13 @@ export class Account {
 
   it('finds nothing in a project without aggregates', () => {
     const emptyProject = inMemoryProject({ '/src/util.ts': 'export const add = (a: number, b: number): number => a + b;' });
-    const model = lifecycleAnalyzer.extract({ declaration: DEFAULT_DECLARATION, files: emptyProject.getSourceFiles(), root: '/' });
+    const model = lifecycleAnalyzer.extract({ declaration: DEFAULT_DECLARATION, files: emptyProject.getSourceFiles(), projectRoot: '/', repositoryRoot: '/' });
 
     expect(lifecycleAnalyzer.scope(model)).toBe('nothing-found');
   });
 
   it('has nothing declared when aggregates are found but no lifecycle is declared', () => {
-    const model = lifecycleAnalyzer.extract({ declaration: DEFAULT_DECLARATION, files: project.getSourceFiles(), root: '/' });
+    const model = lifecycleAnalyzer.extract({ declaration: DEFAULT_DECLARATION, files: project.getSourceFiles(), projectRoot: '/', repositoryRoot: '/' });
 
     expect(lifecycleAnalyzer.scope(model)).toBe('nothing-declared');
   });
@@ -175,7 +175,7 @@ export class Account {
         lifecycles: [{ target: ticket, fields: [{ name: 'status', terminal: ['CLOSED'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: project.getSourceFiles(),
-      root: '/',
+      projectRoot: '/', repositoryRoot: '/',
     });
 
     expect(lifecycleAnalyzer.scope(model)).toBe('checkable');

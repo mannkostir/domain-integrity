@@ -34,7 +34,7 @@ const analyse = (field: DeclaredField) => {
   const model = lifecycleAnalyzer.extract({
     declaration: { ...DEFAULT_DECLARATION, lifecycles: [{ target: order, fields: [field], allowAfterTerminal: [] }] },
     files: project.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
   return {
     problems: model.problems,

@@ -16,7 +16,7 @@ describe('unreachableState', () => {
         line: 3,
         message: "status value 'confirmed' is never assigned.",
         fix: "Add the method that moves Order into 'confirmed', or remove the value from the type.",
-        details: { aggregate: 'Order', aggregateId: 'Order', field: 'status', value: 'CONFIRMED' },
+        details: { aggregate: 'Order', aggregateId: 'src/order.ts:Order', field: 'status', value: 'CONFIRMED' },
       },
     ]);
   });

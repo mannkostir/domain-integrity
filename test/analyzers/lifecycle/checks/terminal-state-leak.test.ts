@@ -35,7 +35,7 @@ describe('terminalStateLeak', () => {
         line: 10,
         message: "annotate() can run after status is 'cancelled'.",
         fix: "Guard annotate() so it cannot run when status is 'cancelled', or list it in allowAfterTerminal if that is intended.",
-        details: { aggregate: 'Order', aggregateId: 'Order', method: 'annotate', field: 'status', values: ['CANCELLED'] },
+        details: { aggregate: 'Order', aggregateId: 'src/order.ts:Order', method: 'annotate', field: 'status', values: ['CANCELLED'] },
       },
     ]);
   });

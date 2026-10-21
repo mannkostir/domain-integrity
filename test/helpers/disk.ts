@@ -40,11 +40,11 @@ export const EVENT_FLOW_PROJECT = {
   'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n",
 };
 
-export const writeProject = (
+const writeProjectInto = (
+  dir: string,
   files: Readonly<Record<string, string>>,
-  compilerOptions: Readonly<Record<string, unknown>> = {},
-): string => {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-cli-')));
+  compilerOptions: Readonly<Record<string, unknown>>,
+): void => {
   const tsconfig = {
     compilerOptions: {
       strict: true,
@@ -56,12 +56,33 @@ export const writeProject = (
     },
     include: ['src'],
   };
+  mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify(tsconfig));
   Object.entries(files).forEach(([path, text]) => {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), text);
   });
+};
+
+const freshTempDir = (): string => realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-cli-')));
+
+export const writeProject = (
+  files: Readonly<Record<string, string>>,
+  compilerOptions: Readonly<Record<string, unknown>> = {},
+): string => {
+  const dir = freshTempDir();
+  writeProjectInto(dir, files, compilerOptions);
   return dir;
+};
+
+export const writeNestedProject = (
+  files: Readonly<Record<string, string>>,
+  compilerOptions: Readonly<Record<string, unknown>> = {},
+): { readonly top: string; readonly project: string } => {
+  const top = freshTempDir();
+  const project = join(top, 'pkg');
+  writeProjectInto(project, files, compilerOptions);
+  return { top, project };
 };
 
 export const captureIo = (cwd: string, answers: readonly boolean[] = []) => {

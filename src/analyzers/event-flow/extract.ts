@@ -28,7 +28,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
   const analysed: ReadonlySet<SourceFile> = new Set(input.files);
   const isProject: ProjectClasses = (cls) => analysed.has(cls.getSourceFile());
   const index = new SourceIndex(input.files);
-  const identities = classIdentities(index.ofKind(SyntaxKind.ClassDeclaration), input.root);
+  const identities = classIdentities(index.ofKind(SyntaxKind.ClassDeclaration), input.repositoryRoot);
   const identity = (cls: ClassDeclaration): ClassIdentity => {
     const found = identities.get(cls);
     if (found === undefined) throw new Error(`${cls.getName() ?? 'anonymous class'} is not in the analysed files`);
@@ -43,7 +43,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
   const sagas = declared.sagas.filter((saga) => [saga.target, ...saga.outcomes.flat()].every(isProject));
   const eventClasses = unique([...raw.map((registration) => registration.event), ...inProcess, ...sagas.flatMap((saga) => saga.outcomes.flat())]);
   const keys: ReadonlySet<Node> = new Set(raw.map((registration) => registration.key));
-  const isTest = (file: SourceFile): boolean => isTestFile(file, input.root);
+  const isTest = (file: SourceFile): boolean => isTestFile(file, input.projectRoot);
   const referenceContext = { analysed, isTest, keys, index };
   const hierarchies = new Map([...eventClasses, ...sagas.map((saga) => saga.target)].map((cls) => [cls, hierarchyOf(cls, isProject)]));
   const ancestorIds = (cls: ClassDeclaration): readonly string[] => (hierarchies.get(cls)?.ancestors ?? []).map((ancestor) => identity(ancestor).id);
@@ -122,7 +122,7 @@ export const extractEventFlows = (input: AnalysisInput): EventFlowModel => {
     libraryKeyed,
     inProcess: inProcess.map((cls) => identity(cls).id),
     sagas: sagaModels,
-    buffers: undispatchedBuffers({ files: input.files, root: input.root, configFile: input.configFile, eventMethods: input.declaration.eventMethods, inertDecorators: input.declaration.inertDecorators, isProject, identity }),
+    buffers: undispatchedBuffers({ files: input.files, root: input.projectRoot, configFile: input.configFile, eventMethods: input.declaration.eventMethods, inertDecorators: input.declaration.inertDecorators, isProject, identity }),
     problems: unique(outside).map((cls) => eventNotAnalysed(cls.getName() ?? 'anonymous class')),
   };
 };

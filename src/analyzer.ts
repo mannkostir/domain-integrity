@@ -6,7 +6,8 @@ import { Finding, Problem, Severity } from './finding';
 export type AnalysisInput = {
   readonly declaration: DomainDeclaration;
   readonly files: readonly SourceFile[];
-  readonly root: string;
+  readonly projectRoot: string;
+  readonly repositoryRoot: string;
   readonly configFile?: SourceFile;
 };
 

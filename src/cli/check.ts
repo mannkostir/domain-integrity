@@ -4,7 +4,7 @@ import { AnalyzerRun } from '../analysis';
 import { AnalyzerFailure } from '../analyzer';
 import { Finding, Problem } from '../finding';
 import { UsageError } from '../engine/errors';
-import { baselineKeys, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
+import { BaselineEntry, baselineEntries, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
 import { formatJson } from '../report/json';
 import { formatSarif } from '../report/sarif';
 import { Report, formatText } from '../report/text';
@@ -13,7 +13,7 @@ import { guardedRead, writeText } from './files';
 import { reportInternalErrors } from './internal-errors';
 import { Io, Paths } from './io';
 import { openSession, reportNotice } from './session';
-import { toolIdentity } from './version';
+import { packageVersion, toolIdentity } from './version';
 
 export type CheckOptions = {
   readonly format: string;
@@ -43,7 +43,7 @@ type Outcome = {
   readonly findings: readonly Finding[];
 };
 
-const updateBaseline = ({ problems, failures, findings }: Outcome, options: CheckOptions, io: Io): number => {
+const updateBaseline = ({ problems, failures, findings }: Outcome, options: CheckOptions, io: Io, repositoryRoot: string): number => {
   if (problems.length > 0) {
     io.err('Baseline not written because of the problems above.\n');
     return 2;
@@ -53,8 +53,8 @@ const updateBaseline = ({ problems, failures, findings }: Outcome, options: Chec
     return 2;
   }
   const path = resolve(io.cwd, options.baseline ?? DEFAULT_BASELINE);
-  writeText(path, serializeBaseline(findings));
-  const entries = baselineKeys(findings).length;
+  writeText(path, serializeBaseline(findings, repositoryRoot));
+  const entries = baselineEntries(findings, repositoryRoot).length;
   io.out(`Baseline written to ${relative(io.cwd, path)} with ${entries} ${entries === 1 ? 'entry' : 'entries'}.\n`);
   return 0;
 };
@@ -79,15 +79,15 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   };
   outcome.problems.forEach((problem) => io.err(`problem: ${problem.message}\n`));
   reportInternalErrors(outcome.failures, io);
-  if (options.updateBaseline) return updateBaseline(outcome, options, io);
+  if (options.updateBaseline) return updateBaseline(outcome, options, io, paths.repositoryRoot);
   const baselinePath = baselinePathFor(options, io);
-  const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath)) : new Set<string>();
-  const { fresh, known } = partitionByBaseline(outcome.findings, baseline);
+  const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath, packageVersion())) : new Map<string, BaselineEntry>();
+  const { fresh, known, exceeded } = partitionByBaseline(outcome.findings, baseline, paths.repositoryRoot);
   const rules = results.flatMap((result) => result.rules);
   const complete = isComplete(outcome);
-  const stale = complete ? staleEntries(outcome.findings, baseline) : [];
+  const stale = complete ? staleEntries(outcome.findings, baseline, paths.repositoryRoot) : [];
   const applied = baselinePath ? { baseline: { path: relative(io.cwd, baselinePath), stale } } : {};
-  io.out(format({ fresh, known, problems: outcome.problems, rules, root: paths.root, ...applied }, toolIdentity()));
+  io.out(format({ fresh, known, exceeded, problems: outcome.problems, rules, repositoryRoot: paths.repositoryRoot, ...applied }, toolIdentity()));
   if (!complete) return 2;
   return fresh.some((finding) => finding.severity === 'error') ? 1 : 0;
 };

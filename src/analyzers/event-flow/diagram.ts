@@ -3,20 +3,22 @@ import { escapeLabel } from '../mermaid-label';
 import { handlerLabel } from './checks/handler-label';
 import { ClassRef, EventFlowModel } from './model';
 
+const byNameThenId = (left: ClassRef, right: ClassRef): number => left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
+
 const handledEvents = (model: EventFlowModel): readonly ClassRef[] =>
   [...new Set(model.registrations.map((registration) => registration.event))]
-    .sort()
     .flatMap((id) => {
       const ref = model.classes.get(id);
       return ref === undefined ? [] : [ref];
-    });
+    })
+    .sort(byNameThenId);
 
 const isNamed = (ref: ClassRef, only: string): boolean => ref.id === only || ref.name === only || ref.qualifiedName === only;
 
 const render = (model: EventFlowModel, events: readonly ClassRef[]): string => {
   if (events.length === 0) return '';
   const edges = events.flatMap((event, eventIndex) =>
-    model.registrations.filter((registration) => registration.event === event.id).map((registration) => ({ eventIndex, event, label: handlerLabel(registration) ?? '(inline)' })),
+    model.registrations.filter((registration) => registration.event === event.id).map((registration) => ({ eventIndex, event, label: handlerLabel(model, registration) ?? '(inline)' })),
   );
   const lines = edges.map(
     (edge, handlerIndex) => `  event_${edge.eventIndex}["${escapeLabel(edge.event.name)}"] --> handler_${handlerIndex}["${escapeLabel(edge.label)}"]`,

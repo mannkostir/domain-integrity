@@ -39,7 +39,7 @@ const leakingMethods = (files: Readonly<Record<string, string>>, path: string, n
       lifecycles: [{ target, fields: [{ name: 'status', terminal: ['CLOSED'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
     },
     files: shapeProject.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
   return [...lifecycleFindings(result.findings).map((finding) => methodOf(finding)), ...result.problems.map((problem) => problem.message)];
 };
@@ -114,7 +114,7 @@ describe('cyclic inheritance', () => {
         lifecycles: [{ target: lower, fields: [{ name: 'status', terminal: ['CLOSED'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: project.getSourceFiles(),
-      root: '/',
+      projectRoot: '/', repositoryRoot: '/',
     });
 
     expect({ findings: result.findings, problems: result.problems }).toEqual({ findings: [], problems: [] });

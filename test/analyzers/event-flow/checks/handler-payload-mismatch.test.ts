@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { handlerPayloadMismatch } from '../../../../src/analyzers/event-flow/checks/handler-payload-mismatch';
-import { eventClass, flowModel, registration } from '../../../helpers/event-flow-model';
+import { classRef, eventClass, flowModel, registration } from '../../../helpers/event-flow-model';
 
 const payload = (classes: readonly string[]) => ({ kind: 'classes' as const, classes, file: '/app/src/handlers.ts', line: 5 });
 
@@ -21,7 +21,7 @@ describe('handlerPayloadMismatch', () => {
         line: 5,
         message: 'PaidHandler.handle is registered for Paid but declares its event as Failed.',
         fix: 'Type the parameter as Paid, or register the handler for Failed.',
-        details: { event: 'Paid', eventId: 'Paid', handler: 'PaidHandler.handle', declared: ['Failed'], declaredIds: ['Failed'] },
+        details: { event: 'Paid', eventId: 'Paid', handler: 'PaidHandler.handle', handlerClassId: 'PaidHandler', handlerMethod: 'handle', declared: ['Failed'], declaredIds: ['Failed'] },
       },
     ]);
   });
@@ -57,5 +57,25 @@ describe('handlerPayloadMismatch', () => {
     });
 
     expect(handlerPayloadMismatch(model)).toEqual([]);
+  });
+
+  describe('with a qualified handler class id', () => {
+    const modelWithMismatch = flowModel({
+      classes: new Map([
+        ['Paid', classRef('Paid')],
+        ['Failed', classRef('Failed')],
+        ['src/handlers.ts:RefundHandler', { ...classRef('RefundHandler'), id: 'src/handlers.ts:RefundHandler', qualifiedName: 'src/handlers.ts:RefundHandler' }],
+      ]),
+      events: new Map([['Paid', eventClass('Paid')]]),
+      registrations: [registration({ handlerClass: 'src/handlers.ts:RefundHandler', handlerMethod: 'handle', payload: payload(['Failed']) })],
+    });
+
+    it('labels the handler with its class name, not its id', () => {
+      expect(handlerPayloadMismatch(modelWithMismatch).map((finding) => finding.details.handler)).toEqual(['RefundHandler.handle']);
+    });
+
+    it('carries the handler class id and method for the identity', () => {
+      expect(handlerPayloadMismatch(modelWithMismatch).map(({ details }) => [details.handlerClassId, details.handlerMethod])).toEqual([['src/handlers.ts:RefundHandler', 'handle']]);
+    });
   });
 });

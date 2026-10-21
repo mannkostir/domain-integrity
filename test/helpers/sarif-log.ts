@@ -13,7 +13,7 @@ export type SarifRule = {
 
 export type SarifLocation = {
   readonly physicalLocation: {
-    readonly artifactLocation: { readonly uri: string };
+    readonly artifactLocation: { readonly uri: string; readonly uriBaseId: string };
     readonly region: { readonly startLine: number };
   };
 };

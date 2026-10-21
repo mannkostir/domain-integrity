@@ -41,15 +41,18 @@ describe('event flows in the CLI', () => {
     expect({ code: await run(['check'], io), message: stderr().includes('No event handlers were found either') }).toEqual({ code: 2, message: true });
   });
 
-  it('writes event-flow baseline keys and treats them as known', async () => {
+  it('writes event-flow baseline entries and treats them as known', async () => {
     const dir = writeProject(EVENT_FLOW_PROJECT);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
     const { io } = captureIo(dir);
 
     expect({
-      keys: JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings,
+      entries: JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings,
       code: await run(['check', '--baseline', 'baseline.json'], io),
-    }).toEqual({ keys: ['dead-handler|Refunded|RefundHandler.handle|'], code: 0 });
+    }).toEqual({
+      entries: [{ rule: 'dead-handler', event: 'src/events.ts:Refunded', handlerClass: 'src/handlers.ts:RefundHandler', handlerMethod: 'handle', count: 1 }],
+      code: 0,
+    });
   });
 
   it('exits 2 for a saga outcome that repeats one class', async () => {

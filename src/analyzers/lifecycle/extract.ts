@@ -130,7 +130,7 @@ const extractAggregate = (
   identity: ClassIdentity,
   declaration: DomainDeclaration,
   project: ProjectIndex,
-  root: string,
+  projectRoot: string,
 ): { readonly aggregate: AggregateModel; readonly problems: readonly Problem[] } => {
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
   const methods = instanceMethods(cls, declaration.aggregateBaseClasses);
@@ -151,23 +151,23 @@ const extractAggregate = (
       methods: methodModels(scope, methods, resolved.fields, declared !== undefined),
       initial: new Map(resolved.fields.map((field) => [field.name, initialValues(cls, field)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(project, field)]) : []),
-      outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, root)) : [],
+      outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, projectRoot)) : [],
       uncertainlyWritten: declared
         ? new Set()
-        : fieldsWrittenUncertainly(cls, declaration.aggregateBaseClasses, project.sources, resolved.fields, root),
+        : fieldsWrittenUncertainly(cls, declaration.aggregateBaseClasses, project.sources, resolved.fields, projectRoot),
     },
   };
 };
 
-export const extractLifecycles = ({ declaration, files, root }: AnalysisInput): LifecycleModel => {
+export const extractLifecycles = ({ declaration, files, projectRoot, repositoryRoot }: AnalysisInput): LifecycleModel => {
   const project = projectIndex(files);
   const classes = discoverAggregates(
     project.sources,
     declaration.aggregateBaseClasses,
     declaration.lifecycles.map((lifecycle) => lifecycle.target),
   );
-  const identities = classIdentities(classes, root);
-  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(identities, cls), declaration, project, root));
+  const identities = classIdentities(classes, repositoryRoot);
+  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(identities, cls), declaration, project, projectRoot));
   return {
     aggregates: extracted.map((result) => result.aggregate),
     problems: extracted.flatMap((result) => result.problems),

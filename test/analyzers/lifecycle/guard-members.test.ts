@@ -84,7 +84,7 @@ describe('guards that call members whose body cannot be traced', () => {
         ],
       },
       files: [file],
-      root: '/',
+      projectRoot: '/', repositoryRoot: '/',
     });
 
     expect(lifecycleAnalyzer.check(model).filter((finding) => finding.ruleId === 'terminal-state-leak')).toEqual([]);

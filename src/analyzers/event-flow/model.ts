@@ -36,7 +36,7 @@ export type UndispatchedBuffer = {
   readonly owner: string;
   readonly buffer: string;
   readonly method: string;
-  readonly raisers: readonly string[];
+  readonly raiserNames: readonly string[];
 } & Location;
 export type EventFlowModel = {
   readonly classes: ReadonlyMap<string, ClassRef>;

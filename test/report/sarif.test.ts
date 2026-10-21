@@ -3,6 +3,7 @@ import { FINGERPRINT, formatSarif } from '../../src/report/sarif';
 import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks';
 import { RuleDescription } from '../../src/analyzer';
 import { Finding } from '../../src/finding';
+import { identityOf, serializeIdentity } from '../../src/report/identity';
 import { ToolIdentity } from '../../src/report/tool';
 import { TOOL, bufferFinding, finding, flowFinding, missingFinding, unhandledFinding } from '../helpers/model';
 import { SarifResult, SarifRule, SarifRun, parseSarif } from '../helpers/sarif-log';
@@ -20,7 +21,7 @@ const DOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.
 const UNDOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.3' };
 
 const sarifRun = (fresh: readonly Finding[], rules: readonly RuleDescription[], tool: ToolIdentity = TOOL, known: readonly Finding[] = []): SarifRun => {
-  const [run] = parseSarif(formatSarif({ fresh, known, problems: [], rules, root: '/app' }, tool)).runs;
+  const [run] = parseSarif(formatSarif({ fresh, known, problems: [], rules, repositoryRoot: '/app', exceeded: new Map() }, tool)).runs;
   if (run === undefined) throw new Error('The SARIF log has no run.');
   return run;
 };
@@ -47,7 +48,7 @@ const knownLeakResult = (): SarifResult => onlyResult(sarifRun([], [ERROR_RULE],
 
 describe('formatSarif', () => {
   it('produces a SARIF 2.1.0 log of one run', () => {
-    const log = parseSarif(formatSarif({ fresh: [], known: [], problems: [], rules: [], root: '/app' }, TOOL));
+    const log = parseSarif(formatSarif({ fresh: [], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
 
     expect({ $schema: log.$schema, version: log.version, runs: log.runs.length }).toEqual({
       $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
@@ -126,8 +127,12 @@ describe('formatSarif', () => {
     expect(leakResult().properties).toEqual({ fix: 'F1' });
   });
 
-  it('fingerprints a result by the baseline key of its finding', () => {
-    expect(leakResult().partialFingerprints).toEqual({ 'domainIntegrity/v1': 'terminal-state-leak|Order|annotate|status|CANCELLED' });
+  it('fingerprints a result with its serialized identity under domainIntegrity/v2', () => {
+    expect(leakResult().partialFingerprints).toEqual({ 'domainIntegrity/v2': serializeIdentity(identityOf(finding({}), '/app')) });
+  });
+
+  it('locates a result relative to the repository root with the %SRCROOT% base', () => {
+    expect(leakResult().locations[0]?.physicalLocation.artifactLocation).toEqual({ uri: 'src/order.ts', uriBaseId: '%SRCROOT%' });
   });
 
   it('leaves a fresh result unsuppressed', () => {
@@ -145,7 +150,7 @@ describe('formatSarif', () => {
   });
 
   it('fingerprints a known finding like a fresh one', () => {
-    expect(knownLeakResult().partialFingerprints).toEqual({ 'domainIntegrity/v1': 'terminal-state-leak|Order|annotate|status|CANCELLED' });
+    expect(knownLeakResult().partialFingerprints).toEqual({ 'domainIntegrity/v2': serializeIdentity(identityOf(finding({}), '/app')) });
   });
 
   it('refuses a finding whose rule the report does not declare', () => {
@@ -159,8 +164,8 @@ describe('formatSarif', () => {
         ruleIndex: 0,
         level: 'error',
         message: { text: 'M4' },
-        locations: [{ physicalLocation: { artifactLocation: { uri: 'src/aggregate-root.ts' }, region: { startLine: 3 } } }],
-        partialFingerprints: { [FINGERPRINT]: 'undispatched-events|AggregateRoot|_domainEvents|' },
+        locations: [{ physicalLocation: { artifactLocation: { uri: 'src/aggregate-root.ts', uriBaseId: '%SRCROOT%' }, region: { startLine: 3 } } }],
+        partialFingerprints: { [FINGERPRINT]: serializeIdentity(identityOf(bufferFinding(), '/app')) },
         properties: { fix: 'F4' },
       },
     ]);
@@ -172,7 +177,8 @@ describe('formatSarif', () => {
       known: [missingFinding(), unhandledFinding()],
       problems: [],
       rules: ALL_RULES,
-      root: '/app',
+      repositoryRoot: '/app',
+      exceeded: new Map(),
     };
 
     expect(sarifViolations(JSON.parse(formatSarif(report, TOOL)))).toEqual([]);

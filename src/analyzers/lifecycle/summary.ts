@@ -1,7 +1,7 @@
-import { relative } from 'node:path';
 import { labelsOf } from './checks/format';
 import { AggregateModel, FieldDeclaration, LifecycleModel, StateField } from './model';
 import { writesField } from './values';
+import { toPosixRelative } from '../../engine/path';
 
 const RULES = [
   '## Domain lifecycles',
@@ -39,7 +39,7 @@ const fieldLines = (aggregate: AggregateModel, field: StateField, declaration: F
 ];
 
 const aggregateSection = (aggregate: AggregateModel, root: string): string[] => [
-  `### ${aggregate.name} (${relative(root, aggregate.file)})`,
+  `### ${aggregate.name} (${toPosixRelative(root, aggregate.file)})`,
   ...aggregate.fields.flatMap((field) => {
     const declaration = aggregate.declarations.get(field.name);
     return declaration ? fieldLines(aggregate, field, declaration) : [];

@@ -8,7 +8,7 @@ Rules for changing these aggregates:
 - Change state only through the aggregate's own methods.
 - Run \`domain-integrity check\` after changing domain code.
 
-### Order (src/order.ts)
+### Order (test/fixtures/enum-inline/src/order.ts)
 - status: pending, confirmed, paid, placed, cancelled
   - terminal: cancelled
   - confirm: pending → confirmed
@@ -44,27 +44,27 @@ stateDiagram-v2
 `;
 
 exports[`fixture projects > enum-inline: text report 1`] = `
-"error unreachable-state  Order  src/order.ts:6
+"error unreachable-state  Order  test/fixtures/enum-inline/src/order.ts:6
   status value 'paid' is never assigned.
   Fix: Add the method that moves Order into 'paid', or remove the value from the type.
 
-error transition-drift  Order.place()  src/order.ts:26
+error transition-drift  Order.place()  test/fixtures/enum-inline/src/order.ts:26
   place() can run from 'confirmed', which the declaration does not allow.
   Fix: Add a guard that excludes 'confirmed', or add it to transitions.place.
 
-warning transition-missing  Order.place()  src/order.ts:26
+warning transition-missing  Order.place()  test/fixtures/enum-inline/src/order.ts:26
   place() cannot run from 'paid', although the declaration allows it.
   Fix: Remove 'paid' from transitions.place, or relax the guard.
 
-error transition-drift  Order.cancel()  src/order.ts:31
+error transition-drift  Order.cancel()  test/fixtures/enum-inline/src/order.ts:31
   cancel() can run from 'paid', 'placed', which the declaration does not allow.
   Fix: Add a guard that excludes 'paid', 'placed', or add them to transitions.cancel.
 
-error terminal-state-leak  Order.annotate()  src/order.ts:36
+error terminal-state-leak  Order.annotate()  test/fixtures/enum-inline/src/order.ts:36
   annotate() can run after status is 'cancelled'.
   Fix: Guard annotate() so it cannot run when status is 'cancelled', or list it in allowAfterTerminal if that is intended.
 
-error undispatched-events  AggregateRoot.events  src/aggregate-root.ts:3
+error undispatched-events  AggregateRoot.events  test/fixtures/enum-inline/src/aggregate-root.ts:3
   AggregateRoot.events collects events from addEvent() raised by Order, but no production code reads or drains it, so those events never reach a handler.
   Fix: Dispatch the events in events after saving the aggregate and clear it, or stop raising them.
 
@@ -282,7 +282,8 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "src/aggregates.ts"
+                  "uri": "test/fixtures/event-flows/src/aggregates.ts",
+                  "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
                   "startLine": 4
@@ -291,7 +292,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "undispatched-events|Undispatched|events|"
+            "domainIntegrity/v2": "[\\"undispatched-events\\",\\"test/fixtures/event-flows/src/aggregates.ts:Undispatched\\",\\"events\\"]"
           },
           "properties": {
             "fix": "Dispatch the events in events after saving the aggregate and clear it, or stop raising them."
@@ -308,7 +309,8 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "src/handlers.ts"
+                  "uri": "test/fixtures/event-flows/src/handlers.ts",
+                  "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
                   "startLine": 4
@@ -317,7 +319,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "dead-handler|RefundIssued|RefundHandler.handle|"
+            "domainIntegrity/v2": "[\\"dead-handler\\",\\"test/fixtures/event-flows/src/events.ts:RefundIssued\\",\\"test/fixtures/event-flows/src/handlers.ts:RefundHandler\\",\\"handle\\"]"
           },
           "properties": {
             "fix": "Publish RefundIssued where it happens, or delete the handler."
@@ -334,7 +336,8 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "src/handlers.ts"
+                  "uri": "test/fixtures/event-flows/src/handlers.ts",
+                  "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
                   "startLine": 13
@@ -343,7 +346,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "handler-payload-mismatch|OrderPlaced|OrderPlacedHandler.handle|PaymentCaptured"
+            "domainIntegrity/v2": "[\\"handler-payload-mismatch\\",\\"test/fixtures/event-flows/src/events.ts:OrderPlaced\\",\\"test/fixtures/event-flows/src/handlers.ts:OrderPlacedHandler\\",\\"handle\\",[\\"test/fixtures/event-flows/src/events.ts:PaymentCaptured\\"]]"
           },
           "properties": {
             "fix": "Type the parameter as OrderPlaced, or register the handler for PaymentCaptured."
@@ -360,7 +363,8 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "src/order.ts"
+                  "uri": "test/fixtures/event-flows/src/order.ts",
+                  "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
                   "startLine": 6
@@ -369,7 +373,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "unhandled-event|Shipped||"
+            "domainIntegrity/v2": "[\\"unhandled-event\\",\\"test/fixtures/event-flows/src/events.ts:Shipped\\"]"
           },
           "properties": {
             "fix": "Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere."
@@ -386,7 +390,8 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "src/saga.ts"
+                  "uri": "test/fixtures/event-flows/src/saga.ts",
+                  "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
                   "startLine": 4
@@ -395,7 +400,7 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
             }
           ],
           "partialFingerprints": {
-            "domainIntegrity/v1": "saga-missing-failure-path|PaymentFailed|OrderSaga|PaymentCaptured"
+            "domainIntegrity/v2": "[\\"saga-missing-failure-path\\",\\"test/fixtures/event-flows/src/saga.ts:OrderSaga\\",\\"test/fixtures/event-flows/src/events.ts:PaymentCaptured\\",\\"test/fixtures/event-flows/src/events.ts:PaymentFailed\\"]"
           },
           "properties": {
             "fix": "Handle PaymentFailed in OrderSaga, for example with a compensating command."
@@ -409,23 +414,23 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
 `;
 
 exports[`fixture projects > event-flows: text report 1`] = `
-"error undispatched-events  Undispatched.events  src/aggregates.ts:4
+"error undispatched-events  Undispatched.events  test/fixtures/event-flows/src/aggregates.ts:4
   Undispatched.events collects events from addEvent() raised by Undispatched, but no production code reads or drains it, so those events never reach a handler.
   Fix: Dispatch the events in events after saving the aggregate and clear it, or stop raising them.
 
-error dead-handler  RefundIssued → RefundHandler.handle  src/handlers.ts:4
+error dead-handler  RefundIssued → RefundHandler.handle  test/fixtures/event-flows/src/handlers.ts:4
   RefundHandler.handle handles RefundIssued, but no production code constructs RefundIssued.
   Fix: Publish RefundIssued where it happens, or delete the handler.
 
-error handler-payload-mismatch  OrderPlaced → OrderPlacedHandler.handle  src/handlers.ts:13
+error handler-payload-mismatch  OrderPlaced → OrderPlacedHandler.handle  test/fixtures/event-flows/src/handlers.ts:13
   OrderPlacedHandler.handle is registered for OrderPlaced but declares its event as PaymentCaptured.
   Fix: Type the parameter as OrderPlaced, or register the handler for PaymentCaptured.
 
-error unhandled-event  Shipped  src/order.ts:6
+error unhandled-event  Shipped  test/fixtures/event-flows/src/order.ts:6
   Shipped is declared in-process and constructed, but no handler is registered for it.
   Fix: Add a handler, or remove Shipped from events.inProcess if it is consumed elsewhere.
 
-error saga-missing-failure-path  PaymentFailed → OrderSaga  src/saga.ts:4
+error saga-missing-failure-path  PaymentFailed → OrderSaga  test/fixtures/event-flows/src/saga.ts:4
   OrderSaga handles PaymentCaptured but not its declared failure PaymentFailed.
   Fix: Handle PaymentFailed in OrderSaga, for example with a compensating command.
 

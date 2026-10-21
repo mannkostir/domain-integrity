@@ -55,7 +55,7 @@ const leaks = () => {
       ],
     },
     files: project.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
   return lifecycleAnalyzer
     .check(model)

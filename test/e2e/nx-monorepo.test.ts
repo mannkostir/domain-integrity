@@ -8,21 +8,36 @@ import { captureIo } from '../helpers/disk';
 import { pointHelpersAtRepo } from '../helpers/init-project';
 
 const FIXTURE = fileURLToPath(new URL('../fixtures/nx-monorepo', import.meta.url));
-const BASELINE_KEYS = [
-  'outside-mutation|../../libs/orders/src/order.ts:Order||status|CancelOrder.execute',
-  'outside-mutation|../../libs/orders/src/order.ts:Order||status|OrderMapper.reopen',
+const BASELINE_ENTRIES = [
+  {
+    rule: 'outside-mutation',
+    aggregate: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
+    field: 'status',
+    file: 'test/fixtures/nx-monorepo/apps/api/src/cancel-order.ts',
+    scope: 'CancelOrder.execute',
+    count: 1,
+  },
+  {
+    rule: 'outside-mutation',
+    aggregate: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
+    field: 'status',
+    file: 'test/fixtures/nx-monorepo/libs/orders/src/order-mapper.ts',
+    scope: 'OrderMapper.reopen',
+    count: 1,
+  },
 ];
 
 type WireOutsideMutation = {
   readonly ruleId: string;
   readonly location: { readonly file: string };
-  readonly details: { readonly aggregateId: string; readonly scope: string };
+  readonly identity: { readonly aggregate: string };
+  readonly details: { readonly scope: string };
 };
 
 const located = (finding: WireOutsideMutation) => ({
   ruleId: finding.ruleId,
   file: finding.location.file,
-  aggregateId: finding.details.aggregateId,
+  aggregateId: finding.identity.aggregate,
   scope: finding.details.scope,
 });
 
@@ -55,14 +70,14 @@ describe('Nx-style monorepo', () => {
       findings: [
         {
           ruleId: 'outside-mutation',
-          file: 'apps/api/src/cancel-order.ts',
-          aggregateId: 'libs/orders/src/order.ts:Order',
+          file: 'test/fixtures/nx-monorepo/apps/api/src/cancel-order.ts',
+          aggregateId: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
           scope: 'CancelOrder.execute',
         },
         {
           ruleId: 'outside-mutation',
-          file: 'libs/orders/src/order-mapper.ts',
-          aggregateId: 'libs/orders/src/order.ts:Order',
+          file: 'test/fixtures/nx-monorepo/libs/orders/src/order-mapper.ts',
+          aggregateId: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
           scope: 'OrderMapper.reopen',
         },
       ],
@@ -75,27 +90,27 @@ describe('Nx-style monorepo', () => {
       findings: [
         {
           ruleId: 'outside-mutation',
-          file: 'src/cancel-order.ts',
-          aggregateId: '../../libs/orders/src/order.ts:Order',
+          file: 'test/fixtures/nx-monorepo/apps/api/src/cancel-order.ts',
+          aggregateId: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
           scope: 'CancelOrder.execute',
         },
         {
           ruleId: 'outside-mutation',
-          file: '../../libs/orders/src/order-mapper.ts',
-          aggregateId: '../../libs/orders/src/order.ts:Order',
+          file: 'test/fixtures/nx-monorepo/libs/orders/src/order-mapper.ts',
+          aggregateId: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
           scope: 'OrderMapper.reopen',
         },
       ],
     });
   });
 
-  it('writes the same baseline keys on every run', async () => {
+  it('writes the same baseline entries on every run', async () => {
     const first = await baselineFrom(FIXTURE, 'apps/api/tsconfig.json');
     const second = await baselineFrom(FIXTURE, 'apps/api/tsconfig.json');
 
     expect([first, second]).toEqual([
-      { version: 1, findings: BASELINE_KEYS },
-      { version: 1, findings: BASELINE_KEYS },
+      { version: 2, findings: BASELINE_ENTRIES },
+      { version: 2, findings: BASELINE_ENTRIES },
     ]);
   });
 

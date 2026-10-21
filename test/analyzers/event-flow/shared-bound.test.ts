@@ -49,19 +49,19 @@ const receivedBySites = (): readonly (readonly string[] | 'any')[] => {
   });
   const config = project.getSourceFileOrThrow('/app/domain.config.ts');
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
-  const model = extractEventFlows({ declaration: readDeclaration(config), files, root: '/app' });
+  const model = extractEventFlows({ declaration: readDeclaration(config), files, projectRoot: '/app', repositoryRoot: '/app' });
   return model.unresolved.map((site) => (site.receives.kind === 'any' ? 'any' : site.receives.events));
 };
 
 describe('unresolved sites sharing an annotation type', () => {
   it('each receive the events comparable with their own annotation, in declaration order', () => {
     expect(receivedBySites()).toEqual([
-      ['Shipped', 'Cancelled', 'Tagged'],
-      ['Paid'],
-      ['Shipped', 'Cancelled', 'Tagged'],
-      ['Tagged'],
-      ['Tagged'],
-      ['Shipped', 'Cancelled', 'Tagged'],
+      ['src/events.ts:Shipped', 'src/events.ts:Cancelled', 'src/events.ts:Tagged'],
+      ['src/events.ts:Paid'],
+      ['src/events.ts:Shipped', 'src/events.ts:Cancelled', 'src/events.ts:Tagged'],
+      ['src/events.ts:Tagged'],
+      ['src/events.ts:Tagged'],
+      ['src/events.ts:Shipped', 'src/events.ts:Cancelled', 'src/events.ts:Tagged'],
     ]);
   });
 });

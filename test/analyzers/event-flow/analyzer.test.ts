@@ -5,7 +5,7 @@ import { inMemoryProject } from '../../helpers/in-memory';
 
 const scopeOf = (sources: Readonly<Record<string, string>>) => {
   const project = inMemoryProject(sources);
-  return eventFlowAnalyzer.scope(eventFlowAnalyzer.extract({ declaration: DEFAULT_DECLARATION, files: project.getSourceFiles(), root: '/' }));
+  return eventFlowAnalyzer.scope(eventFlowAnalyzer.extract({ declaration: DEFAULT_DECLARATION, files: project.getSourceFiles(), projectRoot: '/', repositoryRoot: '/' }));
 };
 
 describe('eventFlowAnalyzer scope', () => {

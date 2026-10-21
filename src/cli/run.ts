@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { AnalyzerRun, DEFAULT_ANALYZERS } from '../analysis';
 import { DomainIntegrityError } from '../engine/errors';
+import { findRepositoryRoot } from '../engine/repository-root';
 import { CheckOptions, checkCommand } from './check';
 import { contextCommand } from './context';
 import { InitOptions, initCommand } from './init';
@@ -15,7 +17,8 @@ const collect = (value: string, previous: readonly string[] | undefined): readon
 
 const pathsFrom = (options: CommonOptions, io: Io): Paths => {
   const tsconfig = resolve(io.cwd, options.project);
-  return { tsconfig, config: resolve(io.cwd, options.config), root: dirname(tsconfig) };
+  const projectRoot = dirname(tsconfig);
+  return { tsconfig, config: resolve(io.cwd, options.config), projectRoot, repositoryRoot: findRepositoryRoot(projectRoot, existsSync) };
 };
 
 const withCommonOptions = (command: Command): Command =>

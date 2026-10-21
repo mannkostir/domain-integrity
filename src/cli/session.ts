@@ -54,7 +54,7 @@ export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[]): Se
   const configFile = configSourceFile(project, paths.config);
   const declaration = readDeclaration(configFile);
   const files = analysedSourceFiles(project, configFile);
-  const results = runAnalyzers({ declaration, files, root: paths.root, configFile }, analyzers);
+  const results = runAnalyzers({ declaration, files, projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile }, analyzers);
   const scope = runScope(results.map((result) => result.scope));
   if (scope === 'nothing-found') throw new ProjectError(nothingFoundMessage(declaration, files.length, results.flatMap((result) => result.problems)));
   if (scope === 'nothing-declared') return { kind: 'nothing-declared', results, notice: nothingDeclaredNotice(paths.config, files.length) };
