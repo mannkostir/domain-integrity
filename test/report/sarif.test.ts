@@ -20,7 +20,7 @@ const DOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.
 const UNDOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.3' };
 
 const sarifRun = (fresh: readonly Finding[], rules: readonly RuleDescription[], tool: ToolIdentity = TOOL, known: readonly Finding[] = []): SarifRun => {
-  const [run] = parseSarif(formatSarif({ fresh, known, problems: [], rules, repositoryRoot: '/app' }, tool)).runs;
+  const [run] = parseSarif(formatSarif({ fresh, known, problems: [], rules, repositoryRoot: '/app', exceeded: new Map() }, tool)).runs;
   if (run === undefined) throw new Error('The SARIF log has no run.');
   return run;
 };
@@ -47,7 +47,7 @@ const knownLeakResult = (): SarifResult => onlyResult(sarifRun([], [ERROR_RULE],
 
 describe('formatSarif', () => {
   it('produces a SARIF 2.1.0 log of one run', () => {
-    const log = parseSarif(formatSarif({ fresh: [], known: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
+    const log = parseSarif(formatSarif({ fresh: [], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
 
     expect({ $schema: log.$schema, version: log.version, runs: log.runs.length }).toEqual({
       $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
@@ -173,6 +173,7 @@ describe('formatSarif', () => {
       problems: [],
       rules: ALL_RULES,
       repositoryRoot: '/app',
+      exceeded: new Map(),
     };
 
     expect(sarifViolations(JSON.parse(formatSarif(report, TOOL)))).toEqual([]);

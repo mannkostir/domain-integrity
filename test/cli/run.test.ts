@@ -134,11 +134,11 @@ describe('check', () => {
     }).toEqual({ code: 2, searched: true, example: true });
   });
 
-  it('keeps lifecycle baseline keys unchanged', async () => {
+  it('writes the lifecycle baseline entry with its count', async () => {
     const dir = writeProject(TICKET_PROJECT);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
 
-    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual(['terminal-state-leak|src/ticket.ts:Ticket|rename|status|CLOSED']);
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual([TICKET_ENTRY]);
   });
 });
 
@@ -199,14 +199,14 @@ export default defineDomain({ lifecycles: [lifecycle(Ticket, { states: { status:
   });
 });
 
-const TICKET_KEY = 'terminal-state-leak|src/ticket.ts:Ticket|rename|status|CLOSED';
+const TICKET_ENTRY = { rule: 'terminal-state-leak', aggregate: 'src/ticket.ts:Ticket', method: 'rename', field: 'status', values: ['CLOSED'], count: 1 };
 
-const GHOST_KEY = 'terminal-state-leak|Ghost|vanish|status|CLOSED';
+const GHOST_ENTRY = { rule: 'terminal-state-leak', aggregate: 'src/ghost.ts:Ghost', method: 'vanish', field: 'status', values: ['CLOSED'], count: 1 };
 
 const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
 
-const writeBaseline = (dir: string, path: string, keys: readonly string[]): void =>
-  writeFileSync(join(dir, path), JSON.stringify({ version: 1, findings: keys }));
+const writeBaseline = (dir: string, path: string, entries: readonly object[]): void =>
+  writeFileSync(join(dir, path), JSON.stringify({ version: 2, findings: entries }));
 
 const duplicatingLifecycle: AnalyzerRun = (input) => {
   const result = analyse(lifecycleAnalyzer, input);
@@ -216,7 +216,7 @@ const duplicatingLifecycle: AnalyzerRun = (input) => {
 describe('check with a baseline', () => {
   it('prints only the summary line when the baseline covers every finding', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, 'baseline.json', [TICKET_KEY]);
+    writeBaseline(dir, 'baseline.json', [TICKET_ENTRY]);
     const { io, stdout } = captureIo(dir);
     await run(['check', '--baseline', 'baseline.json'], io);
 
@@ -225,7 +225,7 @@ describe('check with a baseline', () => {
 
   it('lists known findings marked as baseline with --show-known', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, 'baseline.json', [TICKET_KEY]);
+    writeBaseline(dir, 'baseline.json', [TICKET_ENTRY]);
     const { io, stdout } = captureIo(dir);
     await run(['check', '--baseline', 'baseline.json', '--show-known'], io);
 
@@ -234,7 +234,7 @@ describe('check with a baseline', () => {
 
   it('loads the default baseline file from the working directory', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
+    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_ENTRY]);
     const { io, stdout } = captureIo(dir);
 
     expect({ code: await run(['check'], io), stdout: stdout() }).toEqual({
@@ -251,7 +251,7 @@ describe('check with a baseline', () => {
 
   it('prefers an explicit baseline over the default file', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
+    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_ENTRY]);
     writeBaseline(dir, 'empty.json', []);
 
     expect(await run(['check', '--baseline', 'empty.json'], captureIo(dir).io)).toBe(1);
@@ -270,7 +270,7 @@ describe('check with a baseline', () => {
 
   it('exits 2 when the default baseline file is not a baseline', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeFileSync(join(dir, DEFAULT_BASELINE), '{"nope": true}');
+    writeFileSync(join(dir, DEFAULT_BASELINE), '{"version": 2}');
     const { io, stderr } = captureIo(dir);
 
     expect({ code: await run(['check'], io), rejected: stderr().includes('domain-integrity.baseline.json is not a domain-integrity baseline.') }).toEqual({
@@ -281,7 +281,7 @@ describe('check with a baseline', () => {
 
   it('exits 2 when an explicit baseline is missing even if the default file exists', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
+    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_ENTRY]);
     const { io, stderr } = captureIo(dir);
 
     expect({ code: await run(['check', '--baseline', 'missing.json'], io), notFound: stderr().includes('not found') }).toEqual({
@@ -292,14 +292,14 @@ describe('check with a baseline', () => {
 
   it('lists stale baseline entries in the text output', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, 'baseline.json', [TICKET_KEY, GHOST_KEY]);
+    writeBaseline(dir, 'baseline.json', [TICKET_ENTRY, GHOST_ENTRY]);
     const { io, stdout } = captureIo(dir);
     await run(['check', '--baseline', 'baseline.json'], io);
 
     expect(stdout()).toBe(
       [
         '1 stale baseline entry, remove with --update-baseline:',
-        `  ${GHOST_KEY}`,
+        '  terminal-state-leak aggregate=src/ghost.ts:Ghost method=vanish field=status values=CLOSED',
         '',
         '0 errors, 0 warnings, 1 known from baseline baseline.json',
         '',
@@ -309,7 +309,7 @@ describe('check with a baseline', () => {
 
   it('exits 0 when the baseline has stale entries', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, 'baseline.json', [TICKET_KEY, GHOST_KEY]);
+    writeBaseline(dir, 'baseline.json', [TICKET_ENTRY, GHOST_ENTRY]);
 
     expect(await run(['check', '--baseline', 'baseline.json'], captureIo(dir).io)).toBe(0);
   });
@@ -318,7 +318,7 @@ describe('check with a baseline', () => {
     const dir = writeProject(TICKET_PROJECT);
     const plain = captureIo(dir);
     await run(['check', '--format', 'json'], plain.io);
-    writeBaseline(dir, 'baseline.json', [TICKET_KEY, GHOST_KEY]);
+    writeBaseline(dir, 'baseline.json', [TICKET_ENTRY, GHOST_ENTRY]);
     const withBaseline = captureIo(dir);
     await run(['check', '--baseline', 'baseline.json', '--format', 'json'], withBaseline.io);
 
@@ -327,7 +327,7 @@ describe('check with a baseline', () => {
 
   it('does not report stale entries when the run has problems', async () => {
     const dir = writeProject(MISSING_FIELD_PROJECT);
-    writeBaseline(dir, 'baseline.json', [GHOST_KEY]);
+    writeBaseline(dir, 'baseline.json', [GHOST_ENTRY]);
     const { io, stdout } = captureIo(dir);
     await run(['check', '--baseline', 'baseline.json'], io);
 
@@ -336,10 +336,10 @@ describe('check with a baseline', () => {
 
   it('prunes stale entries when updating the baseline', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, 'baseline.json', [TICKET_KEY, GHOST_KEY]);
+    writeBaseline(dir, 'baseline.json', [TICKET_ENTRY, GHOST_ENTRY]);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
 
-    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual([TICKET_KEY]);
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual([TICKET_ENTRY]);
   });
 
   it('reports the number of entries written in the plural', async () => {
@@ -358,7 +358,7 @@ describe('check with a baseline', () => {
 
   it('reports an auto-loaded baseline as suppressed results in SARIF', async () => {
     const dir = writeProject(TICKET_PROJECT);
-    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_KEY]);
+    writeBaseline(dir, DEFAULT_BASELINE, [TICKET_ENTRY]);
     const { io, stdout } = captureIo(dir);
     await run(['check', '--format', 'sarif'], io);
 
@@ -466,13 +466,13 @@ describe('same-named aggregates', () => {
     });
   });
 
-  it('writes path-qualified baseline keys', async () => {
+  it('writes path-qualified baseline entries', async () => {
     const dir = writeProject(SAME_NAMED_PROJECT);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
 
     expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual([
-      'terminal-state-leak|src/a/ticket.ts:Ticket|rename|status|CLOSED_A',
-      'terminal-state-leak|src/b/ticket.ts:Ticket|rename|status|CLOSED_B',
+      { rule: 'terminal-state-leak', aggregate: 'src/a/ticket.ts:Ticket', method: 'rename', field: 'status', values: ['CLOSED_A'], count: 1 },
+      { rule: 'terminal-state-leak', aggregate: 'src/b/ticket.ts:Ticket', method: 'rename', field: 'status', values: ['CLOSED_B'], count: 1 },
     ]);
   });
 
@@ -488,11 +488,11 @@ describe('same-named aggregates', () => {
     ]);
   });
 
-  it('keeps plain baseline keys for a uniquely named aggregate', async () => {
+  it('writes the repository-relative aggregate id for a uniquely named aggregate', async () => {
     const dir = writeProject(TICKET_PROJECT);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);
 
-    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual(['terminal-state-leak|src/ticket.ts:Ticket|rename|status|CLOSED']);
+    expect(JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8')).findings).toEqual([TICKET_ENTRY]);
   });
 });
 
