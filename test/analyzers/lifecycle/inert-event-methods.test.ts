@@ -287,7 +287,7 @@ const leaks = (project: Project, inertEventMethods: readonly string[]) => {
       lifecycles: [{ target, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
     },
     files: project.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
   return lifecycleAnalyzer
     .check(model)

@@ -87,7 +87,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   const project = loadProject(paths.tsconfig, paths.config);
   const config = startingConfig(project, paths.config, options.baseClass);
   const declaration = config ? readDeclaration(config) : DEFAULT_DECLARATION;
-  const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, config), root: paths.root, configFile: config });
+  const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, config), projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile: config });
   if (lifecycleAnalyzer.scope(model) === 'nothing-found') {
     throw new ProjectError(noAggregatesForInitMessage(declaration, initRetryCommand(paths, io.cwd, options.yes === true)));
   }
@@ -106,7 +106,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
     );
     return 0;
   }
-  const accepted = options.yes ? suggestions : await confirmEach(suggestions, io, paths.root);
+  const accepted = options.yes ? suggestions : await confirmEach(suggestions, io, paths.repositoryRoot);
   if (accepted.length === 0) {
     io.out(nothingWrittenMessage('Nothing declared.', options, relative(io.cwd, paths.config), declaration));
     return 0;

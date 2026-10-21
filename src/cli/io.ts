@@ -8,7 +8,7 @@ export type Io = {
   readonly isInteractive: boolean;
 };
 
-export type Paths = { readonly tsconfig: string; readonly config: string; readonly root: string };
+export type Paths = { readonly tsconfig: string; readonly config: string; readonly projectRoot: string; readonly repositoryRoot: string };
 
 export const DEFAULT_TSCONFIG = 'tsconfig.json';
 

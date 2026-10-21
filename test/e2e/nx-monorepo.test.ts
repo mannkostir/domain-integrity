@@ -9,8 +9,8 @@ import { pointHelpersAtRepo } from '../helpers/init-project';
 
 const FIXTURE = fileURLToPath(new URL('../fixtures/nx-monorepo', import.meta.url));
 const BASELINE_KEYS = [
-  'outside-mutation|../../libs/orders/src/order.ts:Order||status|CancelOrder.execute',
-  'outside-mutation|../../libs/orders/src/order.ts:Order||status|OrderMapper.reopen',
+  'outside-mutation|test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order||status|CancelOrder.execute',
+  'outside-mutation|test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order||status|OrderMapper.reopen',
 ];
 
 type WireOutsideMutation = {
@@ -55,14 +55,14 @@ describe('Nx-style monorepo', () => {
       findings: [
         {
           ruleId: 'outside-mutation',
-          file: 'apps/api/src/cancel-order.ts',
-          aggregateId: 'libs/orders/src/order.ts:Order',
+          file: 'test/fixtures/nx-monorepo/apps/api/src/cancel-order.ts',
+          aggregateId: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
           scope: 'CancelOrder.execute',
         },
         {
           ruleId: 'outside-mutation',
-          file: 'libs/orders/src/order-mapper.ts',
-          aggregateId: 'libs/orders/src/order.ts:Order',
+          file: 'test/fixtures/nx-monorepo/libs/orders/src/order-mapper.ts',
+          aggregateId: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
           scope: 'OrderMapper.reopen',
         },
       ],
@@ -75,14 +75,14 @@ describe('Nx-style monorepo', () => {
       findings: [
         {
           ruleId: 'outside-mutation',
-          file: 'src/cancel-order.ts',
-          aggregateId: '../../libs/orders/src/order.ts:Order',
+          file: 'test/fixtures/nx-monorepo/apps/api/src/cancel-order.ts',
+          aggregateId: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
           scope: 'CancelOrder.execute',
         },
         {
           ruleId: 'outside-mutation',
-          file: '../../libs/orders/src/order-mapper.ts',
-          aggregateId: '../../libs/orders/src/order.ts:Order',
+          file: 'test/fixtures/nx-monorepo/libs/orders/src/order-mapper.ts',
+          aggregateId: 'test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order',
           scope: 'OrderMapper.reopen',
         },
       ],

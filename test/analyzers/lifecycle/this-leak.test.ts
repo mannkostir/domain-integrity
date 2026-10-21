@@ -478,7 +478,7 @@ const leaks = (target: ClassDeclaration) => {
       ],
     },
     files: project.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
   return lifecycleAnalyzer
     .check(model)

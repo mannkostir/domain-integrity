@@ -4,7 +4,7 @@ import { DEFAULT_DECLARATION } from '../src/engine/declaration';
 import { ConfigError } from '../src/engine/errors';
 import { LifecycleFinding, Problem } from '../src/finding';
 
-const INPUT: AnalysisInput = { declaration: DEFAULT_DECLARATION, files: [], root: '/' };
+const INPUT: AnalysisInput = { declaration: DEFAULT_DECLARATION, files: [], projectRoot: '/', repositoryRoot: '/' };
 
 const MISSING_FIELD: Problem = {
   code: 'state-field-missing',

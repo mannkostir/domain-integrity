@@ -41,7 +41,7 @@ const sarifResult = (finding: Finding, report: Report) => ({
   locations: [
     {
       physicalLocation: {
-        artifactLocation: { uri: toPosixRelative(report.root, finding.file) },
+        artifactLocation: { uri: toPosixRelative(report.repositoryRoot, finding.file) },
         region: { startLine: finding.line },
       },
     },

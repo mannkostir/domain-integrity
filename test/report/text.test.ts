@@ -8,7 +8,7 @@ describe('formatText', () => {
 
   it('omits known findings unless asked to show them', () => {
     const text = formatText(
-      { fresh: [finding({})], known: [knownFinding], problems: [], rules: [], root: '/app', baseline: appliedBaseline },
+      { fresh: [finding({})], known: [knownFinding], problems: [], rules: [], repositoryRoot: '/app', baseline: appliedBaseline },
       { showKnown: false },
     );
 
@@ -26,7 +26,7 @@ describe('formatText', () => {
 
   it('lists known findings after fresh ones when asked to show them', () => {
     const text = formatText(
-      { fresh: [finding({})], known: [knownFinding], problems: [], rules: [], root: '/app', baseline: appliedBaseline },
+      { fresh: [finding({})], known: [knownFinding], problems: [], rules: [], repositoryRoot: '/app', baseline: appliedBaseline },
       { showKnown: true },
     );
 
@@ -48,7 +48,7 @@ describe('formatText', () => {
 
   it('prints a single summary line when the baseline covers every finding', () => {
     const text = formatText(
-      { fresh: [], known: [knownFinding, finding({ line: 5 }), leakWith({ method: 'close' }, { line: 7 })], problems: [], rules: [], root: '/app', baseline: appliedBaseline },
+      { fresh: [], known: [knownFinding, finding({ line: 5 }), leakWith({ method: 'close' }, { line: 7 })], problems: [], rules: [], repositoryRoot: '/app', baseline: appliedBaseline },
       { showKnown: false },
     );
 
@@ -57,7 +57,7 @@ describe('formatText', () => {
 
   it('names the baseline in the summary even when it matches nothing', () => {
     const text = formatText(
-      { fresh: [], known: [], problems: [], rules: [], root: '/app', baseline: { path: 'ci/baseline.json', stale: [] } },
+      { fresh: [], known: [], problems: [], rules: [], repositoryRoot: '/app', baseline: { path: 'ci/baseline.json', stale: [] } },
       { showKnown: false },
     );
 
@@ -66,7 +66,7 @@ describe('formatText', () => {
 
   it('lists a single stale baseline entry before the summary', () => {
     const text = formatText(
-      { fresh: [], known: [], problems: [], rules: [], root: '/app', baseline: { path: 'b.json', stale: ['unreachable-state|Order||status|DRAFT'] } },
+      { fresh: [], known: [], problems: [], rules: [], repositoryRoot: '/app', baseline: { path: 'b.json', stale: ['unreachable-state|Order||status|DRAFT'] } },
       { showKnown: false },
     );
 
@@ -83,7 +83,7 @@ describe('formatText', () => {
 
   it('lists several stale baseline entries before the summary', () => {
     const text = formatText(
-      { fresh: [], known: [], problems: [], rules: [], root: '/app', baseline: { path: 'b.json', stale: ['a|A', 'b|B'] } },
+      { fresh: [], known: [], problems: [], rules: [], repositoryRoot: '/app', baseline: { path: 'b.json', stale: ['a|A', 'b|B'] } },
       { showKnown: false },
     );
 
@@ -93,12 +93,12 @@ describe('formatText', () => {
   });
 
   it('prints only the summary when there is nothing to report', () => {
-    expect(formatText({ fresh: [], known: [], problems: [], rules: [], root: '/app' }, { showKnown: false })).toBe('0 errors, 0 warnings\n');
+    expect(formatText({ fresh: [], known: [], problems: [], rules: [], repositoryRoot: '/app' }, { showKnown: false })).toBe('0 errors, 0 warnings\n');
   });
 
   it('names the aggregate by its id', () => {
     const text = formatText(
-      { fresh: [leakWith({ aggregateId: 'src/order.ts:Order' })], known: [], problems: [], rules: [], root: '/app' },
+      { fresh: [leakWith({ aggregateId: 'src/order.ts:Order' })], known: [], problems: [], rules: [], repositoryRoot: '/app' },
       { showKnown: false },
     );
 
@@ -106,14 +106,14 @@ describe('formatText', () => {
   });
 
   it('locates an event-flow finding by event and handler', () => {
-    const text = formatText({ fresh: [flowFinding({})], known: [], problems: [], rules: [], root: '/app' }, { showKnown: false });
+    const text = formatText({ fresh: [flowFinding({})], known: [], problems: [], rules: [], repositoryRoot: '/app' }, { showKnown: false });
 
     expect(text.split('\n')[0]).toBe('error dead-handler  RefundIssued → RefundHandler.handle  src/handlers.ts:4');
   });
 
   it('locates an event-flow finding without a handler by its event alone', () => {
     const text = formatText(
-      { fresh: [unhandledFinding()], known: [], problems: [], rules: [], root: '/app' },
+      { fresh: [unhandledFinding()], known: [], problems: [], rules: [], repositoryRoot: '/app' },
       { showKnown: false },
     );
 
@@ -121,7 +121,7 @@ describe('formatText', () => {
   });
 
   it('locates an undispatched buffer by owner and buffer', () => {
-    const text = formatText({ fresh: [bufferFinding()], known: [], problems: [], rules: [], root: '/app' }, { showKnown: false });
+    const text = formatText({ fresh: [bufferFinding()], known: [], problems: [], rules: [], repositoryRoot: '/app' }, { showKnown: false });
 
     expect(text.split('\n')[0]).toBe('error undispatched-events  AggregateRoot._domainEvents  src/aggregate-root.ts:3');
   });

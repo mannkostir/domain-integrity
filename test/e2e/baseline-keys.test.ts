@@ -72,8 +72,8 @@ describe('baseline keys', () => {
 
   it('keys a qualified aggregate id by its path', async () => {
     expect(await baselineKeysOf(fixture('nx-monorepo'))).toEqual([
-      'outside-mutation|libs/orders/src/order.ts:Order||status|CancelOrder.execute',
-      'outside-mutation|libs/orders/src/order.ts:Order||status|OrderMapper.reopen',
+      'outside-mutation|test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order||status|CancelOrder.execute',
+      'outside-mutation|test/fixtures/nx-monorepo/libs/orders/src/order.ts:Order||status|OrderMapper.reopen',
     ]);
   });
 

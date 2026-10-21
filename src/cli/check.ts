@@ -87,7 +87,7 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   const complete = isComplete(outcome);
   const stale = complete ? staleEntries(outcome.findings, baseline) : [];
   const applied = baselinePath ? { baseline: { path: relative(io.cwd, baselinePath), stale } } : {};
-  io.out(format({ fresh, known, problems: outcome.problems, rules, root: paths.root, ...applied }, toolIdentity()));
+  io.out(format({ fresh, known, problems: outcome.problems, rules, repositoryRoot: paths.repositoryRoot, ...applied }, toolIdentity()));
   if (!complete) return 2;
   return fresh.some((finding) => finding.severity === 'error') ? 1 : 0;
 };

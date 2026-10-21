@@ -11,7 +11,7 @@ export type Report = {
   readonly known: readonly Finding[];
   readonly problems: readonly Problem[];
   readonly rules: readonly RuleDescription[];
-  readonly root: string;
+  readonly repositoryRoot: string;
   readonly baseline?: AppliedBaseline;
 };
 
@@ -63,8 +63,8 @@ export const formatText = (report: Report, options: TextOptions): string => {
   const known = report.baseline ? `, ${report.known.length} known from baseline ${report.baseline.path}` : '';
   const summary = `${plural(errors, 'error')}, ${plural(warnings, 'warning')}${known}`;
   return `${[
-    ...report.fresh.map((finding) => entry(finding, report.root, '')),
-    ...(options.showKnown ? report.known.map((finding) => entry(finding, report.root, ' (baseline)')) : []),
+    ...report.fresh.map((finding) => entry(finding, report.repositoryRoot, '')),
+    ...(options.showKnown ? report.known.map((finding) => entry(finding, report.repositoryRoot, ' (baseline)')) : []),
     ...staleBlock(report.baseline?.stale ?? []),
     summary,
   ].join('\n\n')}\n`;

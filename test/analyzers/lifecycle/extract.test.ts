@@ -50,7 +50,7 @@ const extractWith = (fields: readonly DeclaredField[]) =>
   extractLifecycles({
     declaration: { ...DEFAULT_DECLARATION, lifecycles: [{ target: order, fields, allowAfterTerminal: [] }] },
     files: project.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
 
 const aggregateNamed = (name: string, fields: readonly DeclaredField[]) =>
@@ -107,7 +107,7 @@ describe('extractLifecycles', () => {
         lifecycles: [{ target: shipment, fields: [{ name: 'status', terminal: [], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
       },
       files: project.getSourceFiles(),
-      root: '/',
+      projectRoot: '/', repositoryRoot: '/',
     });
 
     expect([...(model.aggregates.find((aggregate) => aggregate.name === 'Shipment')?.mentioned.get('status') ?? [])]).toEqual(['SENT']);
@@ -171,7 +171,7 @@ export const reopen = (invoice: Invoice): void => { invoice.state = 'open'; };
 
 describe('extractLifecycles writes from test files', () => {
   it('treats a field of an undeclared aggregate written only from a test file as uncertainly written', () => {
-    const { aggregates } = extractLifecycles({ declaration: DEFAULT_DECLARATION, files: specWrittenProject.getSourceFiles(), root: '/' });
+    const { aggregates } = extractLifecycles({ declaration: DEFAULT_DECLARATION, files: specWrittenProject.getSourceFiles(), projectRoot: '/', repositoryRoot: '/' });
 
     expect([...(aggregates.find((aggregate) => aggregate.name === 'Invoice')?.uncertainlyWritten ?? [])]).toEqual(['state']);
   });
@@ -194,7 +194,7 @@ export class Invoice extends AggregateRoot<{ open: boolean }> {}
 `,
   });
 
-  const { aggregates } = extractLifecycles({ declaration: DEFAULT_DECLARATION, files: duplicated.getSourceFiles(), root: '/' });
+  const { aggregates } = extractLifecycles({ declaration: DEFAULT_DECLARATION, files: duplicated.getSourceFiles(), projectRoot: '/', repositoryRoot: '/' });
 
   it('qualifies aggregates that share a class name with their relative path', () => {
     expect(aggregates.filter((aggregate) => aggregate.name === 'Order').map((aggregate) => aggregate.id).sort()).toEqual([

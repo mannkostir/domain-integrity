@@ -47,7 +47,7 @@ const suggestedTerminals = (files: Readonly<Record<string, string>>): ReadonlyMa
   const model = lifecycleAnalyzer.extract({
     declaration: { ...DEFAULT_DECLARATION, lifecycles: [] },
     files: project.getSourceFiles(),
-    root: '/',
+    projectRoot: '/', repositoryRoot: '/',
   });
   const ticket = lifecycleAnalyzer.suggest(model).find((suggestion) => suggestion.className === 'Ticket');
   return new Map(ticket?.fields.map(({ field, terminal }) => [field.name, terminal.map((value) => value.token)]));
