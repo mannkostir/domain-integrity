@@ -391,8 +391,8 @@ A stale entry is a baseline entry that no longer matches the current findings: e
 
 ```text
 2 stale baseline entries, remove with --update-baseline:
-  terminal-state-leak aggregate=src/order.ts:Order method=annotate field=status values=CANCELLED
   outside-mutation aggregate=src/order.ts:Order field=status file=src/mapper.ts scope=OrderMapper.toDomain (accepts 2, found 1)
+  terminal-state-leak aggregate=src/order.ts:Order method=annotate field=status values=CANCELLED
 ```
 
 Stale entries never change the exit code. They are not reported when the run has problems or an internal error, because its findings are then incomplete.
