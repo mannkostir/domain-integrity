@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:domain-integrity:report:v1",
+  "$id": "urn:domain-integrity:report:v2",
   "title": "domain-integrity check report",
-  "description": "Output of `domain-integrity check --format json`, format version 1.",
+  "description": "Output of `domain-integrity check --format json`, format version 2.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "tool", "summary", "findings", "known", "problems"],
   "properties": {
-    "version": { "const": 1 },
+    "version": { "const": 2 },
     "tool": {
       "type": "object",
       "additionalProperties": false,
@@ -37,7 +37,7 @@
     "finding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ruleId", "severity", "analyzer", "key", "location", "message", "fix", "details"],
+      "required": ["ruleId", "severity", "analyzer", "identity", "location", "message", "fix", "details"],
       "properties": {
         "ruleId": {
           "enum": [
@@ -55,7 +55,7 @@
         },
         "severity": { "enum": ["error", "warning"] },
         "analyzer": { "enum": ["lifecycle", "event-flow"] },
-        "key": { "type": "string", "minLength": 1 },
+        "identity": { "type": "object" },
         "location": {
           "type": "object",
           "additionalProperties": false,
@@ -67,25 +67,135 @@
         "details": { "type": "object" }
       },
       "allOf": [
-        { "if": { "properties": { "ruleId": { "const": "terminal-state-leak" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "details": { "$ref": "#/$defs/terminalStateLeakDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "unreachable-state" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "details": { "$ref": "#/$defs/unreachableStateDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "outside-mutation" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "details": { "$ref": "#/$defs/outsideMutationDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "transition-drift" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "details": { "$ref": "#/$defs/transitionDriftDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "transition-missing" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "details": { "$ref": "#/$defs/transitionMissingDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "dead-handler" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "details": { "$ref": "#/$defs/deadHandlerDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "handler-payload-mismatch" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "details": { "$ref": "#/$defs/handlerPayloadMismatchDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "unhandled-event" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "details": { "$ref": "#/$defs/unhandledEventDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "saga-missing-failure-path" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "details": { "$ref": "#/$defs/sagaMissingFailurePathDetails" } } } },
-        { "if": { "properties": { "ruleId": { "const": "undispatched-events" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "details": { "$ref": "#/$defs/undispatchedEventsDetails" } } } }
+        { "if": { "properties": { "ruleId": { "const": "terminal-state-leak" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "identity": { "$ref": "#/$defs/terminalStateLeakIdentity" }, "details": { "$ref": "#/$defs/terminalStateLeakDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "unreachable-state" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "identity": { "$ref": "#/$defs/unreachableStateIdentity" }, "details": { "$ref": "#/$defs/unreachableStateDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "outside-mutation" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "identity": { "$ref": "#/$defs/outsideMutationIdentity" }, "details": { "$ref": "#/$defs/outsideMutationDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "transition-drift" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "identity": { "$ref": "#/$defs/transitionDriftIdentity" }, "details": { "$ref": "#/$defs/transitionDriftDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "transition-missing" } } }, "then": { "properties": { "analyzer": { "const": "lifecycle" }, "identity": { "$ref": "#/$defs/transitionMissingIdentity" }, "details": { "$ref": "#/$defs/transitionMissingDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "dead-handler" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "identity": { "$ref": "#/$defs/deadHandlerIdentity" }, "details": { "$ref": "#/$defs/deadHandlerDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "handler-payload-mismatch" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "identity": { "$ref": "#/$defs/handlerPayloadMismatchIdentity" }, "details": { "$ref": "#/$defs/handlerPayloadMismatchDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "unhandled-event" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "identity": { "$ref": "#/$defs/unhandledEventIdentity" }, "details": { "$ref": "#/$defs/unhandledEventDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "saga-missing-failure-path" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "identity": { "$ref": "#/$defs/sagaMissingFailurePathIdentity" }, "details": { "$ref": "#/$defs/sagaMissingFailurePathDetails" } } } },
+        { "if": { "properties": { "ruleId": { "const": "undispatched-events" } } }, "then": { "properties": { "analyzer": { "const": "event-flow" }, "identity": { "$ref": "#/$defs/undispatchedEventsIdentity" }, "details": { "$ref": "#/$defs/undispatchedEventsDetails" } } } }
       ]
+    },
+    "terminalStateLeakIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "aggregate", "method", "field", "values"],
+      "properties": {
+        "rule": { "const": "terminal-state-leak" },
+        "aggregate": { "$ref": "#/$defs/name" },
+        "method": { "$ref": "#/$defs/name" },
+        "field": { "$ref": "#/$defs/name" },
+        "values": { "type": "array", "items": { "$ref": "#/$defs/name" } }
+      }
+    },
+    "unreachableStateIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "aggregate", "field", "value"],
+      "properties": {
+        "rule": { "const": "unreachable-state" },
+        "aggregate": { "$ref": "#/$defs/name" },
+        "field": { "$ref": "#/$defs/name" },
+        "value": { "$ref": "#/$defs/name" }
+      }
+    },
+    "outsideMutationIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "aggregate", "field", "file", "scope"],
+      "properties": {
+        "rule": { "const": "outside-mutation" },
+        "aggregate": { "$ref": "#/$defs/name" },
+        "field": { "$ref": "#/$defs/name" },
+        "file": { "$ref": "#/$defs/name" },
+        "scope": { "$ref": "#/$defs/name" }
+      }
+    },
+    "transitionDriftIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "aggregate", "method", "field", "kind"],
+      "properties": {
+        "rule": { "const": "transition-drift" },
+        "aggregate": { "$ref": "#/$defs/name" },
+        "method": { "$ref": "#/$defs/name" },
+        "field": { "$ref": "#/$defs/name" },
+        "kind": { "$ref": "#/$defs/name" }
+      }
+    },
+    "transitionMissingIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "aggregate", "method", "field"],
+      "properties": {
+        "rule": { "const": "transition-missing" },
+        "aggregate": { "$ref": "#/$defs/name" },
+        "method": { "$ref": "#/$defs/name" },
+        "field": { "$ref": "#/$defs/name" }
+      }
+    },
+    "deadHandlerIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "event", "handlerClass", "handlerMethod"],
+      "properties": {
+        "rule": { "const": "dead-handler" },
+        "event": { "$ref": "#/$defs/name" },
+        "handlerClass": { "type": ["string", "null"] },
+        "handlerMethod": { "type": ["string", "null"] }
+      }
+    },
+    "handlerPayloadMismatchIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "event", "handlerClass", "handlerMethod", "declared"],
+      "properties": {
+        "rule": { "const": "handler-payload-mismatch" },
+        "event": { "$ref": "#/$defs/name" },
+        "handlerClass": { "type": ["string", "null"] },
+        "handlerMethod": { "type": ["string", "null"] },
+        "declared": { "type": "array", "items": { "$ref": "#/$defs/name" } }
+      }
+    },
+    "unhandledEventIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "event"],
+      "properties": {
+        "rule": { "const": "unhandled-event" },
+        "event": { "$ref": "#/$defs/name" }
+      }
+    },
+    "sagaMissingFailurePathIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "saga", "success", "failure"],
+      "properties": {
+        "rule": { "const": "saga-missing-failure-path" },
+        "saga": { "$ref": "#/$defs/name" },
+        "success": { "$ref": "#/$defs/name" },
+        "failure": { "$ref": "#/$defs/name" }
+      }
+    },
+    "undispatchedEventsIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "owner", "buffer"],
+      "properties": {
+        "rule": { "const": "undispatched-events" },
+        "owner": { "$ref": "#/$defs/name" },
+        "buffer": { "$ref": "#/$defs/name" }
+      }
     },
     "terminalStateLeakDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["aggregate", "aggregateId", "method", "field", "values"],
+      "required": ["aggregate", "method", "field", "values"],
       "properties": {
         "aggregate": { "$ref": "#/$defs/name" },
-        "aggregateId": { "$ref": "#/$defs/name" },
         "method": { "$ref": "#/$defs/name" },
         "field": { "$ref": "#/$defs/name" },
         "values": { "type": "array", "minItems": 1, "allOf": [{ "$ref": "#/$defs/values" }] }
@@ -94,10 +204,9 @@
     "unreachableStateDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["aggregate", "aggregateId", "field", "value"],
+      "required": ["aggregate", "field", "value"],
       "properties": {
         "aggregate": { "$ref": "#/$defs/name" },
-        "aggregateId": { "$ref": "#/$defs/name" },
         "field": { "$ref": "#/$defs/name" },
         "value": { "type": "string" }
       }
@@ -105,10 +214,9 @@
     "outsideMutationDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["aggregate", "aggregateId", "field", "scope"],
+      "required": ["aggregate", "field", "scope"],
       "properties": {
         "aggregate": { "$ref": "#/$defs/name" },
-        "aggregateId": { "$ref": "#/$defs/name" },
         "field": { "$ref": "#/$defs/name" },
         "scope": { "$ref": "#/$defs/name" }
       }
@@ -116,10 +224,9 @@
     "transitionDriftDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["aggregate", "aggregateId", "method", "field", "kind", "values"],
+      "required": ["aggregate", "method", "field", "kind", "values"],
       "properties": {
         "aggregate": { "$ref": "#/$defs/name" },
-        "aggregateId": { "$ref": "#/$defs/name" },
         "method": { "$ref": "#/$defs/name" },
         "field": { "$ref": "#/$defs/name" },
         "kind": { "enum": ["extra", "undeclared"] },
@@ -129,10 +236,9 @@
     "transitionMissingDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["aggregate", "aggregateId", "method", "field", "values"],
+      "required": ["aggregate", "method", "field", "values"],
       "properties": {
         "aggregate": { "$ref": "#/$defs/name" },
-        "aggregateId": { "$ref": "#/$defs/name" },
         "method": { "$ref": "#/$defs/name" },
         "field": { "$ref": "#/$defs/name" },
         "values": { "type": "array", "minItems": 1, "allOf": [{ "$ref": "#/$defs/values" }] }
@@ -141,51 +247,44 @@
     "deadHandlerDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event", "eventId", "handler"],
+      "required": ["event", "handler"],
       "properties": {
         "event": { "$ref": "#/$defs/name" },
-        "eventId": { "$ref": "#/$defs/name" },
         "handler": { "oneOf": [{ "$ref": "#/$defs/name" }, { "type": "null" }] }
       }
     },
     "handlerPayloadMismatchDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event", "eventId", "handler", "declared", "declaredIds"],
+      "required": ["event", "handler", "declared"],
       "properties": {
         "event": { "$ref": "#/$defs/name" },
-        "eventId": { "$ref": "#/$defs/name" },
         "handler": { "oneOf": [{ "$ref": "#/$defs/name" }, { "type": "null" }] },
-        "declared": { "type": "array", "minItems": 1, "allOf": [{ "$ref": "#/$defs/names" }] },
-        "declaredIds": { "type": "array", "minItems": 1, "allOf": [{ "$ref": "#/$defs/names" }] }
+        "declared": { "type": "array", "minItems": 1, "allOf": [{ "$ref": "#/$defs/names" }] }
       }
     },
     "unhandledEventDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event", "eventId"],
-      "properties": { "event": { "$ref": "#/$defs/name" }, "eventId": { "$ref": "#/$defs/name" } }
+      "required": ["event"],
+      "properties": { "event": { "$ref": "#/$defs/name" } }
     },
     "sagaMissingFailurePathDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["saga", "sagaId", "success", "successId", "failure", "failureId"],
+      "required": ["saga", "success", "failure"],
       "properties": {
         "saga": { "$ref": "#/$defs/name" },
-        "sagaId": { "$ref": "#/$defs/name" },
         "success": { "$ref": "#/$defs/name" },
-        "successId": { "$ref": "#/$defs/name" },
-        "failure": { "$ref": "#/$defs/name" },
-        "failureId": { "$ref": "#/$defs/name" }
+        "failure": { "$ref": "#/$defs/name" }
       }
     },
     "undispatchedEventsDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["owner", "ownerId", "buffer", "method", "raisers"],
+      "required": ["owner", "buffer", "method", "raisers"],
       "properties": {
         "owner": { "$ref": "#/$defs/name" },
-        "ownerId": { "$ref": "#/$defs/name" },
         "buffer": { "$ref": "#/$defs/name" },
         "method": { "$ref": "#/$defs/name" },
         "raisers": { "type": "array", "minItems": 1, "allOf": [{ "$ref": "#/$defs/names" }] }

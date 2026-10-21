@@ -476,12 +476,12 @@ describe('same-named aggregates', () => {
     ]);
   });
 
-  it('reports the plain name and the qualified id in JSON', async () => {
+  it('reports the plain name in the details and the qualified id in the identity in JSON', async () => {
     const { io, stdout } = captureIo(writeProject(SAME_NAMED_PROJECT));
     await run(['check', '--format', 'json'], io);
 
     expect(
-      JSON.parse(stdout()).findings.map((finding: { details: { aggregate: string; aggregateId: string } }) => [finding.details.aggregate, finding.details.aggregateId]),
+      JSON.parse(stdout()).findings.map((finding: { details: { aggregate: string }; identity: { aggregate: string } }) => [finding.details.aggregate, finding.identity.aggregate]),
     ).toEqual([
       ['Ticket', 'src/a/ticket.ts:Ticket'],
       ['Ticket', 'src/b/ticket.ts:Ticket'],

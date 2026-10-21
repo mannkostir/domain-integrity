@@ -1,22 +1,22 @@
 import { toPosixRelative } from '../engine/path';
 import { DetailsByProblem, DetailsByRule, Finding, FindingOf, Problem, ProblemCode, ProblemOf, RuleId, Severity } from '../finding';
-import { findingKey } from './key';
+import { identityOf } from './identity';
 import { Report } from './text';
 import { ToolIdentity } from './tool';
 
-export const REPORT_FORMAT_VERSION = 1;
+export const REPORT_FORMAT_VERSION = 2;
 
 const FINDING_DETAILS: { readonly [R in RuleId]: (details: DetailsByRule[R]) => object } = {
-  'terminal-state-leak': (d) => ({ aggregate: d.aggregate, aggregateId: d.aggregateId, method: d.method, field: d.field, values: [...d.values] }),
-  'unreachable-state': (d) => ({ aggregate: d.aggregate, aggregateId: d.aggregateId, field: d.field, value: d.value }),
-  'outside-mutation': (d) => ({ aggregate: d.aggregate, aggregateId: d.aggregateId, field: d.field, scope: d.scope }),
-  'transition-drift': (d) => ({ aggregate: d.aggregate, aggregateId: d.aggregateId, method: d.method, field: d.field, kind: d.kind, values: [...d.values] }),
-  'transition-missing': (d) => ({ aggregate: d.aggregate, aggregateId: d.aggregateId, method: d.method, field: d.field, values: [...d.values] }),
-  'dead-handler': (d) => ({ event: d.event, eventId: d.eventId, handler: d.handler }),
-  'handler-payload-mismatch': (d) => ({ event: d.event, eventId: d.eventId, handler: d.handler, declared: [...d.declared], declaredIds: [...d.declaredIds] }),
-  'unhandled-event': (d) => ({ event: d.event, eventId: d.eventId }),
-  'saga-missing-failure-path': (d) => ({ saga: d.saga, sagaId: d.sagaId, success: d.success, successId: d.successId, failure: d.failure, failureId: d.failureId }),
-  'undispatched-events': (d) => ({ owner: d.owner, ownerId: d.ownerId, buffer: d.buffer, method: d.method, raisers: [...d.raisers] }),
+  'terminal-state-leak': (d) => ({ aggregate: d.aggregate, method: d.method, field: d.field, values: [...d.values] }),
+  'unreachable-state': (d) => ({ aggregate: d.aggregate, field: d.field, value: d.value }),
+  'outside-mutation': (d) => ({ aggregate: d.aggregate, field: d.field, scope: d.scope }),
+  'transition-drift': (d) => ({ aggregate: d.aggregate, method: d.method, field: d.field, kind: d.kind, values: [...d.values] }),
+  'transition-missing': (d) => ({ aggregate: d.aggregate, method: d.method, field: d.field, values: [...d.values] }),
+  'dead-handler': (d) => ({ event: d.event, handler: d.handler }),
+  'handler-payload-mismatch': (d) => ({ event: d.event, handler: d.handler, declared: [...d.declared] }),
+  'unhandled-event': (d) => ({ event: d.event }),
+  'saga-missing-failure-path': (d) => ({ saga: d.saga, success: d.success, failure: d.failure }),
+  'undispatched-events': (d) => ({ owner: d.owner, buffer: d.buffer, method: d.method, raisers: [...d.raisers] }),
 };
 
 const PROBLEM_DETAILS: { readonly [C in ProblemCode]: (details: DetailsByProblem[C]) => object } = {
@@ -37,7 +37,7 @@ const wireFinding = (root: string) => (finding: Finding) => ({
   ruleId: finding.ruleId,
   severity: finding.severity,
   analyzer: finding.analyzer,
-  key: findingKey(finding),
+  identity: identityOf(finding, root),
   location: { file: toPosixRelative(root, finding.file), line: finding.line },
   message: finding.message,
   fix: finding.fix,

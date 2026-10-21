@@ -30,13 +30,14 @@ const BASELINE_ENTRIES = [
 type WireOutsideMutation = {
   readonly ruleId: string;
   readonly location: { readonly file: string };
-  readonly details: { readonly aggregateId: string; readonly scope: string };
+  readonly identity: { readonly aggregate: string };
+  readonly details: { readonly scope: string };
 };
 
 const located = (finding: WireOutsideMutation) => ({
   ruleId: finding.ruleId,
   file: finding.location.file,
-  aggregateId: finding.details.aggregateId,
+  aggregateId: finding.identity.aggregate,
   scope: finding.details.scope,
 });
 

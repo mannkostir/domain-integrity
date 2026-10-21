@@ -9,8 +9,9 @@ import { LIFECYCLE_RULES } from '../../src/analyzers/lifecycle/checks';
 import { stateFieldAccessor, stateFieldMissing, stateFieldUnsupportedType, transitionMethodMissing, unknownStateValue } from '../../src/analyzers/lifecycle/problems';
 import { eventNotAnalysed, sagaOutcomeUnhandled } from '../../src/analyzers/event-flow/problems';
 import { run } from '../../src/cli/run';
-import { PROBLEM_ANALYZERS, Problem, RULE_ANALYZERS } from '../../src/finding';
+import { PROBLEM_ANALYZERS, Problem, RULE_ANALYZERS, RuleId } from '../../src/finding';
 import { formatJson } from '../../src/report/json';
+import { IDENTITY_FIELDS } from '../../src/report/identity';
 import { captureIo } from '../helpers/disk';
 import { JSON_FIXTURES } from '../helpers/fixtures';
 import { TOOL, finding } from '../helpers/model';
@@ -77,6 +78,23 @@ describe('report schema', () => {
     const report = JSON.parse(formatJson({ fresh: [], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
 
     expect(validateReport(JSON.stringify({ ...report, extra: true }))).not.toEqual([]);
+  });
+
+  it('identifies the schema as report v2', () => {
+    expect(REPORT_SCHEMA.$id).toBe('urn:domain-integrity:report:v2');
+  });
+
+  it('defines an identity for exactly the rules the finding model knows', () => {
+    const names = Object.keys(REPORT_SCHEMA.$defs as object).filter((name) => name.endsWith('Identity'));
+
+    expect(sorted(names)).toHaveLength(Object.keys(RULE_ANALYZERS).length);
+  });
+
+  it.each(Object.keys(RULE_ANALYZERS))('requires the identity fields of %s', (rule) => {
+    const defs = REPORT_SCHEMA.$defs as Record<string, { required: readonly string[] }>;
+    const name = `${rule.replace(/-(\w)/g, (_m, c: string) => c.toUpperCase())}Identity`;
+
+    expect(defs[name]?.required).toEqual(['rule', ...IDENTITY_FIELDS[rule as RuleId]]);
   });
 
   it('lists exactly the registered rules', () => {

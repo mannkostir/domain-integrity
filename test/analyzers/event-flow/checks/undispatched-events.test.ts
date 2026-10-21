@@ -25,7 +25,7 @@ describe('undispatchedEvents', () => {
         message:
           'AggregateRoot._domainEvents collects events from addDomainEvent() raised by Booking, Payment, but no production code reads or drains it, so those events never reach a handler.',
         fix: 'Dispatch the events in _domainEvents after saving the aggregate and clear it, or stop raising them.',
-        details: { owner: 'AggregateRoot', ownerId: 'src/aggregate-root.ts:AggregateRoot', buffer: '_domainEvents', method: 'addDomainEvent', raisers: ['src/booking.ts:Booking', 'src/payment.ts:Payment'] },
+        details: { owner: 'AggregateRoot', ownerId: 'src/aggregate-root.ts:AggregateRoot', buffer: '_domainEvents', method: 'addDomainEvent', raisers: ['Booking', 'Payment'] },
       },
     ]);
   });
