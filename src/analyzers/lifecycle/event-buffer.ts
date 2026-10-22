@@ -1,6 +1,8 @@
 import {
   CallExpression,
   ClassDeclaration,
+  GetAccessorDeclaration,
+  MethodDeclaration,
   Node,
   PropertyAccessExpression,
   PropertyDeclaration,
@@ -25,6 +27,11 @@ const isReturned = (node: Node): boolean => {
   return Node.isReturnStatement(statement) && statement.getExpression() === outer;
 };
 
+type HandedOut = (node: Node) => boolean;
+
+const enclosingFunction = (node: Node): Node | undefined =>
+  node.getFirstAncestor((ancestor) => Node.isFunctionLikeDeclaration(ancestor) || Node.isArrowFunction(ancestor));
+
 const isReturnedConst = (node: Node): boolean => {
   const outer = outermostWrapper(node);
   const declaration = outer.getParent();
@@ -33,20 +40,41 @@ const isReturnedConst = (node: Node): boolean => {
   if (!Node.isIdentifier(name)) return false;
   if (declaration.getVariableStatement()?.getDeclarationKind() !== VariableDeclarationKind.Const) return false;
   const uses = name.findReferencesAsNodes().filter((reference) => reference !== name);
-  return uses.length > 0 && uses.every(isReturned);
+  const owner = enclosingFunction(declaration);
+  return uses.length > 0 && uses.every((use) => isReturned(use) && enclosingFunction(use) === owner);
 };
 
-const isHandedOut = (node: Node): boolean => isReturned(node) || isReturnedConst(node);
+const isStructurallyHandedOut: HandedOut = (node) => isReturned(node) || isReturnedConst(node);
 
-const isCopiedOut = (target: Node): boolean => {
+const handingMember = (node: Node): MethodDeclaration | GetAccessorDeclaration | undefined => {
+  const member = enclosingFunction(node);
+  return Node.isMethodDeclaration(member) || Node.isGetAccessorDeclaration(member) ? member : undefined;
+};
+
+const isInsideFamily = (reference: Node, family: readonly ClassDeclaration[]): boolean =>
+  family.some(
+    (cls) => cls.getSourceFile() === reference.getSourceFile() && reference.getPos() >= cls.getPos() && reference.getEnd() <= cls.getEnd(),
+  );
+
+const isUsedInFamily = (member: MethodDeclaration | GetAccessorDeclaration, family: readonly ClassDeclaration[]): boolean => {
+  const name = member.getNameNode();
+  return (
+    !Node.isIdentifier(name) || name.findReferencesAsNodes().some((reference) => reference !== name && isInsideFamily(reference, family))
+  );
+};
+
+const handedOutOf =
+  (family: readonly ClassDeclaration[]): HandedOut =>
+  (node) => {
+    if (!isStructurallyHandedOut(node)) return false;
+    const member = handingMember(node);
+    return member !== undefined && !isUsedInFamily(member, family);
+  };
+
+const isCopiedOut = (target: Node, handedOut: HandedOut): boolean => {
   const spread = target.getParent();
   const literal = spread?.getParent();
-  return (
-    Node.isSpreadElement(spread) &&
-    Node.isArrayLiteralExpression(literal) &&
-    literal.getElements().length === 1 &&
-    isHandedOut(literal)
-  );
+  return Node.isSpreadElement(spread) && Node.isArrayLiteralExpression(literal) && literal.getElements().length === 1 && handedOut(literal);
 };
 
 const memberOf = (target: Node, name: string): PropertyAccessExpression | undefined => {
@@ -72,16 +100,18 @@ const isLengthReset = (target: Node): boolean => {
   );
 };
 
-const isSpliceReset = (target: Node): boolean => {
+const isSpliceReset = (target: Node, handedOut: HandedOut): boolean => {
   const splice = memberOf(target, 'splice');
   const call = splice?.getParent();
   if (!Node.isCallExpression(call) || call.getExpression() !== splice || call.hasQuestionDotToken()) return false;
   const [start, ...rest] = call.getArguments();
-  return rest.length === 0 && isZero(start) && (Node.isExpressionStatement(outermostWrapper(call).getParent()) || isHandedOut(call));
+  return rest.length === 0 && isZero(start) && (Node.isExpressionStatement(outermostWrapper(call).getParent()) || handedOut(call));
 };
 
-export const isEventBufferReset = (target: Node): boolean =>
-  isResetToEmpty(target) || isLengthReset(target) || isSpliceReset(target);
+const isResetWith = (target: Node, handedOut: HandedOut): boolean =>
+  isResetToEmpty(target) || isLengthReset(target) || isSpliceReset(target, handedOut);
+
+export const isEventBufferReset = (target: Node): boolean => isResetWith(target, isStructurallyHandedOut);
 
 const declarationsAreIn = (node: Node, buffers: ReadonlySet<Node>): boolean => {
   const declarations = node.getSymbol()?.getDeclarations() ?? [];
@@ -89,9 +119,7 @@ const declarationsAreIn = (node: Node, buffers: ReadonlySet<Node>): boolean => {
 };
 
 export const isEventBufferAccess = (node: Node, buffers: ReadonlySet<Node>): boolean =>
-  Node.isPropertyAccessExpression(node) &&
-  Node.isThisExpression(unwrap(node.getExpression())) &&
-  declarationsAreIn(node, buffers);
+  Node.isPropertyAccessExpression(node) && Node.isThisExpression(unwrap(node.getExpression())) && declarationsAreIn(node, buffers);
 
 const pushCallOf = (access: Node): CallExpression | undefined => {
   const call = outermostWrapper(access).getParent()?.getParent();
@@ -114,11 +142,13 @@ const isEventPush = (access: Node, candidates: ReadonlySet<Node>, eventMethods: 
   return call !== undefined && (pushesOnlyNewObjects(call) || isInPushOnlyEventMethod(access, candidates, eventMethods));
 };
 
-const isBufferUse = (reference: Node, candidates: ReadonlySet<Node>, eventMethods: ReadonlySet<string>): boolean => {
+const isBufferUse = (reference: Node, candidates: ReadonlySet<Node>, eventMethods: ReadonlySet<string>, handedOut: HandedOut): boolean => {
   const access = accessOf(reference);
   if (!Node.isPropertyAccessExpression(access) || !Node.isThisExpression(unwrap(access.getExpression()))) return false;
   const target = outermostWrapper(access);
-  return isEventBufferReset(target) || isEventPush(access, candidates, eventMethods) || isHandedOut(target) || isCopiedOut(target);
+  return (
+    isResetWith(target, handedOut) || isEventPush(access, candidates, eventMethods) || handedOut(target) || isCopiedOut(target, handedOut)
+  );
 };
 
 const partsOf = (type: Type): readonly Type[] =>
@@ -136,12 +166,24 @@ const mentionsGeneric = (type: Type): boolean =>
 const isGenericOrMapped = (type: Type): boolean =>
   isInstantiable(type) || (isMapped(type) && (type.getAliasTypeArguments().length === 0 || mentionsGeneric(type)));
 
+const isNonPrimitive = (type: Type): boolean => (type.getFlags() & ts.TypeFlags.NonPrimitive) !== 0;
+
+const isOpaqueObject = (type: Type): boolean =>
+  isNonPrimitive(type) ||
+  (type.isObject() &&
+    type.getProperties().length === 0 &&
+    type.getCallSignatures().length === 0 &&
+    type.getConstructSignatures().length === 0 &&
+    type.getStringIndexType() === undefined &&
+    type.getNumberIndexType() === undefined);
+
 const canCarry = (type: Type, name: string): boolean =>
   partsOf(type).some((part) =>
     part === type
       ? part.isAny() ||
         part.isUnknown() ||
         isGenericOrMapped(part) ||
+        isOpaqueObject(part) ||
         part.getStringIndexType() !== undefined ||
         part.getNumberIndexType() !== undefined ||
         part.getProperty(name) !== undefined
@@ -165,6 +207,11 @@ const isReachedByAssign = (property: PropertyDeclaration, family: readonly Class
 const writesComputedKeys = (cls: ClassDeclaration): boolean =>
   cls.getDescendantsOfKind(SyntaxKind.ElementAccessExpression).some(isComputedWriteOnThis);
 
+const isArrayTyped = (property: PropertyDeclaration): boolean => {
+  const type = property.getType().getNonNullableType();
+  return type.isArray() || type.isReadonlyArray();
+};
+
 const referencesOf = (property: PropertyDeclaration): readonly Node[] =>
   property.findReferencesAsNodes().filter((reference) => reference !== property.getNameNode());
 
@@ -177,7 +224,18 @@ export const eventBuffers = (
   if (family.some((cls) => hasUnknownClassDecorator(cls, inertDecorators) || writesComputedKeys(cls))) return new Set();
   const candidates = family
     .flatMap((cls) => cls.getProperties())
-    .filter((property) => isPlainDeclaration(property) && !isBracketWrittenIn(property, writes) && !isReachedByAssign(property, family));
+    .filter(
+      (property) =>
+        isPlainDeclaration(property) &&
+        isArrayTyped(property) &&
+        !isBracketWrittenIn(property, writes) &&
+        !isReachedByAssign(property, family),
+    );
   const candidateSet: ReadonlySet<Node> = new Set(candidates);
-  return new Set(candidates.filter((property) => referencesOf(property).every((reference) => isBufferUse(reference, candidateSet, eventMethods))));
+  const handedOut = handedOutOf(family);
+  return new Set(
+    candidates.filter((property) =>
+      referencesOf(property).every((reference) => isBufferUse(reference, candidateSet, eventMethods, handedOut)),
+    ),
+  );
 };
