@@ -13,6 +13,7 @@ import { initialValues } from './initial';
 import { transitionMethodMissing, unknownStateValue } from './problems';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
 import { instanceMethods } from './members';
+import { NO_BOOKKEEPING } from './bookkeeping';
 import { mutatingMethods } from './mutation';
 import { mentionedTokens } from './mentions';
 import { outsideAssignments } from './outside';
@@ -105,7 +106,7 @@ const methodModels = (
   fields: readonly StateField[],
   declared: boolean,
 ): MethodModel[] => {
-  const mutating = mutatingMethods(methods, [...scope.eventMethods]);
+  const mutating = mutatingMethods(methods, [...scope.eventMethods], NO_BOOKKEEPING);
   return methods.map((method) => ({
     name: method.getName(),
     file: method.getSourceFile().getFilePath(),

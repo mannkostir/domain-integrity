@@ -1,5 +1,6 @@
 import { MethodDeclaration, Node, SyntaxKind } from 'ts-morph';
 import { isAssignmentOperator } from './assigned';
+import { Bookkeeping, isAuditWrite, isBookkeepingAssignment, isBookkeepingCollectionCall } from './bookkeeping';
 import { isRootedAtThis } from './field-ref';
 
 const COLLECTION_MUTATORS = new Set([
@@ -27,24 +28,31 @@ const isCollection = (node: Node): boolean => {
 
 const INCREMENTS = new Set<SyntaxKind>([SyntaxKind.PlusPlusToken, SyntaxKind.MinusMinusToken]);
 
-const assignsThis = (method: MethodDeclaration): boolean =>
+const assignsThis = (method: MethodDeclaration, bookkeeping: Bookkeeping): boolean =>
   method
     .getDescendantsOfKind(SyntaxKind.BinaryExpression)
-    .some((binary) => isAssignmentOperator(binary) && isRootedAtThis(binary.getLeft()));
+    .some(
+      (binary) => isAssignmentOperator(binary) && isRootedAtThis(binary.getLeft()) && !isBookkeepingAssignment(binary, bookkeeping),
+    );
 
-const incrementsThis = (method: MethodDeclaration): boolean =>
+const incrementsThis = (method: MethodDeclaration, bookkeeping: Bookkeeping): boolean =>
   [
     ...method.getDescendantsOfKind(SyntaxKind.PrefixUnaryExpression),
     ...method.getDescendantsOfKind(SyntaxKind.PostfixUnaryExpression),
-  ].some((unary) => INCREMENTS.has(unary.getOperatorToken()) && isRootedAtThis(unary.getOperand()));
+  ].some(
+    (unary) =>
+      INCREMENTS.has(unary.getOperatorToken()) && isRootedAtThis(unary.getOperand()) && !isAuditWrite(unary.getOperand(), bookkeeping),
+  );
 
-const callsMutator = (method: MethodDeclaration, eventMethods: ReadonlySet<string>): boolean =>
+const callsMutator = (method: MethodDeclaration, eventMethods: ReadonlySet<string>, bookkeeping: Bookkeeping): boolean =>
   method.getDescendantsOfKind(SyntaxKind.CallExpression).some((call) => {
     const callee = call.getExpression();
     if (!Node.isPropertyAccessExpression(callee)) return false;
     const receiver = callee.getExpression();
     if (Node.isThisExpression(receiver)) return eventMethods.has(callee.getName());
-    if (COLLECTION_MUTATORS.has(callee.getName()) && isRootedAtThis(receiver) && isCollection(receiver)) return true;
+    if (COLLECTION_MUTATORS.has(callee.getName()) && isRootedAtThis(receiver) && isCollection(receiver)) {
+      return !isBookkeepingCollectionCall(receiver, bookkeeping);
+    }
     const [target] = call.getArguments();
     return callee.getText() === 'Object.assign' && target !== undefined && isRootedAtThis(target);
   });
@@ -67,11 +75,18 @@ const closeOverCalls = (methods: readonly MethodDeclaration[], mutating: Readonl
   return next.size === mutating.size ? mutating : closeOverCalls(methods, next);
 };
 
-export const mutatingMethods = (methods: readonly MethodDeclaration[], eventMethods: readonly string[]): ReadonlySet<string> => {
+export const mutatingMethods = (
+  methods: readonly MethodDeclaration[],
+  eventMethods: readonly string[],
+  bookkeeping: Bookkeeping,
+): ReadonlySet<string> => {
   const events = new Set(eventMethods);
   const direct = new Set(
     methods
-      .filter((method) => assignsThis(method) || incrementsThis(method) || callsMutator(method, events))
+      .filter(
+        (method) =>
+          assignsThis(method, bookkeeping) || incrementsThis(method, bookkeeping) || callsMutator(method, events, bookkeeping),
+      )
       .map((method) => method.getName()),
   );
   return closeOverCalls(methods, direct);
