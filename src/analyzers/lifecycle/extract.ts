@@ -13,7 +13,7 @@ import { initialValues } from './initial';
 import { transitionMethodMissing, unknownStateValue } from './problems';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
 import { instanceMethods } from './members';
-import { NO_BOOKKEEPING } from './bookkeeping';
+import { Bookkeeping } from './bookkeeping';
 import { mutatingMethods } from './mutation';
 import { mentionedTokens } from './mentions';
 import { outsideAssignments } from './outside';
@@ -105,8 +105,14 @@ const methodModels = (
   methods: readonly MethodDeclaration[],
   fields: readonly StateField[],
   declared: boolean,
+  auditFields: readonly string[],
 ): MethodModel[] => {
-  const mutating = mutatingMethods(methods, [...scope.eventMethods], NO_BOOKKEEPING);
+  const stateFieldNames = new Set(fields.map((field) => field.name));
+  const bookkeeping: Bookkeeping = {
+    auditFields: new Set(auditFields.filter((name) => !stateFieldNames.has(name))),
+    eventBuffers: scope.eventBuffers,
+  };
+  const mutating = mutatingMethods(methods, [...scope.eventMethods], bookkeeping);
   return methods.map((method) => ({
     name: method.getName(),
     file: method.getSourceFile().getFilePath(),
@@ -149,7 +155,7 @@ const extractAggregate = (
       fields: resolved.fields,
       declarations: resolved.declarations,
       allowAfterTerminal: new Set(declared?.allowAfterTerminal ?? []),
-      methods: methodModels(scope, methods, resolved.fields, declared !== undefined),
+      methods: methodModels(scope, methods, resolved.fields, declared !== undefined, declaration.auditFields),
       initial: new Map(resolved.fields.map((field) => [field.name, initialValues(cls, field)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(project, field)]) : []),
       outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, projectRoot)) : [],
