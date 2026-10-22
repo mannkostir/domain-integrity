@@ -42,6 +42,21 @@ export class AssignedGeneric<P extends object> {
   constructor(props: P) { Object.assign(this, props); }
   clearEvents(): void { this._events.length = 0; }
 }
+export class AssignedIntersection<P extends object> {
+  private readonly _events: object[] = [];
+  constructor(props: P & { id: string }) { Object.assign(this, props); }
+  clearEvents(): void { this._events.length = 0; }
+}
+export class AssignedPartial<P extends object> {
+  private readonly _events: object[] = [];
+  constructor(props: Partial<P>) { Object.assign(this, props); }
+  clearEvents(): void { this._events.length = 0; }
+}
+export class AssignedReadonly<P extends object> {
+  private readonly _events: object[] = [];
+  constructor(props: Readonly<P>) { Object.assign(this, props); }
+  clearEvents(): void { this._events.length = 0; }
+}
 export class Iterated {
   private items: object[] = [];
   open(): void { this.items.push(new Opened('a')); }
@@ -120,6 +135,18 @@ describe('eventBuffers', () => {
 
   it('rejects an array when Object.assign onto this takes a type-parameter source', () => {
     expect(buffersOf('AssignedGeneric')).toEqual([]);
+  });
+
+  it('rejects an array when Object.assign onto this takes an intersection with a type parameter', () => {
+    expect(buffersOf('AssignedIntersection')).toEqual([]);
+  });
+
+  it('rejects an array when Object.assign onto this takes a Partial of a type parameter', () => {
+    expect(buffersOf('AssignedPartial')).toEqual([]);
+  });
+
+  it('rejects an array when Object.assign onto this takes a Readonly of a type parameter', () => {
+    expect(buffersOf('AssignedReadonly')).toEqual([]);
   });
 
   it('rejects an array the aggregate iterates', () => {

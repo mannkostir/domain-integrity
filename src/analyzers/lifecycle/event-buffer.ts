@@ -6,6 +6,7 @@ import {
   PropertyDeclaration,
   SyntaxKind,
   Type,
+  ts,
   VariableDeclarationKind,
 } from 'ts-morph';
 import { isBracketWrittenIn, isPlainArrayPush, isPlainDeclaration, isPushOnlyMethod, isResetToEmpty } from '../shared/array-store';
@@ -120,15 +121,22 @@ const isBufferUse = (reference: Node, candidates: ReadonlySet<Node>, eventMethod
   return isEventBufferReset(target) || isEventPush(access, candidates, eventMethods) || isHandedOut(target) || isCopiedOut(target);
 };
 
+const partsOf = (type: Type): readonly Type[] =>
+  type.isUnion() ? type.getUnionTypes() : type.isIntersection() ? type.getIntersectionTypes() : [type];
+
+const isGenericOrMapped = (type: Type): boolean =>
+  (type.getFlags() & ts.TypeFlags.Instantiable) !== 0 || (type.getObjectFlags() & ts.ObjectFlags.Mapped) !== 0;
+
 const canCarry = (type: Type, name: string): boolean =>
-  (type.isUnion() ? type.getUnionTypes() : [type]).some(
-    (member) =>
-      member.isAny() ||
-      member.isUnknown() ||
-      member.isTypeParameter() ||
-      member.getStringIndexType() !== undefined ||
-      member.getNumberIndexType() !== undefined ||
-      member.getProperty(name) !== undefined,
+  partsOf(type).some((part) =>
+    part === type
+      ? part.isAny() ||
+        part.isUnknown() ||
+        isGenericOrMapped(part) ||
+        part.getStringIndexType() !== undefined ||
+        part.getNumberIndexType() !== undefined ||
+        part.getProperty(name) !== undefined
+      : canCarry(part, name),
   );
 
 const assignCanReach = (call: CallExpression, name: string): boolean =>
