@@ -30,17 +30,21 @@ The test-file `outside-mutation` re-run compared the recorded 43 findings with t
 
 The baseline v2 re-run compared main (6a1da59) with the branch (e7a7391), which identifies a finding by a structured identity whose class ids are always `path:Class`, reports every path relative to the repository root, and writes baseline format 2. A fresh main run matches the recorded 43 findings and exit codes. The branch reports the same 43 findings in every repository; for each finding the rule, severity, display names, line and message are identical, and so are every exit code and every repository's stderr. Only identities, ids and reported paths change, by design. A first branch run listed Booking-System's 9 raisers in its `undispatched-events` message in file-path order, because raisers were ordered by their now qualified ids; they are ordered by class name again. Reported paths gain the folder between the repository root and the tsconfig: undb's start with `packages/authz/` and bitloops' with `backend/`. The private reference repo copy has no `.git`, so its paths stay relative to its tsconfig directory. Out-of-repo probes used a git repository with the outside-spec shape under `packages/api` and its own tsconfig. Run from the repository root and from the package directory, JSON and SARIF paths start with `packages/api/`, and each SARIF `uri` names an existing file under the root with `uriBaseId` `%SRCROOT%`. After `--update-baseline`, adding a second `Invitation` class in another file reports nothing and exits 0. A second assignment of `status` in the already baselined `InvitationService.accept` reports both assignments, each marked `(baseline accepts 1 of 2)`, and exits 1.
 
+The domain-command re-run compared main (73932f4) with the branch (20bd791), on which a method whose only writes stamp an `auditFields` field or empty a proven private event array is no longer judged as a domain command. A fresh main run matches the recorded 43 findings and exit codes. The branch reports 41: kyhsa93 `AccountImplement.clearEvents` is no longer reported after `deletedAt` or `lockedAt`, because `this._events.length = 0` empties a private array that only receives `new …Event(…)` values and is only handed out as a copy, and the constructor's `Object.assign(this, properties)` takes a concrete type without an `_events` property. Every other finding, every exit code and every repository's stderr is byte-identical to main. Two config variants were run with copies of the configs kept outside the repositories. bitloops with `auditFields: ['createdAt', 'updatedAt', 'version', 'eventStreamVersion']` no longer reports `TodoEntity.commit`, which writes only `eventStreamVersion` and calls `clearDomainEvents()`; main still reports it with that config, and the other 4 bitloops findings are unchanged. ticket-sale with `is_reserved` declared with no terminal value no longer reports the 4 `EventSpot` findings on either main or the branch, so they came from the guessed terminal value, not from the methods; `Order.pay` and `Order.cancel` are unchanged. With both variants the total is 36, and no intended finding is left. Out-of-repo probes stay silent on the branch, where main reported each: a public `touch()` writing `updatedAt` behind a project `@BeforeUpdate()` decorator and behind the installed `typeorm` `@BeforeUpdate()` on an `@Entity()`; `pullDomainEvents()` as `const events = this.domainEvents; this.domainEvents = []; return events;` beside a push-only `addDomainEvent`; `return this.events.splice(0)`; the kyhsa93 shape; and the bitloops shape with `eventStreamVersion` listed. In each, an unguarded command in the same class is still reported. Still reported on the branch, as on main: clearing an array the aggregate reads with `reduce`, an array pushed with a parameter outside an event method, a `protected` array in a base class, an array an `Object.assign(this, props)` source can carry by name, and a write to a declared state field named `version` while `version` is in the default `auditFields`.
+
 ## Summary
 
 - **Repositories run:** 10: nine public repositories plus the private reference repo, which is counted among the 10. Of those, 9 produced a model and 1 (CodelyTV/typescript-ddd-example) has no state fields, so there was nothing to declare. There were also 2 thin repositories (mguay22/nestjs-ddd, mbrookson/nestjs-ddd). They were cloned, but their aggregates have no state fields and they were dropped.
 - **Aggregates:** 47 discovered with the default base classes and 28 declared. The 28th, kyhsa93 `AccountImplement`, implements an interface instead of extending a base class. It was declared by hand in the v0.1 run; with `'Account'` added to `aggregateBaseClasses` it is discovered, which makes 48.
-- **Lifecycle findings:** 42 in total, with ddd-forum listing `inertEventMethods: ['addDomainEvent']`; 41 without it:
+- **Lifecycle findings:** 40 in total, with ddd-forum listing `inertEventMethods: ['addDomainEvent']`; 39 without it:
   - 34 real;
-  - 7 intended;
+  - 5 intended;
   - 1 false positive.
 
+  The 2 kyhsa93 `clearEvents` findings, intended before, are no longer reported since methods that only keep books are not judged as domain commands. The 5 intended findings left go away by configuration: bitloops `commit` with `eventStreamVersion` in `auditFields`, and the 4 ticket-sale `EventSpot` findings with `is_reserved` declared with no terminal value.
+
   The first run produced 66 findings. 27 of them were false positives from one pattern, private event-sourcing appliers. The leak and drift checks now judge only public methods, which removes all 27. The one remaining false positive, kyhsa93 `close` after `lockedAt`, goes away when `close` is listed in `allowAfterTerminal` inside the `lockedAt` field, which leaves 41 findings. All 5 earlier bitloops findings are reported again once its library members are listed in `inertMembers`.
-- **Event-flow findings:** 2, both real: ddd-forum `handler-payload-mismatch` for `AfterPostVotesChanged.onPostVotesChanged`, and Booking-System `undispatched-events` for `AggregateRoot._domainEvents`. With lifecycle findings, 44 in total with ddd-forum listing `inertEventMethods`, and 43 without it.
+- **Event-flow findings:** 2, both real: ddd-forum `handler-payload-mismatch` for `AfterPostVotesChanged.onPostVotesChanged`, and Booking-System `undispatched-events` for `AggregateRoot._domainEvents`. With lifecycle findings, 42 in total with ddd-forum listing `inertEventMethods`, and 41 without it.
 - **Spike findings:**
 
   | Spike finding | Result |
@@ -99,8 +103,8 @@ Per-repository setup:
 | terminal-state-leak (deletedAt) | AccountImplement.close | real | closing twice re-stamps `deletedAt` and emits a second event |
 | terminal-state-leak (lockedAt) | AccountImplement.close | false positive (resolved by configuration) | closing a locked account is a legitimate exit; `lockedAt: { terminal: 'set', allowAfterTerminal: ['close'] }` exempts it for `lockedAt` alone, and `close` after `deletedAt` is still reported |
 | terminal-state-leak (deletedAt) | AccountImplement.lock | real | a closed account can be locked |
-| terminal-state-leak (deletedAt) | AccountImplement.clearEvents | intended | `_events.length = 0` clears the outbox after persistence; belongs in `allowAfterTerminal` |
-| terminal-state-leak (lockedAt) | AccountImplement.clearEvents | intended | same |
+| terminal-state-leak (deletedAt) | AccountImplement.clearEvents | intended (no longer reported) | `_events.length = 0` clears the outbox after persistence; emptying a proven event array is bookkeeping, so the method is not judged as a domain command |
+| terminal-state-leak (lockedAt) | AccountImplement.clearEvents | intended (no longer reported) | same |
 
 `lock()` is not reported for `lockedAt`, because `if (this.lockedAt) throwError(...)` is recognised as a guard.
 
@@ -112,7 +116,7 @@ Per-repository setup:
 | terminal-state-leak | TodoEntity.complete | real | spike finding; only `completed` is checked, never `deleted` |
 | terminal-state-leak | TodoEntity.uncomplete | real | spike finding |
 | terminal-state-leak | TodoEntity.modifyTitle | real | renaming a deleted todo is allowed |
-| terminal-state-leak | TodoEntity.commit | intended | sets the stream version and clears events after persisting; must run after `delete` |
+| terminal-state-leak | TodoEntity.commit | intended | sets the stream version and clears events after persisting; must run after `delete`; not reported once `eventStreamVersion` is listed in `auditFields` |
 
 Without `inertMembers`, the library getter `this.id` and method `this.clearDomainEvents()` count as reading `deleted`, and only `delete` is reported.
 
@@ -185,8 +189,8 @@ The original event-flow run reported nothing here either. The `CommissionStrateg
 
 | check | aggregate.method | verdict | reason |
 |---|---|---|---|
-| terminal-state-leak | EventSpot.markAsReserved | intended | `EventSpot` is a child entity, matched by the default `Entity` base class; the owning `EventSection.markSpotAsReserved` throws on an already reserved spot |
-| terminal-state-leak | EventSpot.changeLocation | intended | `init` guessed `is_reserved: [true]` as terminal; a reserved spot is not a finished spot |
+| terminal-state-leak | EventSpot.markAsReserved | intended | `EventSpot` is a child entity, matched by the default `Entity` base class; the owning `EventSection.markSpotAsReserved` throws on an already reserved spot; not reported once `is_reserved` is declared with no terminal value |
+| terminal-state-leak | EventSpot.changeLocation | intended | `init` guessed `is_reserved: [true]` as terminal; a reserved spot is not a finished spot; not reported once `is_reserved` is declared with no terminal value |
 | terminal-state-leak | EventSpot.publish | intended | same |
 | terminal-state-leak | EventSpot.unPublish | intended | same |
 | terminal-state-leak | Order.pay | real | no guard; a cancelled order can be paid, and paying twice emits a second `OrderPaid` |
@@ -202,6 +206,7 @@ This was not fixed, because it needs a design change rather than a correction of
 
 ## Resolved during validation
 
+- **Infrastructure methods were judged as domain commands.** Any write to `this` made a method a mutator, so kyhsa93 `clearEvents()`, which empties the outbox after persistence, and bitloops `commit()`, which stamps the stream version, were reported after the terminal state. A method whose only writes stamp an `auditFields` field or empty a proven private event array is no longer judged as a domain command; pushing an event still is ([issue #61](https://github.com/mannkostir/domain-integrity/issues/61)). kyhsa93 `clearEvents` is no longer reported, and bitloops `commit` is not once `eventStreamVersion` is listed in `auditFields`.
 - **Project-declared event methods that register `this` hid real leaks.** ddd-forum's `addDomainEvent` pushes the event, passes `this` to the static `DomainEvents.markAggregateForDispatch` registry and logs through `Reflect.getPrototypeOf(this)`, so it is not push-only and its callers, including `User.setAccessToken`, stayed unjudged. Resolved by configuration ([issue #33](https://github.com/mannkostir/domain-integrity/issues/33)): a project lists event methods known not to read aggregate state in `inertEventMethods`, and with `inertEventMethods: ['addDomainEvent']` ddd-forum reports `setAccessToken` after `isDeleted`. The assertion is switched off when the name is declared or written as anything other than a method, or when a class in the aggregate's family is decorated or calls `Object.assign(this, …)`.
 - **`allowAfterTerminal` was per aggregate, not per field.** kyhsa93 `close()` should be allowed after `lockedAt` but not after `deletedAt`, and the only options were to exempt it for both fields or for neither. A state field now takes its own `allowAfterTerminal`, which combines with the aggregate-level list, so `close` can be exempted for `lockedAt` alone. Fixed in #38.
 - **Private event appliers were judged as entry points.** This caused the 27 false positives in daruma-backend. The leak and drift checks now judge only public methods. Fixed in 56c5953.
