@@ -124,8 +124,17 @@ const isBufferUse = (reference: Node, candidates: ReadonlySet<Node>, eventMethod
 const partsOf = (type: Type): readonly Type[] =>
   type.isUnion() ? type.getUnionTypes() : type.isIntersection() ? type.getIntersectionTypes() : [type];
 
+const isInstantiable = (type: Type): boolean => (type.getFlags() & ts.TypeFlags.Instantiable) !== 0;
+
+const isMapped = (type: Type): boolean => (type.getObjectFlags() & ts.ObjectFlags.Mapped) !== 0;
+
+const mentionsGeneric = (type: Type): boolean =>
+  isInstantiable(type) ||
+  partsOf(type).some((part) => part !== type && mentionsGeneric(part)) ||
+  [...type.getAliasTypeArguments(), ...type.getTypeArguments()].some(mentionsGeneric);
+
 const isGenericOrMapped = (type: Type): boolean =>
-  (type.getFlags() & ts.TypeFlags.Instantiable) !== 0 || (type.getObjectFlags() & ts.ObjectFlags.Mapped) !== 0;
+  isInstantiable(type) || (isMapped(type) && (type.getAliasTypeArguments().length === 0 || mentionsGeneric(type)));
 
 const canCarry = (type: Type, name: string): boolean =>
   partsOf(type).some((part) =>

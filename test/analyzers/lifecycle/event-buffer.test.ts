@@ -57,6 +57,23 @@ export class AssignedReadonly<P extends object> {
   constructor(props: Readonly<P>) { Object.assign(this, props); }
   clearEvents(): void { this._events.length = 0; }
 }
+interface Essentials { id: string }
+interface Optionals { balance?: number }
+export class AssignedRequiredIntersection {
+  private readonly _events: object[] = [];
+  constructor(props: Essentials & Required<Optionals>) { Object.assign(this, props); }
+  clearEvents(): void { this._events.length = 0; }
+}
+export class AssignedConcretePartial {
+  private readonly _events: object[] = [];
+  constructor(props: Partial<{ id: string }>) { Object.assign(this, props); }
+  clearEvents(): void { this._events.length = 0; }
+}
+export class AssignedConcreteCarrying {
+  private readonly _events: object[] = [];
+  constructor(props: Required<{ id: string; _events?: object[] }>) { Object.assign(this, props); }
+  clearEvents(): void { this._events.length = 0; }
+}
 export class Iterated {
   private items: object[] = [];
   open(): void { this.items.push(new Opened('a')); }
@@ -147,6 +164,18 @@ describe('eventBuffers', () => {
 
   it('rejects an array when Object.assign onto this takes a Readonly of a type parameter', () => {
     expect(buffersOf('AssignedReadonly')).toEqual([]);
+  });
+
+  it('proves an array when Object.assign onto this takes an intersection with a concrete Required', () => {
+    expect(buffersOf('AssignedRequiredIntersection')).toEqual(['_events']);
+  });
+
+  it('proves an array when Object.assign onto this takes a concrete Partial without its name', () => {
+    expect(buffersOf('AssignedConcretePartial')).toEqual(['_events']);
+  });
+
+  it('rejects an array when Object.assign onto this takes a concrete Required carrying its name', () => {
+    expect(buffersOf('AssignedConcreteCarrying')).toEqual([]);
   });
 
   it('rejects an array the aggregate iterates', () => {
