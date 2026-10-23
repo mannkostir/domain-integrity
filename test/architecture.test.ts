@@ -40,4 +40,8 @@ describe('import boundaries', () => {
   it('forbids ts-morph in lifecycle checks', async () => {
     expect(await restrictedImportsIn('src/analyzers/lifecycle/checks/outside-mutation.ts', "import { Node } from 'ts-morph';\nexport const n = Node;\n")).toBe(1);
   });
+
+  it('forbids ts-morph in rule config', async () => {
+    expect(await restrictedImportsIn('src/rules/apply.ts', "import { Node } from 'ts-morph';\nexport const n = Node;\n")).toBe(1);
+  });
 });

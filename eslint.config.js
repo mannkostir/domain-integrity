@@ -47,4 +47,8 @@ export default tseslint.config(
     files: ['src/analyzers/lifecycle/checks/**/*.ts'],
     rules: { 'no-restricted-imports': ['error', { paths: [tsMorph] }] },
   },
+  {
+    files: ['src/rules/**/*.ts'],
+    rules: { 'no-restricted-imports': ['error', { paths: [tsMorph] }] },
+  },
 );
