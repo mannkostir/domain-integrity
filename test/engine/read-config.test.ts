@@ -51,7 +51,7 @@ export default defineDomain({});
 import { defineDomain, lifecycle } from 'domain-integrity';
 import { Order, OrderStatus } from './src/order';
 export default defineDomain({
-  lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled], transitions: { cancel: [OrderStatus.pending] } } }, allowAfterTerminal: ['cancel'] })],
+  lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled], transitions: { cancel: { from: [OrderStatus.pending] } } } }, allowAfterTerminal: ['cancel'] })],
 });
 `).declaration.lifecycles;
 
@@ -517,5 +517,39 @@ const shared = { baseClasses: ['AggregateRoot'] };
 export default defineDomain({ aggregates: shared });
 `),
     ).toThrow(/domain.config.ts:3 "aggregates" must be an object literal/);
+  });
+});
+
+const ORDER_TRANSITIONS = (transition: string): string => `import { defineDomain, lifecycle } from 'domain-integrity';
+import { Order, OrderStatus } from './src/order';
+export default defineDomain({
+  lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled], transitions: {
+    cancel: ${transition},
+  } } } })],
+});
+`;
+
+describe('transitions', () => {
+  it('reads the source states named by from', () => {
+    const [order] = read(ORDER_TRANSITIONS('{ from: [OrderStatus.pending] }')).declaration.lifecycles;
+
+    expect(order?.fields[0]?.transitions).toEqual(new Map([['cancel', ['PENDING']]]));
+  });
+
+  it('reads a bare array as the same source states', () => {
+    const fromObject = read(ORDER_TRANSITIONS('{ from: [OrderStatus.pending] }')).declaration.lifecycles[0]?.fields;
+    const fromArray = read(ORDER_TRANSITIONS('[OrderStatus.pending]')).declaration.lifecycles[0]?.fields;
+
+    expect(fromArray).toEqual(fromObject);
+  });
+
+  it('deprecates a bare array', () => {
+    expect(read(ORDER_TRANSITIONS('[OrderStatus.pending]')).deprecations).toEqual([
+      { line: 5, old: 'transitions.cancel: [...]', replacement: 'transitions.cancel: { from: [...] }' },
+    ]);
+  });
+
+  it('does not deprecate from', () => {
+    expect(read(ORDER_TRANSITIONS('{ from: [OrderStatus.pending] }')).deprecations).toEqual([]);
   });
 });
