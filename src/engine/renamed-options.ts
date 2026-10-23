@@ -9,6 +9,7 @@ export const RENAMED_OPTIONS = {
   inertDecorators: { old: ['inertDecorators'], current: ['inert', 'decorators'] },
   inertEventMethods: { old: ['inertEventMethods'], current: ['inert', 'raiseMethods'] },
   inertMembers: { old: ['inertMembers'], current: ['inert', 'members'] },
+  reportTestFileMutations: { old: ['reportTestFileMutations'], current: ['rules', 'outside-mutation', 'testFiles'] },
 } as const satisfies Readonly<Record<string, RenamedOption>>;
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;

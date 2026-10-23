@@ -1,4 +1,5 @@
 import { ClassDeclaration } from 'ts-morph';
+import { RuleId, RuleLevel } from '../finding';
 
 export type DeclaredField = {
   readonly name: string;
@@ -25,6 +26,14 @@ export type DeclaredEvents = {
   readonly sagas: readonly DeclaredSaga[];
 };
 
+export type DeclaredSuppression = {
+  readonly rule: RuleId;
+  readonly target: ClassDeclaration;
+  readonly member: string | undefined;
+  readonly reason: string;
+  readonly line: number;
+};
+
 export type DomainDeclaration = {
   readonly aggregateBaseClasses: readonly string[];
   readonly auditFields: readonly string[];
@@ -35,6 +44,8 @@ export type DomainDeclaration = {
   readonly lifecycles: readonly DeclaredLifecycle[];
   readonly reportTestFileMutations: boolean;
   readonly events: DeclaredEvents;
+  readonly rules: ReadonlyMap<RuleId, RuleLevel>;
+  readonly suppressions: readonly DeclaredSuppression[];
 };
 
 export const DEFAULT_DECLARATION: DomainDeclaration = {
@@ -47,6 +58,8 @@ export const DEFAULT_DECLARATION: DomainDeclaration = {
   lifecycles: [],
   reportTestFileMutations: false,
   events: { handlerDecorators: ['EventsHandler', 'OnEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
+  rules: new Map(),
+  suppressions: [],
 };
 
 export type Deprecation = { readonly line: number; readonly old: string; readonly replacement: string };

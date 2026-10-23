@@ -569,6 +569,7 @@ The old names still work and print a `warning:` line on stderr naming the replac
 | `inertDecorators` | `inert.decorators` |
 | `inertEventMethods` | `inert.raiseMethods` |
 | `inertMembers` | `inert.members` |
+| `reportTestFileMutations` | `rules['outside-mutation'].testFiles` |
 | `transitions.<method>: [...]` | `transitions.<method>: { from: [...] }` |
 
 ## Quiet by design

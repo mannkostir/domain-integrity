@@ -43,6 +43,8 @@ export default defineDomain({});
       lifecycles: [],
       reportTestFileMutations: false,
       events: { handlerDecorators: ['EventsHandler', 'OnEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
+      rules: new Map(),
+      suppressions: [],
     });
   });
 
@@ -470,7 +472,7 @@ const nested = (path: readonly string[], value: string): string =>
 const configSetting = (setting: string): string =>
   `import { defineDomain } from 'domain-integrity';\nexport default defineDomain({\n  ${setting},\n});\n`;
 
-const RENAMED = Object.entries(RENAMED_OPTIONS);
+const RENAMED = Object.entries(RENAMED_OPTIONS).filter(([field]) => field !== 'reportTestFileMutations');
 
 describe('renamed options', () => {
   it.each(RENAMED)('reads %s from its grouped name without a deprecation', (field, option) => {
@@ -545,6 +547,91 @@ const shared = { baseClasses: ['AggregateRoot'] };
 export default defineDomain({ aggregates: shared });
 `),
     ).toThrow(/domain.config.ts:3 "aggregates" must be an object literal/);
+  });
+});
+
+describe('rules', () => {
+  it('reads levels and option objects', () => {
+    const { rules } = read(configSetting("rules: { 'transition-missing': 'off', 'unhandled-event': { level: 'warning' }, 'outside-mutation': { testFiles: true } }")).declaration;
+
+    expect(rules).toEqual(new Map([['transition-missing', 'off'], ['unhandled-event', 'warning']]));
+  });
+
+  it('reads testFiles as test-file mutation reporting', () => {
+    expect(read(configSetting("rules: { 'outside-mutation': { testFiles: true } }")).declaration.reportTestFileMutations).toBe(true);
+  });
+
+  it('leaves test files unreported when outside-mutation has only a level', () => {
+    expect(read(configSetting("rules: { 'outside-mutation': 'warning' }")).declaration.reportTestFileMutations).toBe(false);
+  });
+
+  it('deprecates reportTestFileMutations', () => {
+    expect(read(configSetting('reportTestFileMutations: true')).deprecations).toEqual([
+      { line: 3, old: 'reportTestFileMutations', replacement: "rules['outside-mutation'].testFiles" },
+    ]);
+  });
+
+  it('rejects reportTestFileMutations next to testFiles', () => {
+    expect(() =>
+      read(`import { defineDomain } from 'domain-integrity';
+export default defineDomain({
+  reportTestFileMutations: true,
+  rules: { 'outside-mutation': { testFiles: true } },
+});
+`),
+    ).toThrow(`Keep only "rules['outside-mutation'].testFiles".`);
+  });
+
+  it('rejects a testFiles that is not a boolean literal', () => {
+    expect(() =>
+      read(`import { defineDomain } from 'domain-integrity';
+const maybe = true as boolean;
+export default defineDomain({ rules: { 'outside-mutation': { testFiles: maybe } } });
+`),
+    ).toThrow(`"rules['outside-mutation'].testFiles" must be true or false`);
+  });
+
+  it('rejects an unknown rule', () => {
+    expect(() => read(configSetting("rules: { 'no-such-rule': 'off' }"))).toThrow(ConfigError);
+  });
+});
+
+const SUPPRESSIONS = (entry: string): string => `import { defineDomain, suppress } from 'domain-integrity';
+import { Order } from './src/order';
+export default defineDomain({
+  suppressions: [${entry}],
+});
+`;
+
+describe('suppressions', () => {
+  it('reads the rule, class, member, reason and line', () => {
+    const [suppression] = read(SUPPRESSIONS("suppress(Order, { rule: 'terminal-state-leak', member: 'cancel', reason: 'Cancelling twice is harmless.' })")).declaration.suppressions;
+
+    expect({ ...suppression, target: suppression?.target.getName() }).toEqual({
+      rule: 'terminal-state-leak',
+      target: 'Order',
+      member: 'cancel',
+      reason: 'Cancelling twice is harmless.',
+      line: 4,
+    });
+  });
+
+  it('reads a suppression without a member', () => {
+    const [suppression] = read(SUPPRESSIONS("suppress(Order, { rule: 'unhandled-event', reason: 'R' })")).declaration.suppressions;
+
+    expect(suppression?.member).toBeUndefined();
+  });
+
+  it('rejects a blank reason', () => {
+    expect(() => read(SUPPRESSIONS("suppress(Order, { rule: 'unhandled-event', reason: '  ' })"))).toThrow(
+      'domain.config.ts:4 suppress(Order) needs a non-empty "reason".',
+    );
+  });
+
+  it('rejects an entry that is not a suppress call', () => {
+    expect(() => read(SUPPRESSIONS("{ kind: 'suppression', target: Order, spec: {} }"))).toThrow(
+      /each entry of "suppressions" must be a suppress\(\.\.\.\) call/,
+    );
   });
 });
 
