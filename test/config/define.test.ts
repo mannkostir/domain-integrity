@@ -20,6 +20,14 @@ class Ticket {
   }
 }
 
+class Unused {}
+
+class Order {
+  private onUnused(event: Unused): Unused {
+    return event;
+  }
+}
+
 describe('config helpers', () => {
   it('return the configuration they are given', () => {
     const declaration = lifecycle(Ticket, {
@@ -142,6 +150,10 @@ describe('rule and suppression config', () => {
 
   it('accept any field name for a field rule', () => {
     expect(suppress(Ticket, { rule: 'unreachable-state', member: 'status', reason: 'R' }).kind).toBe('suppression');
+  });
+
+  it('accept a private handler method for a handler rule', () => {
+    expect(suppress(Order, { rule: 'dead-handler', member: 'onUnused', reason: 'R' }).kind).toBe('suppression');
   });
 
   it('reject a member for a rule anchored on the class', () => {

@@ -20,6 +20,17 @@ const check = async (dir: string, args: readonly string[] = []) => {
 
 const project = (options: string, transitions = ''): string => writeProject({ ...TICKET_SOURCES, 'domain.config.ts': ticketConfig(options, transitions) });
 
+const PRIVATE_HANDLER_SOURCES = {
+  'src/aggregate-root.ts': 'export abstract class AggregateRoot {\n  protected register<E>(handler: (event: E) => void, event: new () => E): void {}\n}\n',
+  'src/events.ts': 'export class Unused {}\n',
+  'src/order.ts': "import { AggregateRoot } from './aggregate-root';\nimport { Unused } from './events';\nexport class Order extends AggregateRoot {\n  constructor() { super(); this.register(this.onUnused, Unused); }\n  private onUnused(e: Unused) {}\n}\n",
+};
+
+const orderConfig = (options: string): string => `import { defineDomain, suppress } from 'domain-integrity';
+import { Order } from './src/order';
+export default defineDomain({ ${options} });
+`;
+
 const RENAME_SUPPRESSION = "suppressions: [suppress(Ticket, { rule: 'terminal-state-leak', member: 'rename', reason: 'Titles may change.' })],";
 
 describe('rule config in check', () => {
@@ -39,6 +50,13 @@ describe('rule config in check', () => {
 
   it('exits 0 when the failing finding is suppressed', async () => {
     const { code, stdout } = await check(project(RENAME_SUPPRESSION));
+
+    expect({ code, counted: stdout.includes('1 suppressed in config') }).toEqual({ code: 0, counted: true });
+  });
+
+  it('exits 0 when a dead handler on a private method is suppressed', async () => {
+    const dir = writeProject({ ...PRIVATE_HANDLER_SOURCES, 'domain.config.ts': orderConfig("suppressions: [suppress(Order, { rule: 'dead-handler', member: 'onUnused', reason: 'Wired later.' })]") });
+    const { code, stdout } = await check(dir);
 
     expect({ code, counted: stdout.includes('1 suppressed in config') }).toEqual({ code: 0, counted: true });
   });

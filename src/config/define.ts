@@ -51,14 +51,14 @@ export type LifecycleDeclaration = {
 
 export type RuleLevel = 'off' | 'warning' | 'error';
 
-type MethodRule =
-  | 'terminal-state-leak'
-  | 'transition-drift'
-  | 'transition-missing'
+type MethodRule = 'terminal-state-leak' | 'transition-drift' | 'transition-missing';
+
+type MemberRule =
+  | 'unreachable-state'
+  | 'outside-mutation'
+  | 'undispatched-events'
   | 'dead-handler'
   | 'handler-payload-mismatch';
-
-type MemberRule = 'unreachable-state' | 'outside-mutation' | 'undispatched-events';
 
 type ClassRule = 'unhandled-event' | 'saga-missing-failure-path';
 
