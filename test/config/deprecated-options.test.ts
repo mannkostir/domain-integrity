@@ -23,6 +23,7 @@ describe('deprecated config options', () => {
     ['inertDecorators', 'Use inert.decorators.'],
     ['inertEventMethods', 'Use inert.raiseMethods.'],
     ['inertMembers', 'Use inert.members.'],
+    ['reportTestFileMutations', "Use rules['outside-mutation'].testFiles."],
   ])('marks %s deprecated', (option, replacement) => {
     expect(deprecationOf(option)).toBe(replacement);
   });

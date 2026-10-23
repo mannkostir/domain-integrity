@@ -1,4 +1,4 @@
-export { defineDomain, lifecycle, saga } from './config/define';
+export { defineDomain, lifecycle, saga, suppress } from './config/define';
 export type {
   AggregatesConfig,
   DomainConfig,
@@ -8,8 +8,15 @@ export type {
   InertConfig,
   LifecycleDeclaration,
   LifecycleSpec,
+  OutsideMutationSetting,
+  RuleLevel,
+  RuleName,
+  RuleSetting,
+  RulesConfig,
   SagaDeclaration,
   SagaSpec,
   StateToken,
+  SuppressionDeclaration,
+  SuppressionSpec,
   TransitionSpec,
 } from './config/define';
