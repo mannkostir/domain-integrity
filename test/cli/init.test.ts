@@ -93,8 +93,16 @@ const MIXED_BASE_PROJECT = {
   'domain.config.ts': ORDER_CONFIG,
 };
 
-const declaredBaseClasses = (dir: string): readonly string[] =>
-  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), join(dir, 'domain.config.ts'))).aggregateBaseClasses;
+const declarationIn = (dir: string) =>
+  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), join(dir, 'domain.config.ts'))).declaration;
+
+const declaredBaseClasses = (dir: string): readonly string[] => declarationIn(dir).aggregateBaseClasses;
+
+const initWithBaseClass = async (config: string | undefined): Promise<string> => {
+  const dir = writeProject(config === undefined ? MODEL_SOURCES : { ...MODEL_SOURCES, 'domain.config.ts': config });
+  await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+  return dir;
+};
 
 describe('init --base-class', () => {
   it('declares an aggregate extending the named base class', async () => {
@@ -109,9 +117,58 @@ describe('init --base-class', () => {
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
     expect({
-      text: readConfig(dir).includes("aggregateBaseClasses: ['Model']"),
+      text: readConfig(dir).includes("aggregates: { baseClasses: ['Model'] }"),
       declared: declaredBaseClasses(dir),
     }).toEqual({ text: true, declared: ['Model'] });
+  });
+
+  it('writes new base classes under aggregates', async () => {
+    const dir = await initWithBaseClass(undefined);
+
+    expect(readConfig(dir)).toContain("aggregates: { baseClasses: ['Model'] }");
+  });
+
+  it('adds base classes inside an existing aggregates group', async () => {
+    const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ aggregates: { auditFields: ['stamp'] }, lifecycles: [] });\n");
+
+    expect({
+      groups: readConfig(dir).split('aggregates:').length - 1,
+      baseClasses: declarationIn(dir).aggregateBaseClasses,
+      auditFields: declarationIn(dir).auditFields,
+    }).toEqual({ groups: 1, baseClasses: ['AggregateRoot', 'Entity', 'Model'], auditFields: ['stamp'] });
+  });
+
+  it('adds base classes inside an aggregates group whose key is quoted', async () => {
+    const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ 'aggregates': { auditFields: ['stamp'] }, lifecycles: [] });\n");
+
+    expect({
+      groups: readConfig(dir).split('aggregates').length - 1,
+      baseClasses: declarationIn(dir).aggregateBaseClasses,
+    }).toEqual({ groups: 1, baseClasses: ['AggregateRoot', 'Entity', 'Model'] });
+  });
+
+  it('appends to a quoted baseClasses key inside the aggregates group', async () => {
+    const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ aggregates: { 'baseClasses': ['Legacy'] }, lifecycles: [] });\n");
+
+    expect({
+      keys: readConfig(dir).split('baseClasses').length - 1,
+      baseClasses: declarationIn(dir).aggregateBaseClasses,
+    }).toEqual({ keys: 1, baseClasses: ['Legacy', 'Model'] });
+  });
+
+  it('appends to a quoted old base class key', async () => {
+    const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ 'aggregateBaseClasses': ['Legacy'], lifecycles: [] });\n");
+
+    expect({
+      keys: readConfig(dir).split('aggregateBaseClasses').length - 1,
+      baseClasses: declarationIn(dir).aggregateBaseClasses,
+    }).toEqual({ keys: 1, baseClasses: ['Legacy', 'Model'] });
+  });
+
+  it('appends to the old base class option when the config uses it', async () => {
+    const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ aggregateBaseClasses: ['Legacy'], lifecycles: [] });\n");
+
+    expect({ text: readConfig(dir).includes("aggregateBaseClasses: ['Legacy', 'Model']"), grouped: readConfig(dir).includes('aggregates:') }).toEqual({ text: true, grouped: false });
   });
 
   it('lets check find the leak of an aggregate discovered through the named base class', async () => {
@@ -185,7 +242,7 @@ describe('init --base-class', () => {
     });
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
-    expect(readConfig(dir)).toContain("\n    aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'],\n    lifecycles: [");
+    expect(readConfig(dir)).toContain("\n    aggregates: { baseClasses: ['AggregateRoot', 'Entity', 'Model'] },\n    lifecycles: [");
   });
 
   it('keeps the two-space indentation of an existing config when recording the base class', async () => {
@@ -195,7 +252,7 @@ describe('init --base-class', () => {
     });
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
-    expect(readConfig(dir)).toContain("\n  aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'],\n  lifecycles: [");
+    expect(readConfig(dir)).toContain("\n  aggregates: { baseClasses: ['AggregateRoot', 'Entity', 'Model'] },\n  lifecycles: [");
   });
 
   it('reports a type error of an existing config at the line the user wrote', async () => {
@@ -264,7 +321,7 @@ describe('init --base-class when nothing is declared', () => {
     await run(['init', '--yes', '--base-class', 'Model'], io);
 
     expect(stdout()).toBe(
-      "No state fields found in the discovered aggregates; nothing to declare.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregateBaseClasses: ['Model'] to defineDomain({...}) in domain.config.ts yourself.\n",
+      "No state fields found in the discovered aggregates; nothing to declare.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregates: { baseClasses: ['Model'] } to defineDomain({...}) in domain.config.ts yourself.\n",
     );
   });
 
@@ -274,7 +331,7 @@ describe('init --base-class when nothing is declared', () => {
     await run(['init', '--yes', '--base-class', 'Model'], io);
 
     expect(stdout()).toBe(
-      "All discovered aggregates are already declared.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Model'] to defineDomain({...}) in domain.config.ts yourself.\n",
+      "All discovered aggregates are already declared.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregates: { baseClasses: ['AggregateRoot', 'Entity', 'Model'] } to defineDomain({...}) in domain.config.ts yourself.\n",
     );
   });
 
@@ -284,7 +341,7 @@ describe('init --base-class when nothing is declared', () => {
     await run(['init', '--base-class', 'Model'], io);
 
     expect(stdout()).toMatch(
-      /Nothing declared\.\nNo config was written to domain\.config\.ts, so the --base-class names were not saved\. For check to find the same aggregates, add aggregateBaseClasses: \['Model'\] to defineDomain\(\{\.\.\.\}\) in domain\.config\.ts yourself\.\n$/,
+      /Nothing declared\.\nNo config was written to domain\.config\.ts, so the --base-class names were not saved\. For check to find the same aggregates, add aggregates: \{ baseClasses: \['Model'\] \} to defineDomain\(\{\.\.\.\}\) in domain\.config\.ts yourself\.\n$/,
     );
   });
 
@@ -388,7 +445,7 @@ describe('init', () => {
     const dir = writeProject(TICKET_SOURCES);
     await run(['init', '--yes'], captureIo(dir).io);
     const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'));
-    const declaration = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts')));
+    const { declaration } = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts')));
 
     expect(declaration.lifecycles.map((lifecycle) => lifecycle.target.getName())).toEqual(['Ticket']);
   });

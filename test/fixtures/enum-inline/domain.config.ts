@@ -9,9 +9,9 @@ export default defineDomain({
         status: {
           terminal: [OrderStatus.cancelled],
           transitions: {
-            confirm: [OrderStatus.pending],
-            place: [OrderStatus.paid],
-            cancel: [OrderStatus.pending, OrderStatus.confirmed],
+            confirm: { from: [OrderStatus.pending] },
+            place: { from: [OrderStatus.paid] },
+            cancel: { from: [OrderStatus.pending, OrderStatus.confirmed] },
           },
         },
       },

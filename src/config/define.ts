@@ -6,12 +6,26 @@ export type SagaSpec = { readonly outcomes: readonly (readonly [EventClass, Even
 
 export type SagaDeclaration = { readonly kind: 'saga'; readonly target: object; readonly spec: SagaSpec };
 
+export type AggregatesConfig = {
+  readonly baseClasses?: readonly string[];
+  readonly auditFields?: readonly string[];
+};
+
 export type EventsConfig = {
+  readonly raiseMethods?: readonly string[];
   readonly handlerDecorators?: readonly string[];
   readonly registerMethods?: readonly string[];
   readonly inProcess?: readonly EventClass[];
   readonly sagas?: readonly SagaDeclaration[];
 };
+
+export type InertConfig = {
+  readonly decorators?: readonly string[];
+  readonly members?: readonly string[];
+  readonly raiseMethods?: readonly string[];
+};
+
+export type TransitionSpec = { readonly from: readonly StateToken[] };
 
 type MethodName<T> = {
   [K in keyof T]: T[K] extends (...args: never[]) => unknown ? K : never;
@@ -20,7 +34,7 @@ type MethodName<T> = {
 
 export type FieldSpec<T> = {
   readonly terminal: StateToken | readonly StateToken[];
-  readonly transitions?: Partial<Record<MethodName<T>, readonly StateToken[]>>;
+  readonly transitions?: Partial<Record<MethodName<T>, TransitionSpec | readonly StateToken[]>>;
   readonly allowAfterTerminal?: readonly MethodName<T>[];
 };
 
@@ -36,15 +50,23 @@ export type LifecycleDeclaration = {
 };
 
 export type DomainConfig = {
-  readonly aggregateBaseClasses?: readonly string[];
-  readonly auditFields?: readonly string[];
-  readonly eventMethods?: readonly string[];
-  readonly events?: EventsConfig;
-  readonly inertDecorators?: readonly string[];
-  readonly inertEventMethods?: readonly string[];
-  readonly inertMembers?: readonly string[];
+  readonly aggregates?: AggregatesConfig;
   readonly lifecycles?: readonly LifecycleDeclaration[];
+  readonly events?: EventsConfig;
+  readonly inert?: InertConfig;
   readonly reportTestFileMutations?: boolean;
+  /** @deprecated Use aggregates.baseClasses. */
+  readonly aggregateBaseClasses?: readonly string[];
+  /** @deprecated Use aggregates.auditFields. */
+  readonly auditFields?: readonly string[];
+  /** @deprecated Use events.raiseMethods. */
+  readonly eventMethods?: readonly string[];
+  /** @deprecated Use inert.decorators. */
+  readonly inertDecorators?: readonly string[];
+  /** @deprecated Use inert.raiseMethods. */
+  readonly inertEventMethods?: readonly string[];
+  /** @deprecated Use inert.members. */
+  readonly inertMembers?: readonly string[];
 };
 
 export const lifecycle = <T extends object>(

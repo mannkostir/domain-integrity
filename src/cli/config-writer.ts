@@ -67,6 +67,27 @@ const appendMissingNames = (array: ArrayLiteralExpression, names: readonly strin
     .forEach((name) => array.addElement(quoted(name)));
 };
 
+const arrayInitializer = (property: Node | undefined, option: string): ArrayLiteralExpression | undefined => {
+  if (property === undefined) return undefined;
+  const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError(`"${option}" in domain.config.ts must be an array literal.`);
+  return array;
+};
+
+const propertyNamed = (object: ObjectLiteralExpression, name: string): Node | undefined =>
+  object.getProperties().find((property) => {
+    const nameNode = Node.isPropertyAssignment(property) ? property.getNameNode() : undefined;
+    return Node.isStringLiteral(nameNode) ? nameNode.getLiteralText() === name : nameNode?.getText() === name;
+  });
+
+const aggregatesGroup = (config: ObjectLiteralExpression): ObjectLiteralExpression | undefined => {
+  const property = propertyNamed(config, 'aggregates');
+  if (property === undefined) return undefined;
+  const group = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+  if (!Node.isObjectLiteralExpression(group)) throw new ConfigError('"aggregates" in domain.config.ts must be an object literal.');
+  return group;
+};
+
 export const recordBaseClasses = (
   file: SourceFile,
   names: readonly string[],
@@ -74,19 +95,17 @@ export const recordBaseClasses = (
 ): void => {
   useIndentationOf(file);
   const config = configObject(file);
-  const property = config.getProperty('aggregateBaseClasses');
-  if (property === undefined) {
-    config.insertPropertyAssignment(0, {
-      name: 'aggregateBaseClasses',
-      initializer: `[${uniqueNames([...implicitBaseClasses, ...names]).map(quoted).join(', ')}]`,
-    });
+  const group = aggregatesGroup(config);
+  const listed =
+    arrayInitializer(group === undefined ? undefined : propertyNamed(group, 'baseClasses'), 'aggregates.baseClasses') ??
+    arrayInitializer(propertyNamed(config, 'aggregateBaseClasses'), 'aggregateBaseClasses');
+  if (listed !== undefined) {
+    appendMissingNames(listed, names);
     return;
   }
-  const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-  if (!Node.isArrayLiteralExpression(array)) {
-    throw new ConfigError('"aggregateBaseClasses" in domain.config.ts must be an array literal.');
-  }
-  appendMissingNames(array, names);
+  const baseClasses = `[${uniqueNames([...implicitBaseClasses, ...names]).map(quoted).join(', ')}]`;
+  if (group !== undefined) group.insertPropertyAssignment(0, { name: 'baseClasses', initializer: baseClasses });
+  else config.insertPropertyAssignment(0, { name: 'aggregates', initializer: `{ baseClasses: ${baseClasses} }` });
 };
 
 const bindsName = (declaration: ImportDeclaration, name: string): boolean =>

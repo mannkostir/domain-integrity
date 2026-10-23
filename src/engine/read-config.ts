@@ -10,14 +10,16 @@ import {
   ts,
 } from 'ts-morph';
 import {
+  ConfigReading,
   DEFAULT_DECLARATION,
   DeclaredEvents,
   DeclaredField,
   DeclaredLifecycle,
   DeclaredSaga,
-  DomainDeclaration,
+  Deprecation,
 } from './declaration';
 import { ConfigError } from './errors';
+import { OptionPath, RENAMED_OPTIONS, RenamedOption, optionPath } from './renamed-options';
 import { SET, UNSET, literalToken } from './value-token';
 
 const unsupported = (node: Node, what: string): ConfigError =>
@@ -95,6 +97,44 @@ const subsetOf = (names: readonly string[], allowed: readonly string[], option: 
   return names;
 };
 
+type Read<T> = { readonly value: T; readonly deprecations: readonly Deprecation[] };
+
+type Located = { readonly expression: Expression | undefined; readonly deprecations: readonly Deprecation[] };
+
+const valueAt = (object: ObjectLiteralExpression, [name, ...rest]: OptionPath, parent: OptionPath = []): Expression | undefined => {
+  if (name === undefined) return undefined;
+  const value = valueOf(object, name);
+  if (value === undefined || rest.length === 0) return value;
+  const path = [...parent, name];
+  if (!Node.isObjectLiteralExpression(value)) throw unsupported(value, `"${optionPath(path)}" must be an object literal`);
+  return valueAt(value, rest, path);
+};
+
+const propertyLine = (value: Expression): number => value.getParentOrThrow().getStartLineNumber();
+
+const conflict = (old: Expression, current: Expression, option: RenamedOption): ConfigError =>
+  new ConfigError(
+    `domain.config.ts:${propertyLine(old)} sets "${optionPath(option.old)}" and domain.config.ts:${propertyLine(current)} sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`,
+  );
+
+const renamedValue = (config: ObjectLiteralExpression, option: RenamedOption): Located => {
+  const current = valueAt(config, option.current);
+  const old = valueAt(config, option.old);
+  if (old === undefined) return { expression: current, deprecations: [] };
+  if (current !== undefined) throw conflict(old, current, option);
+  return {
+    expression: old,
+    deprecations: [{ line: propertyLine(old), old: optionPath(option.old), replacement: optionPath(option.current) }],
+  };
+};
+
+type ListOption = keyof typeof RENAMED_OPTIONS;
+
+const listOption = (config: ObjectLiteralExpression, name: ListOption): Read<readonly string[]> => {
+  const { expression, deprecations } = renamedValue(config, RENAMED_OPTIONS[name]);
+  return { value: stringList(expression, DEFAULT_DECLARATION[name]), deprecations };
+};
+
 const valueToken = (expression: Expression): string => {
   if (Node.isStringLiteral(expression) && [SET, UNSET].includes(expression.getLiteralText())) {
     return expression.getLiteralText();
@@ -107,22 +147,46 @@ const valueToken = (expression: Expression): string => {
 const tokens = (expression: Expression): readonly string[] =>
   Node.isArrayLiteralExpression(expression) ? expression.getElements().map(valueToken) : [valueToken(expression)];
 
-const readTransitions = (expression: Expression): ReadonlyMap<string, readonly string[]> => {
-  if (!Node.isObjectLiteralExpression(expression)) throw unsupported(expression, '"transitions" must be an object literal');
-  return new Map(properties(expression).map((property) => [propertyName(property), tokens(property.getInitializerOrThrow())]));
+const transitionSources = (method: PropertyAssignment): Read<readonly string[]> => {
+  const spec = method.getInitializerOrThrow();
+  const name = propertyName(method);
+  if (!Node.isObjectLiteralExpression(spec)) {
+    return {
+      value: tokens(spec),
+      deprecations: [
+        { line: method.getStartLineNumber(), old: `transitions.${name}: [...]`, replacement: `transitions.${name}: { from: [...] }` },
+      ],
+    };
+  }
+  const from = valueOf(spec, 'from');
+  if (from === undefined) throw unsupported(spec, `transitions.${name} needs "from"`);
+  return { value: tokens(from), deprecations: [] };
 };
 
-const readField = (field: PropertyAssignment): DeclaredField => {
+const readTransitions = (expression: Expression): Read<ReadonlyMap<string, readonly string[]>> => {
+  if (!Node.isObjectLiteralExpression(expression)) throw unsupported(expression, '"transitions" must be an object literal');
+  const methods = properties(expression).map((property) => ({ name: propertyName(property), sources: transitionSources(property) }));
+  return {
+    value: new Map(methods.map(({ name, sources }) => [name, sources.value])),
+    deprecations: methods.flatMap(({ sources }) => sources.deprecations),
+  };
+};
+
+const readField = (field: PropertyAssignment): Read<DeclaredField> => {
   const spec = field.getInitializerOrThrow();
   if (!Node.isObjectLiteralExpression(spec)) throw unsupported(spec, 'a state field spec must be an object literal');
   const terminal = valueOf(spec, 'terminal');
   if (terminal === undefined) throw unsupported(spec, `state field "${propertyName(field)}" needs "terminal"`);
   const transitions = valueOf(spec, 'transitions');
+  const read = transitions === undefined ? undefined : readTransitions(transitions);
   return {
-    name: propertyName(field),
-    terminal: tokens(terminal),
-    transitions: transitions === undefined ? undefined : readTransitions(transitions),
-    allowAfterTerminal: stringList(valueOf(spec, 'allowAfterTerminal'), []),
+    value: {
+      name: propertyName(field),
+      terminal: tokens(terminal),
+      transitions: read?.value,
+      allowAfterTerminal: stringList(valueOf(spec, 'allowAfterTerminal'), []),
+    },
+    deprecations: read?.deprecations ?? [],
   };
 };
 
@@ -137,16 +201,20 @@ const targetClass = (call: CallExpression): ClassDeclaration => {
   return declaration;
 };
 
-const readLifecycle = (element: Expression): DeclaredLifecycle => {
+const readLifecycle = (element: Expression): Read<DeclaredLifecycle> => {
   const call = callNamed(element, 'lifecycle');
   if (!call) throw unsupported(element, 'each entry of "lifecycles" must be a lifecycle(...) call');
   const spec = objectArgument(call, 1);
   const states = valueOf(spec, 'states');
   if (!Node.isObjectLiteralExpression(states)) throw unsupported(spec, '"states" must be an object literal');
+  const fields = properties(states).map(readField);
   return {
-    target: targetClass(call),
-    fields: properties(states).map(readField),
-    allowAfterTerminal: stringList(valueOf(spec, 'allowAfterTerminal'), []),
+    value: {
+      target: targetClass(call),
+      fields: fields.map((field) => field.value),
+      allowAfterTerminal: stringList(valueOf(spec, 'allowAfterTerminal'), []),
+    },
+    deprecations: fields.flatMap((field) => field.deprecations),
   };
 };
 
@@ -187,46 +255,56 @@ const readSaga = (element: Expression): DeclaredSaga => {
   return { target, outcomes: arrayElements(outcomes).map(readOutcome(target.getName() ?? 'anonymous')) };
 };
 
-const readEvents = (expression: Expression | undefined): DeclaredEvents => {
+const readEvents = (config: ObjectLiteralExpression): DeclaredEvents => {
   const defaults = DEFAULT_DECLARATION.events;
-  if (expression === undefined) return defaults;
-  if (!Node.isObjectLiteralExpression(expression)) throw unsupported(expression, '"events" must be an object literal');
-  const inProcess = valueOf(expression, 'inProcess');
-  const sagas = valueOf(expression, 'sagas');
+  const inProcess = valueAt(config, ['events', 'inProcess']);
+  const sagas = valueAt(config, ['events', 'sagas']);
   return {
-    handlerDecorators: stringList(valueOf(expression, 'handlerDecorators'), defaults.handlerDecorators),
-    registerMethods: stringList(valueOf(expression, 'registerMethods'), defaults.registerMethods),
+    handlerDecorators: stringList(valueAt(config, ['events', 'handlerDecorators']), defaults.handlerDecorators),
+    registerMethods: stringList(valueAt(config, ['events', 'registerMethods']), defaults.registerMethods),
     inProcess: inProcess === undefined ? [] : arrayElements(inProcess).map((element) => projectClass(element, 'each entry of "events.inProcess"')),
     sagas: sagas === undefined ? [] : arrayElements(sagas).map(readSaga),
   };
 };
 
-export const readDeclaration = (file: SourceFile): DomainDeclaration => {
+const byLine = (left: Deprecation, right: Deprecation): number => left.line - right.line;
+
+export const readDeclaration = (file: SourceFile): ConfigReading => {
   assertNoTypeErrors(file);
   const exported = file.getExportAssignment((assignment) => !assignment.isExportEquals());
   const call = callNamed(exported?.getExpression(), 'defineDomain');
   if (!call) throw new ConfigError('domain.config.ts must "export default defineDomain({...})".');
   const config = objectArgument(call, 0);
   const lifecycles = valueOf(config, 'lifecycles');
-  const eventMethods = stringList(valueOf(config, 'eventMethods'), DEFAULT_DECLARATION.eventMethods);
+  const declaredLifecycles = lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle);
+  const aggregateBaseClasses = listOption(config, 'aggregateBaseClasses');
+  const auditFields = listOption(config, 'auditFields');
+  const eventMethods = listOption(config, 'eventMethods');
+  const inertDecorators = listOption(config, 'inertDecorators');
+  const inertEventMethods = listOption(config, 'inertEventMethods');
+  const inertMembers = listOption(config, 'inertMembers');
+  const reads = [aggregateBaseClasses, auditFields, eventMethods, inertDecorators, inertEventMethods, inertMembers, ...declaredLifecycles];
   return {
-    aggregateBaseClasses: stringList(valueOf(config, 'aggregateBaseClasses'), DEFAULT_DECLARATION.aggregateBaseClasses),
-    auditFields: stringList(valueOf(config, 'auditFields'), DEFAULT_DECLARATION.auditFields),
-    eventMethods,
-    inertDecorators: stringList(valueOf(config, 'inertDecorators'), DEFAULT_DECLARATION.inertDecorators),
-    inertEventMethods: subsetOf(
-      stringList(valueOf(config, 'inertEventMethods'), DEFAULT_DECLARATION.inertEventMethods),
-      eventMethods,
-      'inertEventMethods',
-      'eventMethods',
-    ),
-    inertMembers: stringList(valueOf(config, 'inertMembers'), DEFAULT_DECLARATION.inertMembers),
-    lifecycles: lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle),
-    reportTestFileMutations: booleanLiteral(
-      valueOf(config, 'reportTestFileMutations'),
-      'reportTestFileMutations',
-      DEFAULT_DECLARATION.reportTestFileMutations,
-    ),
-    events: readEvents(valueOf(config, 'events')),
+    declaration: {
+      aggregateBaseClasses: aggregateBaseClasses.value,
+      auditFields: auditFields.value,
+      eventMethods: eventMethods.value,
+      inertDecorators: inertDecorators.value,
+      inertEventMethods: subsetOf(
+        inertEventMethods.value,
+        eventMethods.value,
+        optionPath(RENAMED_OPTIONS.inertEventMethods.current),
+        optionPath(RENAMED_OPTIONS.eventMethods.current),
+      ),
+      inertMembers: inertMembers.value,
+      lifecycles: declaredLifecycles.map((read) => read.value),
+      reportTestFileMutations: booleanLiteral(
+        valueOf(config, 'reportTestFileMutations'),
+        'reportTestFileMutations',
+        DEFAULT_DECLARATION.reportTestFileMutations,
+      ),
+      events: readEvents(config),
+    },
+    deprecations: reads.flatMap((read) => read.deprecations).sort(byLine),
   };
 };

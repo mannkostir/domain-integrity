@@ -48,3 +48,7 @@ export const DEFAULT_DECLARATION: DomainDeclaration = {
   reportTestFileMutations: false,
   events: { handlerDecorators: ['EventsHandler', 'OnEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
 };
+
+export type Deprecation = { readonly line: number; readonly old: string; readonly replacement: string };
+
+export type ConfigReading = { readonly declaration: DomainDeclaration; readonly deprecations: readonly Deprecation[] };

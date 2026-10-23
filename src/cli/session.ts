@@ -5,6 +5,8 @@ import { Problem } from '../finding';
 import { ProjectError } from '../engine/errors';
 import { analysedSourceFiles, configSourceFile, loadProject, loadedSourceFiles } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
+import { toPosixRelative } from '../engine/path';
+import { reportDeprecations } from './deprecations';
 import { Io, Paths } from './io';
 
 export type Session =
@@ -17,7 +19,7 @@ const searchedBaseClasses = (declaration: DomainDeclaration): string =>
   `Searched for classes extending or implementing: ${declaration.aggregateBaseClasses.join(', ')}.`;
 
 const SET_BASE_CLASSES =
-  'Set "aggregateBaseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregateBaseClasses: [\'MyAggregateBase\'] })';
+  'Set "aggregates.baseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregates: { baseClasses: [\'MyAggregateBase\'] } })';
 
 const NO_HANDLERS = 'No event handlers were found either.';
 
@@ -49,10 +51,11 @@ export const runScope = (scopes: readonly CheckScope[]): CheckScope => {
   return scopes.includes('nothing-declared') ? 'nothing-declared' : 'nothing-found';
 };
 
-export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[]): Session => {
+export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[], io: Io): Session => {
   const project = loadProject(paths.tsconfig, paths.config);
   const configFile = configSourceFile(project, paths.config);
-  const declaration = readDeclaration(configFile);
+  const { declaration, deprecations } = readDeclaration(configFile);
+  reportDeprecations(deprecations, toPosixRelative(io.cwd, paths.config), io);
   const files = analysedSourceFiles(project, configFile);
   const results = runAnalyzers({ declaration, files, projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile }, analyzers);
   const scope = runScope(results.map((result) => result.scope));

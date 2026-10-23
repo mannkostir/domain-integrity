@@ -193,17 +193,17 @@ const configSource = () => {
   const signalImport = events > 0 ? [`import { ${range(events).map((index) => `Signal${index}`).join(', ')} } from './src/signals/signals';`] : [];
   const lifecycles = range(aggregates).filter(isDeclared).map(
     (index) =>
-      `    lifecycle(${aggregateName(index)}, { states: { status: { terminal: ['closed'], transitions: { activate: ['draft'], suspend: ['active'], resume: ['suspended'], close: ['draft', 'active', 'suspended'] } } } }),`,
+      `    lifecycle(${aggregateName(index)}, { states: { status: { terminal: ['closed'], transitions: { activate: { from: ['draft'] }, suspend: { from: ['active'] }, resume: { from: ['suspended'] }, close: { from: ['draft', 'active', 'suspended'] } } } } }),`,
   );
-  const inProcess = events > 0 ? `\n  events: { inProcess: [${range(events).map((index) => `Signal${index}`).join(', ')}] },` : '';
+  const inProcess = events > 0 ? `, inProcess: [${range(events).map((index) => `Signal${index}`).join(', ')}]` : '';
   return `import { defineDomain, lifecycle } from 'domain-integrity';
 ${[...imports, ...signalImport].join('\n')}
 
 export default defineDomain({
-  eventMethods: ['addEvent'],
+  events: { raiseMethods: ['addEvent']${inProcess} },
   lifecycles: [
 ${lifecycles.join('\n')}
-  ],${inProcess}
+  ],
 });
 `;
 };
