@@ -19,7 +19,7 @@ const searchedBaseClasses = (declaration: DomainDeclaration): string =>
   `Searched for classes extending or implementing: ${declaration.aggregateBaseClasses.join(', ')}.`;
 
 const SET_BASE_CLASSES =
-  'Set "aggregateBaseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregateBaseClasses: [\'MyAggregateBase\'] })';
+  'Set "aggregates.baseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregates: { baseClasses: [\'MyAggregateBase\'] } })';
 
 const NO_HANDLERS = 'No event handlers were found either.';
 

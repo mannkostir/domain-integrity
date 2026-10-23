@@ -65,6 +65,12 @@ describe('a config that uses old option names', () => {
     expect(stderr.split(EVENT_METHODS_WARNING).length - 1).toBe(1);
   });
 
+  it('warns once at the original line when init also records a base class', async () => {
+    const { stderr } = await runIn({ ...TICKET_SOURCES, 'domain.config.ts': OLD_CONFIG }, ['init', '--yes', '--base-class', 'Model']);
+
+    expect(stderr.split(EVENT_METHODS_WARNING).length - 1).toBe(1);
+  });
+
   it('still warns when no aggregates are found', async () => {
     const emptyConfig = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({\n  lifecycles: [],\n  eventMethods: ['addEvent'],\n});\n";
     const { code, stderr } = await runIn({ 'src/empty.ts': 'export const nothing = 1;\n', 'domain.config.ts': emptyConfig }, ['check']);

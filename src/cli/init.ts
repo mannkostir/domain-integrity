@@ -67,7 +67,7 @@ const writeLifecycles = async (
 };
 
 const unsavedBaseClassesNote = (configPath: string, baseClasses: readonly string[]): string =>
-  `No config was written to ${configPath}, so the --base-class names were not saved. For check to find the same aggregates, add aggregateBaseClasses: [${baseClasses.map((name) => `'${name}'`).join(', ')}] to defineDomain({...}) in ${configPath} yourself.\n`;
+  `No config was written to ${configPath}, so the --base-class names were not saved. For check to find the same aggregates, add aggregates: { baseClasses: [${baseClasses.map((name) => `'${name}'`).join(', ')}] } to defineDomain({...}) in ${configPath} yourself.\n`;
 
 const nothingWrittenMessage = (reason: string, options: InitOptions, configPath: string, declaration: DomainDeclaration): string =>
   options.baseClass === undefined
