@@ -20,7 +20,7 @@ const isEmptyArrayLiteral = (node: Node | undefined): boolean => {
 const isPrivateField = (property: PropertyDeclaration): boolean =>
   property.hasModifier(SyntaxKind.PrivateKeyword) || Node.isPrivateIdentifier(property.getNameNode());
 
-const isPlainDeclaration = (property: PropertyDeclaration): boolean => {
+export const isPlainDeclaration = (property: PropertyDeclaration): boolean => {
   const initializer = property.getInitializer();
   return (
     !isLibraryNode(property) &&
@@ -57,7 +57,7 @@ const bracketName = (property: PropertyDeclaration): string | undefined => {
   return Node.isStringLiteral(name) ? name.getLiteralText() : undefined;
 };
 
-const isBracketWrittenIn = (property: PropertyDeclaration, writes: BracketWrites): boolean => {
+export const isBracketWrittenIn = (property: PropertyDeclaration, writes: BracketWrites): boolean => {
   const name = bracketName(property);
   return name !== undefined && writes.of(name).some((target) => !isResetToEmpty(target));
 };

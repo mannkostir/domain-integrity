@@ -59,6 +59,7 @@ export type AggregateScope = {
   readonly inertMembers: ReadonlySet<string>;
   readonly leaksThis: boolean;
   readonly plainEventArrays: ReadonlySet<Node>;
+  readonly eventBuffers: ReadonlySet<Node>;
 };
 
 type MemberLookup =

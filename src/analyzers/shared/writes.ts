@@ -62,7 +62,7 @@ const isAssignAccess = (callee: Node): boolean =>
   (Node.isPropertyAccessExpression(callee) && callee.getName() === 'assign') ||
   (Node.isElementAccessExpression(callee) && isAssignKey(callee.getArgumentExpression()));
 
-const isAssignOntoThis = (node: Node): boolean => {
+export const isAssignOntoThis = (node: Node): boolean => {
   if (!Node.isCallExpression(node)) return false;
   const [target] = node.getArguments();
   return isAssignAccess(unwrap(node.getExpression())) && target !== undefined && Node.isThisExpression(unwrap(target));
@@ -71,7 +71,7 @@ const isAssignOntoThis = (node: Node): boolean => {
 const isLiteralKey = (key: Node | undefined): boolean =>
   Node.isStringLiteral(key) || Node.isNumericLiteral(key) || Node.isNoSubstitutionTemplateLiteral(key);
 
-const isComputedWriteOnThis = (node: Node): boolean =>
+export const isComputedWriteOnThis = (node: Node): boolean =>
   Node.isElementAccessExpression(node) &&
   Node.isThisExpression(unwrap(node.getExpression())) &&
   !isLiteralKey(node.getArgumentExpression()) &&
