@@ -33,6 +33,17 @@ export default defineDomain({ ${options} });
 
 const RENAME_SUPPRESSION = "suppressions: [suppress(Ticket, { rule: 'terminal-state-leak', member: 'rename', reason: 'Titles may change.' })],";
 
+const RENAME_AND_STALE_SUPPRESSIONS =
+  "suppressions: [suppress(Ticket, { rule: 'terminal-state-leak', member: 'rename', reason: 'Titles may change.' }), suppress(Ticket, { rule: 'terminal-state-leak', member: 'close', reason: 'R' })],";
+
+const MISSING_FIELD_CONFIG = `import { defineDomain, lifecycle, suppress } from 'domain-integrity';
+import { Ticket, TicketStatus } from './src/ticket';
+export default defineDomain({
+  lifecycles: [lifecycle(Ticket, { states: { status: { terminal: [TicketStatus.closed] }, phase: { terminal: ['DONE'] } } })],
+  suppressions: [suppress(Ticket, { rule: 'terminal-state-leak', member: 'close', reason: 'R' })],
+});
+`;
+
 describe('rule config in check', () => {
   it('exits 0 when the only failing rule is off', async () => {
     expect((await check(project("rules: { 'terminal-state-leak': 'off' },"))).code).toBe(0);
@@ -65,6 +76,19 @@ describe('rule config in check', () => {
     const { stdout } = await check(project("suppressions: [suppress(Ticket, { rule: 'terminal-state-leak', member: 'close', reason: 'R' })],"));
 
     expect(stdout).toContain('  domain.config.ts:5 terminal-state-leak Ticket.close');
+  });
+
+  it('exits 0 when the only suppression left over is stale', async () => {
+    const { code, stdout } = await check(project(RENAME_AND_STALE_SUPPRESSIONS));
+
+    expect({ code, stale: stdout.includes('1 stale suppression, matching no finding:') }).toEqual({ code: 0, stale: true });
+  });
+
+  it('withholds stale suppressions when the run has a problem', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': MISSING_FIELD_CONFIG });
+    const { code, stdout } = await check(dir);
+
+    expect({ code, stale: stdout.includes('stale suppression') }).toEqual({ code: 2, stale: false });
   });
 
   it('leaves suppressed findings out of the baseline', async () => {
