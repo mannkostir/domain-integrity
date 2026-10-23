@@ -37,7 +37,7 @@ const buildProgram = (io: Io, outcome: { exitCode: number }, analyzers: readonly
     .option('--format <format>', 'text, json or sarif', 'text')
     .option('--baseline <path>', 'treat findings in this baseline file as known (default: domain-integrity.baseline.json, when it exists)')
     .option('--update-baseline', 'write the current findings to the baseline file')
-    .option('--show-known', 'list findings already in the baseline in the text output')
+    .option('--show-known', 'list findings accepted by the baseline or suppressed in the config in the text output')
     .action((options: CheckOptions & CommonOptions) => {
       outcome.exitCode = checkCommand(pathsFrom(options, io), options, io, analyzers);
     });
