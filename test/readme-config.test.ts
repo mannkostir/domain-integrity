@@ -16,3 +16,11 @@ describe('README migration table', () => {
     expect(MIGRATION).toContain('| `transitions.<method>: [...]` | `transitions.<method>: { from: [...] }` |');
   });
 });
+
+describe('README rules section', () => {
+  const RULES = README.slice(README.indexOf('## Rules and suppressions'));
+
+  it.each(['off', 'warning', 'error', 'testFiles', 'suppress(', 'reason', 'stale suppression'])('mentions %s', (term) => {
+    expect(RULES).toContain(term);
+  });
+});

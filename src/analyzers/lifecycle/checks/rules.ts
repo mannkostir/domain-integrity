@@ -26,7 +26,7 @@ export const OUTSIDE_MUTATION: RuleDescription<'outside-mutation'> = {
   severity: 'error',
   description: 'Aggregate state is assigned outside the aggregate.',
   explanation:
-    "A state field is assigned from code outside the aggregate, such as a service, mapper or specification, so the aggregate's guards and transitions are bypassed. A write through the aggregate's own setter is not reported, and neither are assignments in test files unless reportTestFileMutations is true.",
+    "A state field is assigned from code outside the aggregate, such as a service, mapper or specification, so the aggregate's guards and transitions are bypassed. A write through the aggregate's own setter is not reported, and neither are assignments in test files unless rules['outside-mutation'].testFiles is true.",
   remedy:
     'Move the change into a method on the aggregate so its guards apply, and call that method instead. Accept the finding into the baseline only if the assignment honestly has to stay where it is, such as a persistence mapper that rebuilds a stored aggregate.',
 };
