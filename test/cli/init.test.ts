@@ -138,6 +138,33 @@ describe('init --base-class', () => {
     }).toEqual({ groups: 1, baseClasses: ['AggregateRoot', 'Entity', 'Model'], auditFields: ['stamp'] });
   });
 
+  it('adds base classes inside an aggregates group whose key is quoted', async () => {
+    const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ 'aggregates': { auditFields: ['stamp'] }, lifecycles: [] });\n");
+
+    expect({
+      groups: readConfig(dir).split('aggregates').length - 1,
+      baseClasses: declarationIn(dir).aggregateBaseClasses,
+    }).toEqual({ groups: 1, baseClasses: ['AggregateRoot', 'Entity', 'Model'] });
+  });
+
+  it('appends to a quoted baseClasses key inside the aggregates group', async () => {
+    const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ aggregates: { 'baseClasses': ['Legacy'] }, lifecycles: [] });\n");
+
+    expect({
+      keys: readConfig(dir).split('baseClasses').length - 1,
+      baseClasses: declarationIn(dir).aggregateBaseClasses,
+    }).toEqual({ keys: 1, baseClasses: ['Legacy', 'Model'] });
+  });
+
+  it('appends to a quoted old base class key', async () => {
+    const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ 'aggregateBaseClasses': ['Legacy'], lifecycles: [] });\n");
+
+    expect({
+      keys: readConfig(dir).split('aggregateBaseClasses').length - 1,
+      baseClasses: declarationIn(dir).aggregateBaseClasses,
+    }).toEqual({ keys: 1, baseClasses: ['Legacy', 'Model'] });
+  });
+
   it('appends to the old base class option when the config uses it', async () => {
     const dir = await initWithBaseClass("import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ aggregateBaseClasses: ['Legacy'], lifecycles: [] });\n");
 

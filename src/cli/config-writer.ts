@@ -74,8 +74,14 @@ const arrayInitializer = (property: Node | undefined, option: string): ArrayLite
   return array;
 };
 
+const propertyNamed = (object: ObjectLiteralExpression, name: string): Node | undefined =>
+  object.getProperties().find((property) => {
+    const nameNode = Node.isPropertyAssignment(property) ? property.getNameNode() : undefined;
+    return Node.isStringLiteral(nameNode) ? nameNode.getLiteralText() === name : nameNode?.getText() === name;
+  });
+
 const aggregatesGroup = (config: ObjectLiteralExpression): ObjectLiteralExpression | undefined => {
-  const property = config.getProperty('aggregates');
+  const property = propertyNamed(config, 'aggregates');
   if (property === undefined) return undefined;
   const group = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
   if (!Node.isObjectLiteralExpression(group)) throw new ConfigError('"aggregates" in domain.config.ts must be an object literal.');
@@ -91,8 +97,8 @@ export const recordBaseClasses = (
   const config = configObject(file);
   const group = aggregatesGroup(config);
   const listed =
-    arrayInitializer(group?.getProperty('baseClasses'), 'aggregates.baseClasses') ??
-    arrayInitializer(config.getProperty('aggregateBaseClasses'), 'aggregateBaseClasses');
+    arrayInitializer(group === undefined ? undefined : propertyNamed(group, 'baseClasses'), 'aggregates.baseClasses') ??
+    arrayInitializer(propertyNamed(config, 'aggregateBaseClasses'), 'aggregateBaseClasses');
   if (listed !== undefined) {
     appendMissingNames(listed, names);
     return;
