@@ -6,6 +6,7 @@ import { ProjectError, UsageError } from '../engine/errors';
 import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
 import { addLifecycles, openConfig, recordBaseClasses } from './config-writer';
+import { reportDeprecations } from './deprecations';
 import { initRetryCommand, noAggregatesForInitMessage } from './init-retry';
 import { Io, Paths } from './io';
 import { moduleSpecifiers } from './module-specifier';
@@ -47,20 +48,14 @@ const assertIdentifiers = (names: readonly string[]): void => {
 const existingConfig = (project: Project, configPath: string): SourceFile | undefined =>
   project.getFileSystem().fileExistsSync(configPath) ? configSourceFile(project, configPath) : undefined;
 
-const validated = (config: SourceFile | undefined): SourceFile | undefined => {
-  if (config !== undefined) readDeclaration(config);
-  return config;
-};
-
-const configWithBaseClasses = (project: Project, configPath: string, names: readonly string[]): SourceFile => {
-  const existing = validated(existingConfig(project, configPath));
+const configWithBaseClasses = (project: Project, configPath: string, existing: SourceFile | undefined, names: readonly string[]): SourceFile => {
   const config = existing ?? openConfig(project, configPath);
   recordBaseClasses(config, names, existing === undefined ? [] : DEFAULT_DECLARATION.aggregateBaseClasses);
   return config;
 };
 
-const startingConfig = (project: Project, configPath: string, baseClasses: readonly string[] | undefined): SourceFile | undefined =>
-  baseClasses === undefined ? existingConfig(project, configPath) : configWithBaseClasses(project, configPath, baseClasses);
+const startingConfig = (project: Project, configPath: string, existing: SourceFile | undefined, baseClasses: readonly string[] | undefined): SourceFile | undefined =>
+  baseClasses === undefined ? existing : configWithBaseClasses(project, configPath, existing, baseClasses);
 
 const writeLifecycles = async (
   project: Project,
@@ -85,7 +80,9 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
     throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
   }
   const project = loadProject(paths.tsconfig, paths.config);
-  const config = startingConfig(project, paths.config, options.baseClass);
+  const existing = existingConfig(project, paths.config);
+  if (existing !== undefined) reportDeprecations(readDeclaration(existing).deprecations, toPosixRelative(io.cwd, paths.config), io);
+  const config = startingConfig(project, paths.config, existing, options.baseClass);
   const declaration = config ? readDeclaration(config).declaration : DEFAULT_DECLARATION;
   const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, config), projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile: config });
   if (lifecycleAnalyzer.scope(model) === 'nothing-found') {

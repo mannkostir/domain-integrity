@@ -69,7 +69,7 @@ const isComplete = ({ problems, failures }: Outcome): boolean => problems.length
 
 export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyzers: readonly AnalyzerRun[]): number => {
   const format = formatterFor(options);
-  const session = openSession(paths, analyzers);
+  const session = openSession(paths, analyzers, io);
   reportNotice(session, io);
   const { results } = session;
   const outcome: Outcome = {

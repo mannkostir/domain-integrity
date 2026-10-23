@@ -19,7 +19,7 @@ const writeSummary = (summary: string, write: string, io: Io): void => {
 };
 
 export const contextCommand = (paths: Paths, write: string | undefined, io: Io, analyzers: readonly AnalyzerRun[]): number => {
-  const session = openSession(paths, analyzers);
+  const session = openSession(paths, analyzers, io);
   reportNotice(session, io);
   const outcomes = session.results.map((result) => result.summary(paths.repositoryRoot));
   const failures = failuresAmong(outcomes);
