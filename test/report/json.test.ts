@@ -12,7 +12,7 @@ const MISSING_FIELD: Problem = {
   details: { aggregate: 'Order', field: 'state' },
 };
 
-const report = (overrides: Partial<Report> = {}): Report => ({ fresh: [], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app', ...overrides });
+const report = (overrides: Partial<Report> = {}): Report => ({ fresh: [], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app', ...overrides });
 
 const parse = (overrides: Partial<Report> = {}) => JSON.parse(formatJson(report(overrides), TOOL));
 

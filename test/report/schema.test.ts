@@ -67,21 +67,21 @@ describe('report schema', () => {
   });
 
   it('accepts a report without findings', () => {
-    expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
+    expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
   });
 
   it('accepts a report with one problem of every code', () => {
-    expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), problems: EVERY_PROBLEM, rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
+    expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: EVERY_PROBLEM, rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
   });
 
   it('accepts a finding whose state value is the empty string', () => {
     const emptyState = { ...unreachableFinding(), details: { aggregate: 'Order', aggregateId: 'Order', field: 'status', value: '' } };
 
-    expect(validateReport(formatJson({ fresh: [emptyState], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
+    expect(validateReport(formatJson({ fresh: [emptyState], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
   });
 
   it('rejects a report with an unknown key', () => {
-    const report = JSON.parse(formatJson({ fresh: [], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
+    const report = JSON.parse(formatJson({ fresh: [], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
 
     expect(validateReport(JSON.stringify({ ...report, extra: true }))).not.toEqual([]);
   });
@@ -140,14 +140,14 @@ describe('report schema', () => {
   });
 
   it('rejects a finding whose details carry an extra key', () => {
-    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
+    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
     const [first] = report.findings;
 
     expect(validateReport(JSON.stringify({ ...report, findings: [{ ...first, details: { ...first.details, extra: true } }] }))).not.toEqual([]);
   });
 
   it('rejects a finding whose details belong to another rule', () => {
-    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
+    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
     const [first] = report.findings;
 
     expect(validateReport(JSON.stringify({ ...report, findings: [{ ...first, ruleId: 'unhandled-event', analyzer: 'event-flow' }] }))).not.toEqual([]);

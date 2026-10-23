@@ -1,6 +1,7 @@
 import { toPosixRelative } from '../engine/path';
 import { RuleDescription } from '../analyzer';
 import { Finding, Problem } from '../finding';
+import { RuleSuppression, SuppressedFinding } from '../rules/apply';
 import { Excess, StaleEntry } from './baseline';
 import { describeIdentity } from './identity';
 
@@ -11,10 +12,12 @@ export type TextOptions = { readonly showKnown: boolean };
 export type Report = {
   readonly fresh: readonly Finding[];
   readonly known: readonly Finding[];
+  readonly suppressed: readonly SuppressedFinding[];
   readonly exceeded: ReadonlyMap<Finding, Excess>;
   readonly problems: readonly Problem[];
   readonly rules: readonly RuleDescription[];
   readonly repositoryRoot: string;
+  readonly staleSuppressions: readonly RuleSuppression[];
   readonly baseline?: AppliedBaseline;
 };
 
@@ -66,15 +69,24 @@ const staleBlock = (stale: readonly StaleEntry[]): readonly string[] =>
         ].join('\n'),
       ];
 
+const suppressionLine = ({ source, rule, target, member }: RuleSuppression): string =>
+  `  ${source} ${rule} ${target}${member === undefined ? '' : `.${member}`}`;
+
+const staleSuppressionBlock = (stale: readonly RuleSuppression[]): readonly string[] =>
+  stale.length === 0 ? [] : [[`${plural(stale.length, 'stale suppression')}, matching no finding:`, ...stale.map(suppressionLine)].join('\n')];
+
 export const formatText = (report: Report, options: TextOptions): string => {
   const errors = report.fresh.filter((finding) => finding.severity === 'error').length;
   const warnings = report.fresh.length - errors;
   const known = report.baseline ? `, ${report.known.length} known from baseline ${report.baseline.path}` : '';
-  const summary = `${plural(errors, 'error')}, ${plural(warnings, 'warning')}${known}`;
+  const suppressed = report.suppressed.length === 0 ? '' : `, ${report.suppressed.length} suppressed in config`;
+  const summary = `${plural(errors, 'error')}, ${plural(warnings, 'warning')}${known}${suppressed}`;
   return `${[
     ...report.fresh.map((finding) => entry(finding, report.repositoryRoot, excessSuffix(report.exceeded.get(finding)))),
     ...(options.showKnown ? report.known.map((finding) => entry(finding, report.repositoryRoot, ' (baseline)')) : []),
+    ...(options.showKnown ? report.suppressed.map(({ finding, reason }) => entry(finding, report.repositoryRoot, ` (suppressed: ${reason})`)) : []),
     ...staleBlock(report.baseline?.stale ?? []),
+    ...staleSuppressionBlock(report.staleSuppressions),
     summary,
   ].join('\n\n')}\n`;
 };
