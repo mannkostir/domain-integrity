@@ -68,7 +68,10 @@ describe('a config that uses old option names', () => {
   it('warns once at the original line when init also records a base class', async () => {
     const { stderr } = await runIn({ ...TICKET_SOURCES, 'domain.config.ts': OLD_CONFIG }, ['init', '--yes', '--base-class', 'Model']);
 
-    expect(stderr.split(EVENT_METHODS_WARNING).length - 1).toBe(1);
+    expect({
+      atOriginalLine: stderr.split(EVENT_METHODS_WARNING).length - 1,
+      anyLine: stderr.split('"eventMethods" is deprecated').length - 1,
+    }).toEqual({ atOriginalLine: 1, anyLine: 1 });
   });
 
   it('still warns when no aggregates are found', async () => {

@@ -110,9 +110,11 @@ const valueAt = (object: ObjectLiteralExpression, [name, ...rest]: OptionPath, p
   return valueAt(value, rest, path);
 };
 
+const propertyLine = (value: Expression): number => value.getParentOrThrow().getStartLineNumber();
+
 const conflict = (old: Expression, current: Expression, option: RenamedOption): ConfigError =>
   new ConfigError(
-    `domain.config.ts:${old.getStartLineNumber()} sets "${optionPath(option.old)}" and domain.config.ts:${current.getStartLineNumber()} sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`,
+    `domain.config.ts:${propertyLine(old)} sets "${optionPath(option.old)}" and domain.config.ts:${propertyLine(current)} sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`,
   );
 
 const renamedValue = (config: ObjectLiteralExpression, option: RenamedOption): Located => {
@@ -122,7 +124,7 @@ const renamedValue = (config: ObjectLiteralExpression, option: RenamedOption): L
   if (current !== undefined) throw conflict(old, current, option);
   return {
     expression: old,
-    deprecations: [{ line: old.getStartLineNumber(), old: optionPath(option.old), replacement: optionPath(option.current) }],
+    deprecations: [{ line: propertyLine(old), old: optionPath(option.old), replacement: optionPath(option.current) }],
   };
 };
 
@@ -152,7 +154,7 @@ const transitionSources = (method: PropertyAssignment): Read<readonly string[]> 
     return {
       value: tokens(spec),
       deprecations: [
-        { line: spec.getStartLineNumber(), old: `transitions.${name}: [...]`, replacement: `transitions.${name}: { from: [...] }` },
+        { line: method.getStartLineNumber(), old: `transitions.${name}: [...]`, replacement: `transitions.${name}: { from: [...] }` },
       ],
     };
   }

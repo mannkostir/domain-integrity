@@ -2,7 +2,7 @@ import { CompilerOptions } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { ConfigError } from '../../src/engine/errors';
 import { readDeclaration } from '../../src/engine/read-config';
-import { RENAMED_OPTIONS, optionPath } from '../../src/engine/renamed-options';
+import { OptionPath, RENAMED_OPTIONS, optionPath } from '../../src/engine/renamed-options';
 import { AGGREGATE_ROOT, inMemoryProject } from '../helpers/in-memory';
 
 const DOMAIN = {
@@ -491,17 +491,45 @@ describe('renamed options', () => {
     });
   });
 
-  it('rejects an old name next to its grouped name', () => {
-    expect(() =>
-      read(`import { defineDomain } from 'domain-integrity';
-export default defineDomain({
-  eventMethods: ['addEvent'],
-  events: { raiseMethods: ['apply'] },
-});
-`),
-    ).toThrow(
-      'domain.config.ts:3 sets "eventMethods" and domain.config.ts:4 sets "events.raiseMethods". Keep only "events.raiseMethods".',
+  it.each(RENAMED)('rejects %s set under both its old and grouped names at the lines of their keys', (_field, option) => {
+    const setting = (path: OptionPath): string => nested(path, "['addEvent']").replace(": ['addEvent']", ":\n    ['addEvent']");
+
+    expect(() => read(configSetting(`${setting(option.old)},\n  ${setting(option.current)}`))).toThrow(
+      `domain.config.ts:3 sets "${optionPath(option.old)}" and domain.config.ts:5 sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`,
     );
+  });
+
+  it.each(RENAMED)('reports the line of the %s key when its value starts on the next line', (_field, option) => {
+    const reading = read(configSetting(nested(option.old, "['addEvent']").replace(": ['addEvent']", ":\n    ['addEvent']")));
+
+    expect(reading.deprecations.map((deprecation) => deprecation.line)).toEqual([3]);
+  });
+
+  it('reports the line of the method key when a bare transitions array starts on the next line', () => {
+    const reading = read(`import { defineDomain, lifecycle } from 'domain-integrity';
+import { Order, OrderStatus } from './src/order';
+export default defineDomain({
+  lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled], transitions: {
+    cancel:
+      [OrderStatus.pending] } } } })],
+});
+`);
+
+    expect(reading.deprecations.map((deprecation) => deprecation.line)).toEqual([5]);
+  });
+
+  it('orders deprecations by line when old names are set against the reading order', () => {
+    const reading = read(`import { defineDomain } from 'domain-integrity';
+export default defineDomain({
+  inertMembers: ['id'],
+  aggregateBaseClasses: ['AggregateRoot'],
+});
+`);
+
+    expect(reading.deprecations.map(({ line, old }) => ({ line, old }))).toEqual([
+      { line: 3, old: 'inertMembers' },
+      { line: 4, old: 'aggregateBaseClasses' },
+    ]);
   });
 
   it('names the grouped options when inert raise methods are not raise methods', () => {
