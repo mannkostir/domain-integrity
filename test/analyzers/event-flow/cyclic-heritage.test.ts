@@ -21,7 +21,7 @@ const ruleIds = (events: string): readonly string[] => {
   });
   const config = project.getSourceFileOrThrow('/app/domain.config.ts');
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
-  const result = analyse(eventFlowAnalyzer, { declaration: readDeclaration(config), files, projectRoot: '/app', repositoryRoot: '/app' });
+  const result = analyse(eventFlowAnalyzer, { declaration: readDeclaration(config).declaration, files, projectRoot: '/app', repositoryRoot: '/app' });
   return result.findings.map((finding) => finding.ruleId);
 };
 

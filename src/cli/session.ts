@@ -52,7 +52,7 @@ export const runScope = (scopes: readonly CheckScope[]): CheckScope => {
 export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[]): Session => {
   const project = loadProject(paths.tsconfig, paths.config);
   const configFile = configSourceFile(project, paths.config);
-  const declaration = readDeclaration(configFile);
+  const { declaration } = readDeclaration(configFile);
   const files = analysedSourceFiles(project, configFile);
   const results = runAnalyzers({ declaration, files, projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile }, analyzers);
   const scope = runScope(results.map((result) => result.scope));

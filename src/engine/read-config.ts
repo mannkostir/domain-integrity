@@ -10,14 +10,16 @@ import {
   ts,
 } from 'ts-morph';
 import {
+  ConfigReading,
   DEFAULT_DECLARATION,
   DeclaredEvents,
   DeclaredField,
   DeclaredLifecycle,
   DeclaredSaga,
-  DomainDeclaration,
+  Deprecation,
 } from './declaration';
 import { ConfigError } from './errors';
+import { OptionPath, RENAMED_OPTIONS, RenamedOption, optionPath } from './renamed-options';
 import { SET, UNSET, literalToken } from './value-token';
 
 const unsupported = (node: Node, what: string): ConfigError =>
@@ -93,6 +95,42 @@ const subsetOf = (names: readonly string[], allowed: readonly string[], option: 
   const outside = names.find((name) => !allowed.includes(name));
   if (outside !== undefined) throw new ConfigError(`"${option}" lists "${outside}", which is not in "${within}".`);
   return names;
+};
+
+type Read<T> = { readonly value: T; readonly deprecations: readonly Deprecation[] };
+
+type Located = { readonly expression: Expression | undefined; readonly deprecations: readonly Deprecation[] };
+
+const valueAt = (object: ObjectLiteralExpression, [name, ...rest]: OptionPath, parent: OptionPath = []): Expression | undefined => {
+  if (name === undefined) return undefined;
+  const value = valueOf(object, name);
+  if (value === undefined || rest.length === 0) return value;
+  const path = [...parent, name];
+  if (!Node.isObjectLiteralExpression(value)) throw unsupported(value, `"${optionPath(path)}" must be an object literal`);
+  return valueAt(value, rest, path);
+};
+
+const conflict = (old: Expression, current: Expression, option: RenamedOption): ConfigError =>
+  new ConfigError(
+    `domain.config.ts:${old.getStartLineNumber()} sets "${optionPath(option.old)}" and domain.config.ts:${current.getStartLineNumber()} sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`,
+  );
+
+const renamedValue = (config: ObjectLiteralExpression, option: RenamedOption): Located => {
+  const current = valueAt(config, option.current);
+  const old = valueAt(config, option.old);
+  if (old === undefined) return { expression: current, deprecations: [] };
+  if (current !== undefined) throw conflict(old, current, option);
+  return {
+    expression: old,
+    deprecations: [{ line: old.getStartLineNumber(), old: optionPath(option.old), replacement: optionPath(option.current) }],
+  };
+};
+
+type ListOption = keyof typeof RENAMED_OPTIONS;
+
+const listOption = (config: ObjectLiteralExpression, name: ListOption): Read<readonly string[]> => {
+  const { expression, deprecations } = renamedValue(config, RENAMED_OPTIONS[name]);
+  return { value: stringList(expression, DEFAULT_DECLARATION[name]), deprecations };
 };
 
 const valueToken = (expression: Expression): string => {
@@ -187,46 +225,55 @@ const readSaga = (element: Expression): DeclaredSaga => {
   return { target, outcomes: arrayElements(outcomes).map(readOutcome(target.getName() ?? 'anonymous')) };
 };
 
-const readEvents = (expression: Expression | undefined): DeclaredEvents => {
+const readEvents = (config: ObjectLiteralExpression): DeclaredEvents => {
   const defaults = DEFAULT_DECLARATION.events;
-  if (expression === undefined) return defaults;
-  if (!Node.isObjectLiteralExpression(expression)) throw unsupported(expression, '"events" must be an object literal');
-  const inProcess = valueOf(expression, 'inProcess');
-  const sagas = valueOf(expression, 'sagas');
+  const inProcess = valueAt(config, ['events', 'inProcess']);
+  const sagas = valueAt(config, ['events', 'sagas']);
   return {
-    handlerDecorators: stringList(valueOf(expression, 'handlerDecorators'), defaults.handlerDecorators),
-    registerMethods: stringList(valueOf(expression, 'registerMethods'), defaults.registerMethods),
+    handlerDecorators: stringList(valueAt(config, ['events', 'handlerDecorators']), defaults.handlerDecorators),
+    registerMethods: stringList(valueAt(config, ['events', 'registerMethods']), defaults.registerMethods),
     inProcess: inProcess === undefined ? [] : arrayElements(inProcess).map((element) => projectClass(element, 'each entry of "events.inProcess"')),
     sagas: sagas === undefined ? [] : arrayElements(sagas).map(readSaga),
   };
 };
 
-export const readDeclaration = (file: SourceFile): DomainDeclaration => {
+const byLine = (left: Deprecation, right: Deprecation): number => left.line - right.line;
+
+export const readDeclaration = (file: SourceFile): ConfigReading => {
   assertNoTypeErrors(file);
   const exported = file.getExportAssignment((assignment) => !assignment.isExportEquals());
   const call = callNamed(exported?.getExpression(), 'defineDomain');
   if (!call) throw new ConfigError('domain.config.ts must "export default defineDomain({...})".');
   const config = objectArgument(call, 0);
   const lifecycles = valueOf(config, 'lifecycles');
-  const eventMethods = stringList(valueOf(config, 'eventMethods'), DEFAULT_DECLARATION.eventMethods);
+  const aggregateBaseClasses = listOption(config, 'aggregateBaseClasses');
+  const auditFields = listOption(config, 'auditFields');
+  const eventMethods = listOption(config, 'eventMethods');
+  const inertDecorators = listOption(config, 'inertDecorators');
+  const inertEventMethods = listOption(config, 'inertEventMethods');
+  const inertMembers = listOption(config, 'inertMembers');
+  const reads = [aggregateBaseClasses, auditFields, eventMethods, inertDecorators, inertEventMethods, inertMembers];
   return {
-    aggregateBaseClasses: stringList(valueOf(config, 'aggregateBaseClasses'), DEFAULT_DECLARATION.aggregateBaseClasses),
-    auditFields: stringList(valueOf(config, 'auditFields'), DEFAULT_DECLARATION.auditFields),
-    eventMethods,
-    inertDecorators: stringList(valueOf(config, 'inertDecorators'), DEFAULT_DECLARATION.inertDecorators),
-    inertEventMethods: subsetOf(
-      stringList(valueOf(config, 'inertEventMethods'), DEFAULT_DECLARATION.inertEventMethods),
-      eventMethods,
-      'inertEventMethods',
-      'eventMethods',
-    ),
-    inertMembers: stringList(valueOf(config, 'inertMembers'), DEFAULT_DECLARATION.inertMembers),
-    lifecycles: lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle),
-    reportTestFileMutations: booleanLiteral(
-      valueOf(config, 'reportTestFileMutations'),
-      'reportTestFileMutations',
-      DEFAULT_DECLARATION.reportTestFileMutations,
-    ),
-    events: readEvents(valueOf(config, 'events')),
+    declaration: {
+      aggregateBaseClasses: aggregateBaseClasses.value,
+      auditFields: auditFields.value,
+      eventMethods: eventMethods.value,
+      inertDecorators: inertDecorators.value,
+      inertEventMethods: subsetOf(
+        inertEventMethods.value,
+        eventMethods.value,
+        optionPath(RENAMED_OPTIONS.inertEventMethods.current),
+        optionPath(RENAMED_OPTIONS.eventMethods.current),
+      ),
+      inertMembers: inertMembers.value,
+      lifecycles: lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle),
+      reportTestFileMutations: booleanLiteral(
+        valueOf(config, 'reportTestFileMutations'),
+        'reportTestFileMutations',
+        DEFAULT_DECLARATION.reportTestFileMutations,
+      ),
+      events: readEvents(config),
+    },
+    deprecations: reads.flatMap((read) => read.deprecations).sort(byLine),
   };
 };

@@ -2,6 +2,7 @@ import { CompilerOptions } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { ConfigError } from '../../src/engine/errors';
 import { readDeclaration } from '../../src/engine/read-config';
+import { RENAMED_OPTIONS, optionPath } from '../../src/engine/renamed-options';
 import { AGGREGATE_ROOT, inMemoryProject } from '../helpers/in-memory';
 
 const DOMAIN = {
@@ -27,7 +28,7 @@ const read = (config: string, compilerOptionOverrides: CompilerOptions = {}) => 
 
 describe('readDeclaration', () => {
   it('applies defaults when optional lists are omitted', () => {
-    const declaration = read(`
+    const { declaration } = read(`
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({});
 `);
@@ -52,7 +53,7 @@ import { Order, OrderStatus } from './src/order';
 export default defineDomain({
   lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled], transitions: { cancel: [OrderStatus.pending] } } }, allowAfterTerminal: ['cancel'] })],
 });
-`).lifecycles;
+`).declaration.lifecycles;
 
     expect({
       target: order?.target.getName(),
@@ -72,7 +73,7 @@ import { Order } from './src/order';
 export default defineDomain({
   lifecycles: [lifecycle(Order, { states: { closedAt: { terminal: 'set' }, archived: { terminal: true } } })],
 });
-`).lifecycles;
+`).declaration.lifecycles;
 
     expect(order?.fields.map((field) => field.terminal)).toEqual([['set'], ['true']]);
   });
@@ -104,7 +105,7 @@ export default defineDomain({ lifecycles });
   });
 
   it('ignores project-level diagnostics that do not belong to the config file', () => {
-    const declaration = read(
+    const { declaration } = read(
       `
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({});
@@ -150,7 +151,7 @@ import { Order, OrderStatus } from './src/order';
 export default defineDomain({
   lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled] } } })],
 });
-`).lifecycles;
+`).declaration.lifecycles;
 
     expect(order?.allowAfterTerminal).toEqual([]);
   });
@@ -162,7 +163,7 @@ import { Order, OrderStatus } from './src/order';
 export default defineDomain({
   lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled], allowAfterTerminal: ['cancel'] } } })],
 });
-`).lifecycles;
+`).declaration.lifecycles;
 
     expect(order?.fields.map((field) => field.allowAfterTerminal)).toEqual([['cancel']]);
   });
@@ -174,7 +175,7 @@ import { Order, OrderStatus } from './src/order';
 export default defineDomain({
   lifecycles: [lifecycle(Order, { states: { status: { terminal: [OrderStatus.cancelled] } } })],
 });
-`).lifecycles;
+`).declaration.lifecycles;
 
     expect(order?.fields.map((field) => field.allowAfterTerminal)).toEqual([[]]);
   });
@@ -202,7 +203,7 @@ export default defineDomain({ aggregateBaseClasses: [name] });
   });
 
   it('reads inertDecorators', () => {
-    const declaration = read(`
+    const { declaration } = read(`
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({ inertDecorators: ['Audited'] });
 `);
@@ -231,7 +232,7 @@ export default defineDomain({ inertDecorators: names });
   });
 
   it('reads inertMembers', () => {
-    const declaration = read(`
+    const { declaration } = read(`
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({ inertMembers: ['id', 'clearDomainEvents'] });
 `);
@@ -260,7 +261,7 @@ export default defineDomain({ inertMembers: names });
   });
 
   it('does not report test-file mutations by default', () => {
-    const declaration = read(`
+    const { declaration } = read(`
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({});
 `);
@@ -269,7 +270,7 @@ export default defineDomain({});
   });
 
   it('reads reportTestFileMutations', () => {
-    const declaration = read(`
+    const { declaration } = read(`
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({ reportTestFileMutations: true });
 `);
@@ -297,7 +298,7 @@ export default defineDomain({ reportTestFileMutations: Boolean(1) });
   });
 
   it('reads inertEventMethods listed in eventMethods', () => {
-    const declaration = read(`
+    const { declaration } = read(`
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({ eventMethods: ['record'], inertEventMethods: ['record'] });
 `);
@@ -306,7 +307,7 @@ export default defineDomain({ eventMethods: ['record'], inertEventMethods: ['rec
   });
 
   it('accepts inertEventMethods from the default eventMethods', () => {
-    const declaration = read(`
+    const { declaration } = read(`
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({ inertEventMethods: ['addDomainEvent'] });
 `);
@@ -320,7 +321,7 @@ export default defineDomain({ inertEventMethods: ['addDomainEvent'] });
 import { defineDomain } from 'domain-integrity';
 export default defineDomain({ eventMethods: ['apply'], inertEventMethods: ['addDomainEvent'] });
 `),
-    ).toThrow('"inertEventMethods" lists "addDomainEvent", which is not in "eventMethods".');
+    ).toThrow('"inert.raiseMethods" lists "addDomainEvent", which is not in "events.raiseMethods".');
   });
 
   it('rejects a misspelled inertEventMethods entry with a ConfigError', () => {
@@ -350,7 +351,7 @@ import { OrderSaga, PaymentCaptured, PaymentFailed } from './src/payments';
 `;
 
   it('resolves in-process classes, saga targets and outcomes', () => {
-    const { events } = read(`${header}
+    const { declaration: { events } } = read(`${header}
 export default defineDomain({ events: { handlerDecorators: ['HandleEvent'], registerMethods: [], inProcess: [PaymentFailed], sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured, PaymentFailed]] })] } });
 `);
 
@@ -460,5 +461,61 @@ export default defineDomain({ events: { sagas: [saga(Alias, { outcomes: [] })] }
 const Alias = PaymentFailed;
 export default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentCaptured, Alias]] })] } });
 `)).toThrow(/an outcome element must be a class reference/);
+  });
+});
+
+const nested = (path: readonly string[], value: string): string =>
+  path.reduceRight((inner, segment, index) => (index === path.length - 1 ? `${segment}: ${value}` : `${segment}: { ${inner} }`), '');
+
+const configSetting = (setting: string): string =>
+  `import { defineDomain } from 'domain-integrity';\nexport default defineDomain({\n  ${setting},\n});\n`;
+
+const RENAMED = Object.entries(RENAMED_OPTIONS);
+
+describe('renamed options', () => {
+  it.each(RENAMED)('reads %s from its grouped name without a deprecation', (field, option) => {
+    const reading = read(configSetting(nested(option.current, "['addEvent']")));
+
+    expect({ value: reading.declaration[field as keyof typeof RENAMED_OPTIONS], deprecations: reading.deprecations }).toEqual({
+      value: ['addEvent'],
+      deprecations: [],
+    });
+  });
+
+  it.each(RENAMED)('reads %s from its old name with a deprecation', (field, option) => {
+    const reading = read(configSetting(nested(option.old, "['addEvent']")));
+
+    expect({ value: reading.declaration[field as keyof typeof RENAMED_OPTIONS], deprecations: reading.deprecations }).toEqual({
+      value: ['addEvent'],
+      deprecations: [{ line: 3, old: optionPath(option.old), replacement: optionPath(option.current) }],
+    });
+  });
+
+  it('rejects an old name next to its grouped name', () => {
+    expect(() =>
+      read(`import { defineDomain } from 'domain-integrity';
+export default defineDomain({
+  eventMethods: ['addEvent'],
+  events: { raiseMethods: ['apply'] },
+});
+`),
+    ).toThrow(
+      'domain.config.ts:3 sets "eventMethods" and domain.config.ts:4 sets "events.raiseMethods". Keep only "events.raiseMethods".',
+    );
+  });
+
+  it('names the grouped options when inert raise methods are not raise methods', () => {
+    expect(() => read(configSetting("inert: { raiseMethods: ['notAnEventMethod'] }"))).toThrow(
+      '"inert.raiseMethods" lists "notAnEventMethod", which is not in "events.raiseMethods".',
+    );
+  });
+
+  it('rejects a group that is not an object literal', () => {
+    expect(() =>
+      read(`import { defineDomain } from 'domain-integrity';
+const shared = { baseClasses: ['AggregateRoot'] };
+export default defineDomain({ aggregates: shared });
+`),
+    ).toThrow(/domain.config.ts:3 "aggregates" must be an object literal/);
   });
 });
