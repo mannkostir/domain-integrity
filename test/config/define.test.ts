@@ -60,6 +60,7 @@ describe('config helpers', () => {
 
     expect(declaration.kind).toBe('lifecycle');
   });
+
   it('accept the grouped options', () => {
     const config = defineDomain({
       aggregates: { baseClasses: ['AggregateRoot'], auditFields: ['updatedAt'] },

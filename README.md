@@ -535,13 +535,14 @@ export default defineDomain({
 | Option | Meaning |
 |---|---|
 | `events.handlerDecorators` | Decorator names that mark a handler. Default: `['EventsHandler', 'OnEvent']`. |
+| `events.raiseMethods` | Calls that emit domain events. Default: `['addEvent', 'addDomainEvent', 'apply']`. |
 | `events.registerMethods` | Method names whose calls register a handler. Default: `['register']`. |
 | `events.inProcess` | Event classes that are dispatched inside the process. `unhandled-event` runs only for these. |
 | `events.sagas` | `saga(Target, { outcomes: [[Success, Failure]] })`. `saga-missing-failure-path` runs only for these. |
 
 An outcome that lists one class as both success and failure exits `2`. So does a declared class outside the analysed files, or a saga that handles neither side of an outcome; the last two are reported as `problem:` lines.
 
-Lifecycle declarations and the other top-level options:
+Lifecycle declarations and the other options:
 
 | Option | Meaning |
 |---|---|
@@ -551,7 +552,6 @@ Lifecycle declarations and the other top-level options:
 | `allowAfterTerminal` | Optional. Methods allowed on a finished aggregate, such as `remove`. Next to `states` it exempts a method for every state field; inside a state field, such as `lockedAt` above, only for that field, so `close()` may run on a locked account but is still judged after `closedAt` is set. The two lists combine. Method names are type-checked. |
 | `aggregates.baseClasses` | Base classes or interfaces that mark an aggregate: a class that extends or implements one, directly or through its base classes and interfaces. Abstract classes are skipped. Method collection also stops at a listed name: if it names a project class in the middle of an aggregate's inheritance chain, that class's methods and those above it are not analysed, so pick interface names that do not clash with your project's base classes. Default: `['AggregateRoot', 'Entity']`. |
 | `aggregates.auditFields` | Bookkeeping fields. `init` never suggests them, and a method whose only writes are to these fields, such as an ORM hook that stamps `updatedAt`, is not judged as a domain command. A field that is also a state field of the aggregate still counts as a domain write. Setting the list replaces the default. Default: `['createdAt', 'updatedAt', 'version']`. |
-| `events.raiseMethods` | Calls that emit domain events. Default: `['addEvent', 'addDomainEvent', 'apply']`. |
 | `inert.decorators` | Class decorator names you assert neither install nor rewrite instance members, matched by name like `events.handlerDecorators`. They add to the built-in list and never replace it. A wrong entry for a decorator that does install members can produce a false finding. Default: `[]`. |
 | `inert.raiseMethods` | Event methods you assert never read aggregate state, such as an `addDomainEvent` that also registers `this` in a static `DomainEvents` registry or logs it. Every entry must also be in `events.raiseMethods`, or `check` exits with code 2. The assertion covers every method of that name in the project, including overrides in subclasses. A listed method's body is not traced, and `this.addDomainEvent(new UserLoggedIn(this))` and `super.addDomainEvent(new UserLoggedIn(this))` count as event handoffs. The assertion holds only while every declaration of the name is a method, no project class declares a non-method instance member of that name, nothing in the project writes it, every base type in the aggregate's heritage resolves, and no class in the aggregate's family or class expression anywhere in the project has a class decorator other than an inert one or calls `Object.assign(this, …)`; see "Asserted event methods". A wrong entry for an event method that reads the state field, or calls code that does, can produce a false finding. Default: `[]`. |
 | `inert.members` | Library getters, methods and properties that never read aggregate state, such as `id` or `clearDomainEvents`. A listed name counts as not reading the state field unless a `.ts` file in your project declares a member of that name; a `super.` call to it counts only the declarations above the class that makes the call; declarations in `.d.ts` files, including your own, count as library code. List only members whose library code never reads aggregate state and never calls back into your overrides: a wrong entry turns a guard through that member into no guard and can produce a false finding. Default: `[]`. |
