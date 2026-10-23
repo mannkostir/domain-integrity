@@ -11,6 +11,7 @@ import { eventNotAnalysed, sagaOutcomeUnhandled } from '../../src/analyzers/even
 import { run } from '../../src/cli/run';
 import { PROBLEM_ANALYZERS, Problem, RULE_ANALYZERS, RuleId } from '../../src/finding';
 import { formatJson } from '../../src/report/json';
+import { Report } from '../../src/report/text';
 import { IDENTITY_FIELDS } from '../../src/report/identity';
 import { captureIo } from '../helpers/disk';
 import { JSON_FIXTURES } from '../helpers/fixtures';
@@ -53,7 +54,9 @@ type ProblemDefinition = {
   readonly allOf: readonly { readonly if: { readonly properties: { readonly code: { readonly const: string } } } }[];
 };
 
-const definitions = REPORT_SCHEMA.$defs as { readonly finding: FindingDefinition; readonly problem: ProblemDefinition };
+const suppressedReport: Report = { fresh: [], known: [], exceeded: new Map(), suppressed: [{ finding: finding(), reason: 'Known.' }], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' };
+
+const definitions = REPORT_SCHEMA.$defs as { readonly findingFields: FindingDefinition; readonly problem: ProblemDefinition };
 
 const sorted = (values: Iterable<string>): string[] => [...values].sort();
 
@@ -67,21 +70,21 @@ describe('report schema', () => {
   });
 
   it('accepts a report without findings', () => {
-    expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
+    expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
   });
 
   it('accepts a report with one problem of every code', () => {
-    expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), problems: EVERY_PROBLEM, rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
+    expect(validateReport(formatJson({ fresh: [], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: EVERY_PROBLEM, rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
   });
 
   it('accepts a finding whose state value is the empty string', () => {
     const emptyState = { ...unreachableFinding(), details: { aggregate: 'Order', aggregateId: 'Order', field: 'status', value: '' } };
 
-    expect(validateReport(formatJson({ fresh: [emptyState], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
+    expect(validateReport(formatJson({ fresh: [emptyState], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL))).toEqual([]);
   });
 
   it('rejects a report with an unknown key', () => {
-    const report = JSON.parse(formatJson({ fresh: [], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
+    const report = JSON.parse(formatJson({ fresh: [], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
 
     expect(validateReport(JSON.stringify({ ...report, extra: true }))).not.toEqual([]);
   });
@@ -104,15 +107,15 @@ describe('report schema', () => {
   });
 
   it('lists exactly the registered rules', () => {
-    expect(sorted(definitions.finding.properties.ruleId.enum)).toEqual(sorted([...LIFECYCLE_RULES, ...EVENT_FLOW_RULES].map((rule) => rule.id)));
+    expect(sorted(definitions.findingFields.properties.ruleId.enum)).toEqual(sorted([...LIFECYCLE_RULES, ...EVENT_FLOW_RULES].map((rule) => rule.id)));
   });
 
   it('lists exactly the rules the finding model knows', () => {
-    expect(sorted(definitions.finding.properties.ruleId.enum)).toEqual(sorted(Object.keys(RULE_ANALYZERS)));
+    expect(sorted(definitions.findingFields.properties.ruleId.enum)).toEqual(sorted(Object.keys(RULE_ANALYZERS)));
   });
 
   it('describes the details of every rule', () => {
-    expect(sorted(definitions.finding.allOf.map((branch) => branch.if.properties.ruleId.const))).toEqual(sorted(Object.keys(RULE_ANALYZERS)));
+    expect(sorted(definitions.findingFields.allOf.map((branch) => branch.if.properties.ruleId.const))).toEqual(sorted(Object.keys(RULE_ANALYZERS)));
   });
 
   it('lists exactly the problem codes', () => {
@@ -140,16 +143,34 @@ describe('report schema', () => {
   });
 
   it('rejects a finding whose details carry an extra key', () => {
-    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
+    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
     const [first] = report.findings;
 
     expect(validateReport(JSON.stringify({ ...report, findings: [{ ...first, details: { ...first.details, extra: true } }] }))).not.toEqual([]);
   });
 
   it('rejects a finding whose details belong to another rule', () => {
-    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], exceeded: new Map(), problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
+    const report = JSON.parse(formatJson({ fresh: [finding()], known: [], exceeded: new Map(), suppressed: [], staleSuppressions: [], problems: [], rules: [], repositoryRoot: '/app' }, TOOL));
     const [first] = report.findings;
 
     expect(validateReport(JSON.stringify({ ...report, findings: [{ ...first, ruleId: 'unhandled-event', analyzer: 'event-flow' }] }))).not.toEqual([]);
+  });
+
+  it('accepts a report with suppressed findings', () => {
+    expect(validateReport(formatJson(suppressedReport, TOOL))).toEqual([]);
+  });
+
+  it('rejects a suppressed finding without a reason', () => {
+    const json = JSON.parse(formatJson(suppressedReport, TOOL));
+    delete json.suppressed[0].reason;
+
+    expect(validateReport(JSON.stringify(json))).not.toEqual([]);
+  });
+
+  it('rejects a reason on a fresh finding', () => {
+    const json = JSON.parse(formatJson({ ...suppressedReport, fresh: [finding()] }, TOOL));
+    json.findings[0].reason = 'R';
+
+    expect(validateReport(JSON.stringify(json))).not.toEqual([]);
   });
 });

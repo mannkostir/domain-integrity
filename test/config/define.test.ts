@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { defineDomain, lifecycle, saga } from '../../src/index';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { RuleId } from '../../src/finding';
+import { defineDomain, lifecycle, saga, suppress } from '../../src/index';
+import type { RuleName } from '../../src/index';
 
 enum TicketStatus {
   open = 'OPEN',
@@ -15,6 +17,14 @@ class Ticket {
 
   close(): void {
     this.status = TicketStatus.closed;
+  }
+}
+
+class Unused {}
+
+class Order {
+  private onUnused(event: Unused): Unused {
+    return event;
   }
 }
 
@@ -99,6 +109,56 @@ describe('config helpers', () => {
     });
 
     expect(config.eventMethods).toEqual(['addEvent']);
+  });
+});
+
+describe('rule and suppression config', () => {
+  it('name exactly the rules the analysis reports', () => {
+    expectTypeOf<RuleName>().toEqualTypeOf<RuleId>();
+  });
+
+  it('accept rule levels and outside-mutation options', () => {
+    const config = defineDomain({
+      rules: { 'transition-missing': 'off', 'unhandled-event': 'warning', 'outside-mutation': { level: 'error', testFiles: true } },
+    });
+
+    expect(config.rules?.['transition-missing']).toBe('off');
+  });
+
+  it('reject an unknown rule', () => {
+    // @ts-expect-error
+    const config = defineDomain({ rules: { 'no-such-rule': 'off' } });
+
+    expect(config.rules).toBeDefined();
+  });
+
+  it('reject test-file options on other rules', () => {
+    // @ts-expect-error
+    const config = defineDomain({ rules: { 'unhandled-event': { testFiles: true } } });
+
+    expect(config.rules).toBeDefined();
+  });
+
+  it('suppress a finding on a method of the class', () => {
+    expect(suppress(Ticket, { rule: 'terminal-state-leak', member: 'close', reason: 'R' }).kind).toBe('suppression');
+  });
+
+  it('reject a method the class does not have', () => {
+    // @ts-expect-error
+    expect(suppress(Ticket, { rule: 'terminal-state-leak', member: 'reopen', reason: 'R' }).kind).toBe('suppression');
+  });
+
+  it('accept any field name for a field rule', () => {
+    expect(suppress(Ticket, { rule: 'unreachable-state', member: 'status', reason: 'R' }).kind).toBe('suppression');
+  });
+
+  it('accept a private handler method for a handler rule', () => {
+    expect(suppress(Order, { rule: 'dead-handler', member: 'onUnused', reason: 'R' }).kind).toBe('suppression');
+  });
+
+  it('reject a member for a rule anchored on the class', () => {
+    // @ts-expect-error
+    expect(suppress(Ticket, { rule: 'unhandled-event', member: 'close', reason: 'R' }).kind).toBe('suppression');
   });
 });
 

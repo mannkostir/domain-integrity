@@ -10,8 +10,8 @@ import { reportDeprecations } from './deprecations';
 import { Io, Paths } from './io';
 
 export type Session =
-  | { readonly kind: 'checkable'; readonly results: readonly AnalysisResult[] }
-  | { readonly kind: 'nothing-declared'; readonly results: readonly AnalysisResult[]; readonly notice: string };
+  | { readonly kind: 'checkable'; readonly declaration: DomainDeclaration; readonly results: readonly AnalysisResult[] }
+  | { readonly kind: 'nothing-declared'; readonly declaration: DomainDeclaration; readonly results: readonly AnalysisResult[]; readonly notice: string };
 
 const NO_AGGREGATES = 'No aggregates found.';
 
@@ -60,8 +60,8 @@ export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[], io:
   const results = runAnalyzers({ declaration, files, projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile }, analyzers);
   const scope = runScope(results.map((result) => result.scope));
   if (scope === 'nothing-found') throw new ProjectError(nothingFoundMessage(declaration, files.length, results.flatMap((result) => result.problems)));
-  if (scope === 'nothing-declared') return { kind: 'nothing-declared', results, notice: nothingDeclaredNotice(paths.config, files.length) };
-  return { kind: 'checkable', results };
+  if (scope === 'nothing-declared') return { kind: 'nothing-declared', declaration, results, notice: nothingDeclaredNotice(paths.config, files.length) };
+  return { kind: 'checkable', declaration, results };
 };
 
 export const reportNotice = (session: Session, io: Io): void => {

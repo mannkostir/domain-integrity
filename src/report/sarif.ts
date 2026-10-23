@@ -1,5 +1,6 @@
 import { RuleDescription } from '../analyzer';
 import { Finding } from '../finding';
+import { SuppressedFinding } from '../rules/apply';
 import { identityOf, serializeIdentity } from './identity';
 import { toPosixRelative } from '../engine/path';
 import { Report } from './text';
@@ -54,6 +55,11 @@ const sarifResult = (finding: Finding, report: Report) => ({
 
 const suppressedResult = (finding: Finding, report: Report) => ({ ...sarifResult(finding, report), suppressions: [BASELINE_SUPPRESSION] });
 
+const configSuppressedResult = ({ finding, reason }: SuppressedFinding, report: Report) => ({
+  ...sarifResult(finding, report),
+  suppressions: [{ kind: 'external', justification: reason }],
+});
+
 export const formatSarif = (report: Report, tool: ToolIdentity): string =>
   `${JSON.stringify(
     {
@@ -72,6 +78,7 @@ export const formatSarif = (report: Report, tool: ToolIdentity): string =>
           results: [
             ...report.fresh.map((finding) => sarifResult(finding, report)),
             ...report.known.map((finding) => suppressedResult(finding, report)),
+            ...report.suppressed.map((suppressed) => configSuppressedResult(suppressed, report)),
           ],
         },
       ],

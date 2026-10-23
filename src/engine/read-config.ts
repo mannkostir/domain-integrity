@@ -16,9 +16,11 @@ import {
   DeclaredField,
   DeclaredLifecycle,
   DeclaredSaga,
+  DeclaredSuppression,
   Deprecation,
 } from './declaration';
 import { ConfigError } from './errors';
+import { RULE_ANALYZERS, RuleId, RuleLevel } from '../finding';
 import { OptionPath, RENAMED_OPTIONS, RenamedOption, optionPath } from './renamed-options';
 import { SET, UNSET, literalToken } from './value-token';
 
@@ -105,6 +107,7 @@ const valueAt = (object: ObjectLiteralExpression, [name, ...rest]: OptionPath, p
   if (name === undefined) return undefined;
   const value = valueOf(object, name);
   if (value === undefined || rest.length === 0) return value;
+  if (Node.isStringLiteral(value)) return undefined;
   const path = [...parent, name];
   if (!Node.isObjectLiteralExpression(value)) throw unsupported(value, `"${optionPath(path)}" must be an object literal`);
   return valueAt(value, rest, path);
@@ -128,7 +131,7 @@ const renamedValue = (config: ObjectLiteralExpression, option: RenamedOption): L
   };
 };
 
-type ListOption = keyof typeof RENAMED_OPTIONS;
+type ListOption = Exclude<keyof typeof RENAMED_OPTIONS, 'reportTestFileMutations'>;
 
 const listOption = (config: ObjectLiteralExpression, name: ListOption): Read<readonly string[]> => {
   const { expression, deprecations } = renamedValue(config, RENAMED_OPTIONS[name]);
@@ -267,6 +270,64 @@ const readEvents = (config: ObjectLiteralExpression): DeclaredEvents => {
   };
 };
 
+const isRuleId = (name: string): name is RuleId => Object.hasOwn(RULE_ANALYZERS, name);
+
+const LEVELS: readonly RuleLevel[] = ['off', 'warning', 'error'];
+
+const levelLiteral = (expression: Expression): RuleLevel => {
+  const level = Node.isStringLiteral(expression) ? LEVELS.find((candidate) => candidate === expression.getLiteralText()) : undefined;
+  if (level === undefined) throw unsupported(expression, 'a rule level must be "off", "warning" or "error"');
+  return level;
+};
+
+const ruleLevel = (setting: Expression): RuleLevel | undefined => {
+  if (!Node.isObjectLiteralExpression(setting)) return levelLiteral(setting);
+  const level = valueOf(setting, 'level');
+  return level === undefined ? undefined : levelLiteral(level);
+};
+
+const ruleEntry = (property: PropertyAssignment): readonly (readonly [RuleId, RuleLevel])[] => {
+  const name = propertyName(property);
+  if (!isRuleId(name)) throw new ConfigError(`domain.config.ts:${property.getStartLineNumber()} "rules" names the unknown rule "${name}".`);
+  const level = ruleLevel(property.getInitializerOrThrow());
+  return level === undefined ? [] : [[name, level]];
+};
+
+const readRuleLevels = (config: ObjectLiteralExpression): ReadonlyMap<RuleId, RuleLevel> => {
+  const rules = valueOf(config, 'rules');
+  if (rules === undefined) return new Map();
+  if (!Node.isObjectLiteralExpression(rules)) throw unsupported(rules, '"rules" must be an object literal');
+  return new Map(properties(rules).flatMap(ruleEntry));
+};
+
+const stringLiteralText = (expression: Expression | undefined, call: CallExpression, what: string): string => {
+  if (!Node.isStringLiteral(expression)) throw unsupported(expression ?? call, `${what} must be a string literal`);
+  return expression.getLiteralText();
+};
+
+const readSuppression = (element: Expression): DeclaredSuppression => {
+  const call = callNamed(element, 'suppress');
+  if (!call) throw unsupported(element, 'each entry of "suppressions" must be a suppress(...) call');
+  const [targetArgument] = call.getArguments();
+  if (targetArgument === undefined) throw unsupported(call, 'suppress() needs a class');
+  const target = projectClass(targetArgument, 'the first argument of suppress()');
+  const spec = objectArgument(call, 1);
+  const rule = stringLiteralText(valueOf(spec, 'rule'), call, '"rule" of suppress()');
+  if (!isRuleId(rule)) throw new ConfigError(`domain.config.ts:${call.getStartLineNumber()} suppress() names the unknown rule "${rule}".`);
+  const member = valueOf(spec, 'member');
+  const reason = stringLiteralText(valueOf(spec, 'reason'), call, '"reason" of suppress()');
+  if (reason.trim() === '') {
+    throw new ConfigError(`domain.config.ts:${call.getStartLineNumber()} suppress(${target.getName() ?? 'anonymous'}) needs a non-empty "reason".`);
+  }
+  return {
+    rule,
+    target,
+    member: member === undefined ? undefined : stringLiteralText(member, call, '"member" of suppress()'),
+    reason,
+    line: call.getStartLineNumber(),
+  };
+};
+
 const byLine = (left: Deprecation, right: Deprecation): number => left.line - right.line;
 
 export const readDeclaration = (file: SourceFile): ConfigReading => {
@@ -283,7 +344,20 @@ export const readDeclaration = (file: SourceFile): ConfigReading => {
   const inertDecorators = listOption(config, 'inertDecorators');
   const inertEventMethods = listOption(config, 'inertEventMethods');
   const inertMembers = listOption(config, 'inertMembers');
-  const reads = [aggregateBaseClasses, auditFields, eventMethods, inertDecorators, inertEventMethods, inertMembers, ...declaredLifecycles];
+  const testFileOption = RENAMED_OPTIONS.reportTestFileMutations;
+  const testFiles = renamedValue(config, testFileOption);
+  const testFilesName = optionPath(testFiles.deprecations.length === 0 ? testFileOption.current : testFileOption.old);
+  const suppressions = valueOf(config, 'suppressions');
+  const reads = [
+    aggregateBaseClasses,
+    auditFields,
+    eventMethods,
+    inertDecorators,
+    inertEventMethods,
+    inertMembers,
+    testFiles,
+    ...declaredLifecycles,
+  ];
   return {
     declaration: {
       aggregateBaseClasses: aggregateBaseClasses.value,
@@ -298,12 +372,10 @@ export const readDeclaration = (file: SourceFile): ConfigReading => {
       ),
       inertMembers: inertMembers.value,
       lifecycles: declaredLifecycles.map((read) => read.value),
-      reportTestFileMutations: booleanLiteral(
-        valueOf(config, 'reportTestFileMutations'),
-        'reportTestFileMutations',
-        DEFAULT_DECLARATION.reportTestFileMutations,
-      ),
+      reportTestFileMutations: booleanLiteral(testFiles.expression, testFilesName, DEFAULT_DECLARATION.reportTestFileMutations),
       events: readEvents(config),
+      rules: readRuleLevels(config),
+      suppressions: suppressions === undefined ? [] : arrayElements(suppressions).map(readSuppression),
     },
     deprecations: reads.flatMap((read) => read.deprecations).sort(byLine),
   };

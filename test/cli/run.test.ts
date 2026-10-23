@@ -382,6 +382,13 @@ describe('program', () => {
     expect(stdout()).toContain('show [options] [name]');
   });
 
+  it('describes --show-known as listing baselined and suppressed findings', async () => {
+    const { io, stdout } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['check', '--help'], io);
+
+    expect(stdout().replace(/\s+/g, ' ')).toContain('--show-known list findings accepted by the baseline or suppressed in the config in the text output');
+  });
+
   it('exits 2 for an unknown command', async () => {
     const { io } = captureIo(writeProject(TICKET_PROJECT));
 

@@ -183,9 +183,9 @@ In the last case stdout keeps the normal output, so JSON and SARIF reports stay 
 
 Only public methods are judged. Private and protected helpers, such as event-sourcing appliers, are covered by the public command that calls them.
 
-Every file your tsconfig includes is scanned, tests too, but an assignment in a test file is not reported as `outside-mutation`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`, relative to the tsconfig directory, the same rule the event-flow checks use. Such an assignment still counts as evidence: its value counts as assigned for `unreachable-state`, so a state that only a test builder sets is not reported as unreachable, and on an undeclared aggregate it counts as a write outside the class, which keeps an `init` suggestion. Set `reportTestFileMutations: true` to report test-file assignments too. Production code is judged the same either way.
+Every file your tsconfig includes is scanned, tests too, but an assignment in a test file is not reported as `outside-mutation`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`, relative to the tsconfig directory, the same rule the event-flow checks use. Such an assignment still counts as evidence: its value counts as assigned for `unreachable-state`, so a state that only a test builder sets is not reported as unreachable, and on an undeclared aggregate it counts as a write outside the class, which keeps an `init` suggestion. Set `rules: { 'outside-mutation': { testFiles: true } }` to report test-file assignments too. Production code is judged the same either way.
 
-This default changed in 0.3.0. Earlier versions reported assignments in test files as `outside-mutation`; set `reportTestFileMutations: true` to keep that.
+This default changed in 0.3.0. Earlier versions reported assignments in test files as `outside-mutation`; set `rules: { 'outside-mutation': { testFiles: true } }` to keep that.
 
 To leave tests out of every analysis, give `check` a tsconfig that excludes them. Excluded files are no longer evidence either, so a state that only a test assigns can then be reported as `unreachable-state`:
 
@@ -218,7 +218,7 @@ Add the method that moves the aggregate into that value, or remove the value fro
 
 #### outside-mutation
 
-A state field is assigned from code outside the aggregate, such as a service, mapper or specification, so the aggregate's guards and transitions are bypassed. A write through the aggregate's own setter is not reported, and neither are assignments in test files unless `reportTestFileMutations` is true.
+A state field is assigned from code outside the aggregate, such as a service, mapper or specification, so the aggregate's guards and transitions are bypassed. A write through the aggregate's own setter is not reported, and neither are assignments in test files unless `rules['outside-mutation'].testFiles` is true.
 
 Move the change into a method on the aggregate so its guards apply, and call that method instead. Accept the finding into the baseline only if the assignment honestly has to stay where it is, such as a persistence mapper that rebuilds a stored aggregate.
 
@@ -277,13 +277,13 @@ Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfi
 
 `--version`, or `-V`, prints the version and exits `0`.
 
-The JSON report is described under [JSON report](#json-report). The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`. Each SARIF result names its rule by `ruleId` and `ruleIndex`, carries the finding's message as `message.text` and its fix in `properties.fix`, and has a `partialFingerprints` entry `domainIntegrity/v2` holding its serialized identity, a JSON array of the rule and the identity fields as listed under [Adopt it in an existing codebase](#adopt-it-in-an-existing-codebase). Each location is an `artifactLocation` whose `uri` is relative to the repository root and whose `uriBaseId` is `%SRCROOT%`. When a baseline is applied, whether given with `--baseline` or loaded from `domain-integrity.baseline.json`, known findings follow the new ones as results with an `external` suppression; they never affect the exit code.
+The JSON report is described under [JSON report](#json-report). The SARIF report carries the version in `tool.driver.version` and the project homepage in `tool.driver.informationUri`. Each SARIF rule carries its full description, its remedy as help text, a `helpUri` linking to its entry in the rule reference, and its severity as `defaultConfiguration.level`. Each SARIF result names its rule by `ruleId` and `ruleIndex`, carries the finding's message as `message.text` and its fix in `properties.fix`, and has a `partialFingerprints` entry `domainIntegrity/v2` holding its serialized identity, a JSON array of the rule and the identity fields as listed under [Adopt it in an existing codebase](#adopt-it-in-an-existing-codebase). Each location is an `artifactLocation` whose `uri` is relative to the repository root and whose `uriBaseId` is `%SRCROOT%`. When a baseline is applied, whether given with `--baseline` or loaded from `domain-integrity.baseline.json`, known findings follow the new ones as results with an `external` suppression; they never affect the exit code. Findings suppressed in the config follow them as results whose `suppressions` entry has the kind `external` and the suppression's reason as its justification.
 
 If one analyzer crashes, the command prints `internal error in <analyzer>, please report (domain-integrity <version>)` with a short stack trace, still prints the other analyzers' results, and exits `2`; `--update-baseline` and `context --write` then write nothing.
 
 ### JSON report
 
-`check --format json` prints one object with the keys `version`, `tool`, `summary`, `findings`, `known` and `problems`, in that order. `version` is the format version, currently `2`. It is raised only by a breaking change: a key removed or renamed, or the meaning or type of a value changed. A new key, rule or problem code keeps it, so code that reads the keys it knows keeps working. `tool` holds the package `name` and `version`. `summary` counts the new errors and warnings, the known findings and the problems, so `errors` and `warnings` match the text summary line. `known` holds the findings accepted by a baseline, in the same shape as `findings`.
+`check --format json` prints one object with the keys `version`, `tool`, `summary`, `findings`, `known`, `suppressed` and `problems`, in that order. `version` is the format version, currently `2`. It is raised only by a breaking change: a key removed or renamed, or the meaning or type of a value changed. A new key, rule or problem code keeps it, so code that reads the keys it knows keeps working. `tool` holds the package `name` and `version`. `summary` counts the new errors and warnings, the known findings, the findings suppressed in the config and the problems, so `errors` and `warnings` match the text summary line. `known` holds the findings accepted by a baseline, in the same shape as `findings`. `suppressed` holds the findings accepted by `suppress()` under [Rules and suppressions](#rules-and-suppressions), each in the shape of a finding followed by a `reason` key holding the suppression's reason.
 
 ```json
 {
@@ -296,6 +296,7 @@ If one analyzer crashes, the command prints `internal error in <analyzer>, pleas
     "errors": 5,
     "warnings": 1,
     "known": 0,
+    "suppressed": 0,
     "problems": 0
   },
   "findings": [
@@ -323,6 +324,7 @@ If one analyzer crashes, the command prints `internal error in <analyzer>, pleas
     }
   ],
   "known": [],
+  "suppressed": [],
   "problems": []
 }
 ```
@@ -469,7 +471,7 @@ jobs:
 
 Findings appear as code-scanning alerts on the pull request, and the job fails when `check` does.
 
-Every result carries the `domainIntegrity/v2` fingerprint, its serialized identity, which identifies a finding across runs without its line number; a change to the identity format would come with a new fingerprint version. Result locations use paths relative to the repository root with `uriBaseId` `%SRCROOT%`, which code scanning resolves against the checkout. GitHub code scanning itself matches alerts by the `primaryLocationLineHash` fingerprint that the upload step adds. When a baseline is applied, from the `baseline` input or from a `domain-integrity.baseline.json` that `check` loads by default, known findings are uploaded as suppressed results instead of being left out, so code scanning does not close their alerts as fixed; they never fail the job.
+Every result carries the `domainIntegrity/v2` fingerprint, its serialized identity, which identifies a finding across runs without its line number; a change to the identity format would come with a new fingerprint version. Result locations use paths relative to the repository root with `uriBaseId` `%SRCROOT%`, which code scanning resolves against the checkout. GitHub code scanning itself matches alerts by the `primaryLocationLineHash` fingerprint that the upload step adds. When a baseline is applied, from the `baseline` input or from a `domain-integrity.baseline.json` that `check` loads by default, known findings are uploaded as suppressed results instead of being left out, so code scanning does not close their alerts as fixed; they never fail the job. Findings suppressed with `suppress()` are uploaded the same way, as results with an `external` suppression whose justification is the reason given in the config.
 
 GitHub's SARIF reference does not list `suppressions` among the properties code scanning uses, and uploaded suppressed results have been reported to appear as open alerts, so on GitHub baselined findings may show as open. Tools that honour SARIF suppressions treat them as suppressed. To dismiss them on GitHub, add the [`advanced-security/dismiss-alerts`](https://github.com/advanced-security/dismiss-alerts) action after the upload; it reads the suppressions from the SARIF report.
 
@@ -555,7 +557,6 @@ Lifecycle declarations and the other options:
 | `inert.decorators` | Class decorator names you assert neither install nor rewrite instance members, matched by name like `events.handlerDecorators`. They add to the built-in list and never replace it. A wrong entry for a decorator that does install members can produce a false finding. Default: `[]`. |
 | `inert.raiseMethods` | Event methods you assert never read aggregate state, such as an `addDomainEvent` that also registers `this` in a static `DomainEvents` registry or logs it. Every entry must also be in `events.raiseMethods`, or `check` exits with code 2. The assertion covers every method of that name in the project, including overrides in subclasses. A listed method's body is not traced, and `this.addDomainEvent(new UserLoggedIn(this))` and `super.addDomainEvent(new UserLoggedIn(this))` count as event handoffs. The assertion holds only while every declaration of the name is a method, no project class declares a non-method instance member of that name, nothing in the project writes it, every base type in the aggregate's heritage resolves, and no class in the aggregate's family or class expression anywhere in the project has a class decorator other than an inert one or calls `Object.assign(this, …)`; see "Asserted event methods". A wrong entry for an event method that reads the state field, or calls code that does, can produce a false finding. Default: `[]`. |
 | `inert.members` | Library getters, methods and properties that never read aggregate state, such as `id` or `clearDomainEvents`. A listed name counts as not reading the state field unless a `.ts` file in your project declares a member of that name; a `super.` call to it counts only the declarations above the class that makes the call; declarations in `.d.ts` files, including your own, count as library code. List only members whose library code never reads aggregate state and never calls back into your overrides: a wrong entry turns a guard through that member into no guard and can produce a false finding. Default: `[]`. |
-| `reportTestFileMutations` | Report assignments in test files as `outside-mutation`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`, relative to the tsconfig directory. Must be `true` or `false`, or `check` exits with code 2. A test-file assignment counts as evidence for `unreachable-state` either way. Default: `false`. |
 
 ### Migrating from 0.2
 
@@ -569,7 +570,63 @@ The old names still work and print a `warning:` line on stderr naming the replac
 | `inertDecorators` | `inert.decorators` |
 | `inertEventMethods` | `inert.raiseMethods` |
 | `inertMembers` | `inert.members` |
+| `reportTestFileMutations` | `rules['outside-mutation'].testFiles` |
 | `transitions.<method>: [...]` | `transitions.<method>: { from: [...] }` |
+
+## Rules and suppressions
+
+`rules` sets the level of a rule. `suppressions` accepts a single finding you have decided to live with.
+
+```ts
+import { defineDomain, suppress } from 'domain-integrity';
+import { Order } from './src/ordering/domain/order';
+import { OrderShipped } from './src/ordering/domain/order-shipped';
+
+export default defineDomain({
+  rules: {
+    'dead-handler': 'off',
+    'transition-drift': 'warning',
+    'unhandled-event': { level: 'error' },
+    'outside-mutation': { testFiles: true },
+  },
+  suppressions: [
+    suppress(Order, { rule: 'terminal-state-leak', member: 'archive', reason: 'Archiving only stamps archivedAt.' }),
+    suppress(OrderShipped, { rule: 'unhandled-event', reason: 'Consumed by the warehouse service.' }),
+  ],
+});
+```
+
+Each rule takes `'off'`, `'warning'` or `'error'`, or an object with an optional `level`; an omitted `level` keeps the rule's default. `'off'` drops the rule's findings. `'warning'` and `'error'` rewrite the severity of every finding of the rule, so a rule can be lowered or raised. A rule id that does not exist is a type error, which `check` reports as a config error and exits `2`.
+
+`outside-mutation` also accepts `testFiles`, which reports assignments in test files as `outside-mutation`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__/`, `test/` or `tests/`, relative to the tsconfig directory. It must be `true` or `false`, or `check` exits with code `2`. A test-file assignment counts as evidence for `unreachable-state` either way. Default: `false`. It replaces the 0.2 option `reportTestFileMutations`.
+
+The exit code follows the configured level: `check` exits `1` when a new finding, one the baseline does not accept, has the level `error` after the rules are applied, and `0` when only warnings, known findings and suppressed findings remain. In the SARIF report an `off` rule is absent from the driver's `rules`, and each result's `level` is the configured level, while a rule's `defaultConfiguration.level` stays the tool's default.
+
+`suppress(Class, { rule, member?, reason })` accepts the findings of one rule that are anchored on `Class`. `Class` must be a class declared in the project, and `reason` is required and must not be empty. Without `member`, every finding of the rule on that class is accepted; with `member`, only the findings anchored on that member. `rule`, `member` and `reason` must be plain string literals; a template literal or a concatenation exits `2`. A rule that is anchored on the class alone takes no `member`, which is a type error. For `terminal-state-leak`, `transition-drift` and `transition-missing`, `member` must name a public method of `Class`, or it is a type error; for the other rules it is any string, so a private handler method can be named. A finding is anchored as follows:
+
+| Rule | `Class` | `member` |
+|---|---|---|
+| `terminal-state-leak`, `transition-drift`, `transition-missing` | the aggregate | the method |
+| `unreachable-state`, `outside-mutation` | the aggregate | the state field |
+| `dead-handler`, `handler-payload-mismatch` | the handler class | the handler method |
+| `unhandled-event` | the event | none |
+| `saga-missing-failure-path` | the saga | none |
+| `undispatched-events` | the owner | the buffer |
+
+A `dead-handler` finding that names no handler class matches no suppression.
+
+A suppressed finding leaves the findings and never fails the run. It is counted in the summary line as `N suppressed in config`, listed under `--show-known` as `(suppressed: <reason>)`, reported in the JSON `suppressed` array with its `reason`, and uploaded to SARIF as a result with `suppressions: [{ kind: 'external', justification }]`, where the justification is the reason. It never enters a baseline, and `--update-baseline` writes only the findings that remain. Rules and suppressions affect `check` only.
+
+A suppression that matches no finding is stale, and so is a suppression of a rule that is `off`. `check` lists stale suppressions before the summary line:
+
+```
+1 stale suppression, matching no finding:
+  domain.config.ts:12 terminal-state-leak Order.archive
+```
+
+A stale suppression never changes the exit code. It is printed only in the text report, not in the JSON or SARIF report, and it is not reported when the run has problems or an internal error, because its findings are then incomplete.
+
+Prefer the baseline for debt you mean to fix, and a suppression for a finding you accept as correct.
 
 ## Quiet by design
 
@@ -582,7 +639,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Bookkeeping methods.** A method whose only writes stamp an `aggregates.auditFields` field or empty a private event array, such as `touch()`, `clearEvents()` or `pullDomainEvents()`, is not a domain command, so `terminal-state-leak` does not judge it. Pushing an event is a domain write. A private array that only ever receives `new X(…)` values and is only handed out of the aggregate, never read back through its own members, is treated as an event array, so a method that empties such an array goes unreported even when clearing it is a real domain act.
 - **Values mentioned elsewhere.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types.
 - **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
-- **Outside mutations in test files.** An assignment in a `*.spec.*` or `*.test.*` file, or in a file under `__tests__/`, `test/` or `tests/`, is not reported as `outside-mutation` unless `reportTestFileMutations` is `true`. Its value still counts as assigned for `unreachable-state`.
+- **Outside mutations in test files.** An assignment in a `*.spec.*` or `*.test.*` file, or in a file under `__tests__/`, `test/` or `tests/`, is not reported as `outside-mutation` unless `rules['outside-mutation'].testFiles` is `true`. Its value still counts as assigned for `unreachable-state`.
 - **Database writes.** State changed by `UPDATE` statements or query builders is invisible.
 - **Circular inheritance.** A class whose `extends` chain loops, which TypeScript rejects, is not analysed, for aggregates and event classes alike.
 

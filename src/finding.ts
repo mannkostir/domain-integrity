@@ -1,5 +1,7 @@
 export type Severity = 'error' | 'warning';
 
+export type RuleLevel = Severity | 'off';
+
 export type AnalyzerId = 'lifecycle' | 'event-flow';
 
 type AggregateTarget = { readonly aggregate: string; readonly aggregateId: string };
