@@ -60,6 +60,45 @@ describe('config helpers', () => {
 
     expect(declaration.kind).toBe('lifecycle');
   });
+  it('accept the grouped options', () => {
+    const config = defineDomain({
+      aggregates: { baseClasses: ['AggregateRoot'], auditFields: ['updatedAt'] },
+      events: { raiseMethods: ['addEvent'], handlerDecorators: ['OnEvent'] },
+      inert: { decorators: ['Entity'], members: ['id'], raiseMethods: ['addEvent'] },
+    });
+
+    expect(config.inert?.raiseMethods).toEqual(['addEvent']);
+  });
+
+  it('accept transitions that name their source states with from', () => {
+    const declaration = lifecycle(Ticket, {
+      states: { status: { terminal: [TicketStatus.closed], transitions: { close: { from: [TicketStatus.open] } } } },
+    });
+
+    expect(declaration.kind).toBe('lifecycle');
+  });
+
+  it('reject target states in transitions', () => {
+    const declaration = lifecycle(Ticket, {
+      // @ts-expect-error
+      states: { status: { terminal: [TicketStatus.closed], transitions: { close: { from: [TicketStatus.open], to: [TicketStatus.closed] } } } },
+    });
+
+    expect(declaration.kind).toBe('lifecycle');
+  });
+
+  it('still accept the old option names', () => {
+    const config = defineDomain({
+      aggregateBaseClasses: ['AggregateRoot'],
+      auditFields: ['updatedAt'],
+      eventMethods: ['addEvent'],
+      inertDecorators: [],
+      inertEventMethods: [],
+      inertMembers: [],
+    });
+
+    expect(config.eventMethods).toEqual(['addEvent']);
+  });
 });
 
 class PaymentCaptured {
