@@ -3,6 +3,7 @@ import { FINGERPRINT, formatSarif } from '../../src/report/sarif';
 import { EVENT_FLOW_RULES } from '../../src/analyzers/event-flow/checks';
 import { RuleDescription } from '../../src/analyzer';
 import { Finding } from '../../src/finding';
+import { SuppressedFinding } from '../../src/rules/apply';
 import { identityOf, serializeIdentity } from '../../src/report/identity';
 import { ToolIdentity } from '../../src/report/tool';
 import { TOOL, bufferFinding, finding, flowFinding, missingFinding, unhandledFinding } from '../helpers/model';
@@ -20,8 +21,8 @@ const DOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.
 
 const UNDOCUMENTED_TOOL: ToolIdentity = { name: 'domain-integrity', version: '1.2.3' };
 
-const sarifRun = (fresh: readonly Finding[], rules: readonly RuleDescription[], tool: ToolIdentity = TOOL, known: readonly Finding[] = []): SarifRun => {
-  const [run] = parseSarif(formatSarif({ fresh, known, suppressed: [], staleSuppressions: [], problems: [], rules, repositoryRoot: '/app', exceeded: new Map() }, tool)).runs;
+const sarifRun = (fresh: readonly Finding[], rules: readonly RuleDescription[], tool: ToolIdentity = TOOL, known: readonly Finding[] = [], suppressed: readonly SuppressedFinding[] = []): SarifRun => {
+  const [run] = parseSarif(formatSarif({ fresh, known, suppressed, staleSuppressions: [], problems: [], rules, repositoryRoot: '/app', exceeded: new Map() }, tool)).runs;
   if (run === undefined) throw new Error('The SARIF log has no run.');
   return run;
 };
@@ -147,6 +148,18 @@ describe('formatSarif', () => {
 
   it('suppresses a known finding as recorded outside the source', () => {
     expect(knownLeakResult().suppressions).toEqual([{ kind: 'external', justification: 'Recorded in the domain-integrity baseline.' }]);
+  });
+
+  it('marks a config-suppressed finding with its reason', () => {
+    const [result] = sarifRun([], [ERROR_RULE], TOOL, [], [{ finding: finding(), reason: 'Known.' }]).results;
+
+    expect(result?.suppressions).toEqual([{ kind: 'external', justification: 'Known.' }]);
+  });
+
+  it('reports a lowered finding at its level and keeps the rule default', () => {
+    const run = sarifRun([finding({ severity: 'warning' })], [ERROR_RULE]);
+
+    expect({ level: run.results[0]?.level, default: run.tool.driver.rules[0]?.defaultConfiguration.level }).toEqual({ level: 'warning', default: 'error' });
   });
 
   it('fingerprints a known finding like a fresh one', () => {

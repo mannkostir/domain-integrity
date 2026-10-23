@@ -1,5 +1,6 @@
 import { toPosixRelative } from '../engine/path';
 import { DetailsByProblem, DetailsByRule, Finding, FindingOf, Problem, ProblemCode, ProblemOf, RuleId, Severity } from '../finding';
+import { SuppressedFinding } from '../rules/apply';
 import { identityOf } from './identity';
 import { Report } from './text';
 import { ToolIdentity } from './tool';
@@ -44,6 +45,8 @@ const wireFinding = (root: string) => (finding: Finding) => ({
   details: findingDetails(finding),
 });
 
+const wireSuppressed = (root: string) => ({ finding, reason }: SuppressedFinding) => ({ ...wireFinding(root)(finding), reason });
+
 const wireProblem = (problem: Problem) => ({ code: problem.code, analyzer: problem.analyzer, message: problem.message, details: problemDetails(problem) });
 
 const countOf = (findings: readonly Finding[], severity: Severity): number => findings.filter((finding) => finding.severity === severity).length;
@@ -57,10 +60,12 @@ export const formatJson = (report: Report, tool: ToolIdentity): string =>
         errors: countOf(report.fresh, 'error'),
         warnings: countOf(report.fresh, 'warning'),
         known: report.known.length,
+        suppressed: report.suppressed.length,
         problems: report.problems.length,
       },
       findings: report.fresh.map(wireFinding(report.repositoryRoot)),
       known: report.known.map(wireFinding(report.repositoryRoot)),
+      suppressed: report.suppressed.map(wireSuppressed(report.repositoryRoot)),
       problems: report.problems.map(wireProblem),
     },
     null,

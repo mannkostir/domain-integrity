@@ -5,7 +5,7 @@
   "description": "Output of `domain-integrity check --format json`, format version 2.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "tool", "summary", "findings", "known", "problems"],
+  "required": ["version", "tool", "summary", "findings", "known", "suppressed", "problems"],
   "properties": {
     "version": { "const": 2 },
     "tool": {
@@ -17,16 +17,18 @@
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["errors", "warnings", "known", "problems"],
+      "required": ["errors", "warnings", "known", "suppressed", "problems"],
       "properties": {
         "errors": { "$ref": "#/$defs/count" },
         "warnings": { "$ref": "#/$defs/count" },
         "known": { "$ref": "#/$defs/count" },
+        "suppressed": { "$ref": "#/$defs/count" },
         "problems": { "$ref": "#/$defs/count" }
       }
     },
     "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
     "known": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "suppressed": { "type": "array", "items": { "$ref": "#/$defs/suppressedFinding" } },
     "problems": { "type": "array", "items": { "$ref": "#/$defs/problem" } }
   },
   "$defs": {
@@ -34,9 +36,16 @@
     "name": { "type": "string", "minLength": 1 },
     "names": { "type": "array", "items": { "$ref": "#/$defs/name" } },
     "values": { "type": "array", "items": { "type": "string" } },
-    "finding": {
+    "finding": { "type": "object", "$ref": "#/$defs/findingFields", "unevaluatedProperties": false },
+    "suppressedFinding": {
       "type": "object",
-      "additionalProperties": false,
+      "$ref": "#/$defs/findingFields",
+      "required": ["reason"],
+      "properties": { "reason": { "type": "string", "minLength": 1 } },
+      "unevaluatedProperties": false
+    },
+    "findingFields": {
+      "type": "object",
       "required": ["ruleId", "severity", "analyzer", "identity", "location", "message", "fix", "details"],
       "properties": {
         "ruleId": {

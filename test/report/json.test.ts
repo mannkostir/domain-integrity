@@ -18,7 +18,7 @@ const parse = (overrides: Partial<Report> = {}) => JSON.parse(formatJson(report(
 
 describe('formatJson', () => {
   it('orders the top-level keys', () => {
-    expect(Object.keys(parse())).toEqual(['version', 'tool', 'summary', 'findings', 'known', 'problems']);
+    expect(Object.keys(parse())).toEqual(['version', 'tool', 'summary', 'findings', 'known', 'suppressed', 'problems']);
   });
 
   it('carries format version 2', () => {
@@ -36,7 +36,7 @@ describe('formatJson', () => {
   });
 
   it('counts new errors and warnings, known findings and problems', () => {
-    expect(parse({ fresh: [finding(), missingFinding()], known: [bufferFinding()], problems: [MISSING_FIELD] }).summary).toEqual({ errors: 1, warnings: 1, known: 1, problems: 1 });
+    expect(parse({ fresh: [finding(), missingFinding()], known: [bufferFinding()], problems: [MISSING_FIELD] }).summary).toEqual({ errors: 1, warnings: 1, known: 1, suppressed: 0, problems: 1 });
   });
 
   it('writes a finding through the envelope with a relative location and its identity', () => {
@@ -117,5 +117,25 @@ describe('formatJson', () => {
     const problem: Problem = { code: 'unknown-state-value', analyzer: 'lifecycle', message: 'M', details: { known: ['A'], value: 'B', field: 'status', aggregate: 'Order' } };
 
     expect(Object.keys(parse({ problems: [problem] }).problems[0].details)).toEqual(['aggregate', 'field', 'value', 'known']);
+  });
+
+  it('lists suppressed findings after known ones with their reason last', () => {
+    const json = parse({ suppressed: [{ finding: finding(), reason: 'Known.' }] });
+
+    expect({ keys: Object.keys(json), entry: Object.keys(json.suppressed[0]), reason: json.suppressed[0].reason }).toEqual({
+      keys: ['version', 'tool', 'summary', 'findings', 'known', 'suppressed', 'problems'],
+      entry: ['ruleId', 'severity', 'analyzer', 'identity', 'location', 'message', 'fix', 'details', 'reason'],
+      reason: 'Known.',
+    });
+  });
+
+  it('counts suppressed findings in the summary', () => {
+    expect(Object.entries(parse({ suppressed: [{ finding: finding(), reason: 'Known.' }] }).summary)).toEqual([
+      ['errors', 0],
+      ['warnings', 0],
+      ['known', 0],
+      ['suppressed', 1],
+      ['problems', 0],
+    ]);
   });
 });
