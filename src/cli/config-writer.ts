@@ -23,7 +23,7 @@ const configObject = (file: SourceFile): ObjectLiteralExpression => {
   const call = file.getExportAssignment((assignment) => !assignment.isExportEquals())?.getExpression();
   const config = Node.isCallExpression(call) ? call.getArguments()[0] : undefined;
   if (!Node.isObjectLiteralExpression(config)) {
-    throw new ConfigError('domain.config.ts must "export default defineDomain({...})".');
+    throw new ConfigError(`${file.getBaseName()} must "export default defineDomain({...})".`);
   }
   return config;
 };
@@ -49,7 +49,7 @@ const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
   const property =
     config.getProperty('lifecycles') ?? config.addPropertyAssignment({ name: 'lifecycles', initializer: '[]' });
   const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError('"lifecycles" in domain.config.ts must be an array literal.');
+  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError(`"lifecycles" in ${file.getBaseName()} must be an array literal.`);
   return array;
 };
 
@@ -70,7 +70,9 @@ const appendMissingNames = (array: ArrayLiteralExpression, names: readonly strin
 const arrayInitializer = (property: Node | undefined, option: string): ArrayLiteralExpression | undefined => {
   if (property === undefined) return undefined;
   const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError(`"${option}" in domain.config.ts must be an array literal.`);
+  if (!Node.isArrayLiteralExpression(array)) {
+    throw new ConfigError(`"${option}" in ${property.getSourceFile().getBaseName()} must be an array literal.`);
+  }
   return array;
 };
 
@@ -84,7 +86,9 @@ const aggregatesGroup = (config: ObjectLiteralExpression): ObjectLiteralExpressi
   const property = propertyNamed(config, 'aggregates');
   if (property === undefined) return undefined;
   const group = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-  if (!Node.isObjectLiteralExpression(group)) throw new ConfigError('"aggregates" in domain.config.ts must be an object literal.');
+  if (!Node.isObjectLiteralExpression(group)) {
+    throw new ConfigError(`"aggregates" in ${config.getSourceFile().getBaseName()} must be an object literal.`);
+  }
   return group;
 };
 

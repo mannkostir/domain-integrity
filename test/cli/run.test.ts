@@ -196,6 +196,37 @@ describe('project and config paths', () => {
 
     expect(stderr()).toBe('config/domain.config.ts not found. Run "domain-integrity init" to create it, or pass -c with the path to your config file.\n');
   });
+
+  it('names the config passed with -c in its type errors', async () => {
+    const config = "import { defineDomain } from 'domain-integrity';\nconst count: number = 'one';\nexport default defineDomain({});\n";
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, 'my.config.ts': config }));
+    await run(['check', '-c', 'my.config.ts'], io);
+
+    expect(stderr()).toBe("Type errors in my.config.ts:\nmy.config.ts:2 Type 'string' is not assignable to type 'number'.\n");
+  });
+
+  it('reports only the first syntax error of the config passed with -c', async () => {
+    const config = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ a: 1 b: 2 c: [ });\n";
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, 'configs/bad.config.ts': config }));
+    await run(['check', '-c', 'configs/bad.config.ts'], io);
+
+    expect(stderr()).toBe("Syntax error at configs/bad.config.ts:2: ',' expected.\n");
+  });
+
+  it('says how to install domain-integrity when the config cannot import it', async () => {
+    const config = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n";
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, 'my.config.ts': config }, { paths: {} }));
+    await run(['check', '-c', 'my.config.ts'], io);
+
+    expect(stderr()).toBe('my.config.ts:1 cannot import "domain-integrity". Install it as a dev dependency: npm install --save-dev domain-integrity\n');
+  });
+
+  it('exits 2 for a syntax error in the config', async () => {
+    const config = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ a: 1 b: 2 });\n";
+    const { io } = captureIo(writeProject({ ...TICKET_SOURCES, 'domain.config.ts': config }));
+
+    expect(await run(['check'], io)).toBe(2);
+  });
 });
 
 describe('check exit codes', () => {

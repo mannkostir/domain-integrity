@@ -94,7 +94,7 @@ const MIXED_BASE_PROJECT = {
 };
 
 const declarationIn = (dir: string) =>
-  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'), dir), join(dir, 'domain.config.ts'), dir)).declaration;
+  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'), dir), join(dir, 'domain.config.ts'), dir), 'domain.config.ts').declaration;
 
 const declaredBaseClasses = (dir: string): readonly string[] => declarationIn(dir).aggregateBaseClasses;
 
@@ -266,6 +266,13 @@ describe('init --base-class', () => {
       withoutFlag: withoutFlag.stderr().includes('domain.config.ts:6 '),
       withFlag: withFlag.stderr().includes('domain.config.ts:6 '),
     }).toEqual({ withoutFlag: true, withFlag: true });
+  });
+
+  it('names the config passed with -c in its type errors', async () => {
+    const { io, stderr } = captureIo(writeProject({ ...MODEL_SOURCES, 'configs/my.config.ts': CONFIG_WITH_TYPE_ERROR_ON_LINE_6 }));
+    await run(['init', '--yes', '-c', 'configs/my.config.ts'], io);
+
+    expect(stderr()).toBe("Type errors in configs/my.config.ts:\nconfigs/my.config.ts:6 Type 'string' is not assignable to type 'number'.\n");
   });
 
   it('exits 2 and writes nothing for a base class that is not an identifier', async () => {
@@ -445,7 +452,7 @@ describe('init', () => {
     const dir = writeProject(TICKET_SOURCES);
     await run(['init', '--yes'], captureIo(dir).io);
     const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'), dir);
-    const { declaration } = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts'), dir));
+    const { declaration } = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts'), dir), 'domain.config.ts');
 
     expect(declaration.lifecycles.map((lifecycle) => lifecycle.target.getName())).toEqual(['Ticket']);
   });

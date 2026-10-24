@@ -3,6 +3,7 @@ import {
   ClassDeclaration,
   Diagnostic,
   Expression,
+  ImportDeclaration,
   Node,
   ObjectLiteralExpression,
   PropertyAssignment,
@@ -24,12 +25,43 @@ import { RULE_ANALYZERS, RuleId, RuleLevel } from '../finding';
 import { OptionPath, RENAMED_OPTIONS, RenamedOption, optionPath } from './renamed-options';
 import { SET, UNSET, literalToken } from './value-token';
 
-const unsupported = (node: Node, what: string): ConfigError =>
-  new ConfigError(
-    `domain.config.ts:${node.getStartLineNumber()} ${what}. Use literal objects, arrays and direct references.`,
+type NamedMessage = (configName: string) => string;
+
+class UnnamedConfigError extends Error {
+  constructor(readonly messageFor: NamedMessage) {
+    super(messageFor('the config file'));
+  }
+}
+
+const unsupported = (node: Node, what: string): UnnamedConfigError =>
+  new UnnamedConfigError(
+    (config) => `${config}:${node.getStartLineNumber()} ${what}. Use literal objects, arrays and direct references.`,
   );
 
 const FILE_NOT_LISTED_IN_PROJECT_CODE = 6307;
+
+const HELPERS_MODULE = 'domain-integrity';
+
+const diagnosticText = (diagnostic: Diagnostic): string =>
+  ts.flattenDiagnosticMessageText(diagnostic.compilerObject.messageText, '\n');
+
+const assertNoSyntaxErrors = (file: SourceFile): void => {
+  const [first] = file.getProject().getProgram().getSyntacticDiagnostics(file);
+  if (first === undefined) return;
+  throw new UnnamedConfigError((config) => `Syntax error at ${config}:${first.getLineNumber()}: ${diagnosticText(first)}`);
+};
+
+const isUnresolvedHelpersImport = (declaration: ImportDeclaration): boolean =>
+  declaration.getModuleSpecifierValue() === HELPERS_MODULE && declaration.getModuleSpecifierSourceFile() === undefined;
+
+const assertHelpersResolve = (file: SourceFile): void => {
+  const unresolved = file.getImportDeclarations().find(isUnresolvedHelpersImport);
+  if (unresolved === undefined) return;
+  throw new UnnamedConfigError(
+    (config) =>
+      `${config}:${unresolved.getStartLineNumber()} cannot import "${HELPERS_MODULE}". Install it as a dev dependency: npm install --save-dev ${HELPERS_MODULE}`,
+  );
+};
 
 const isConfigTypeError = (diagnostic: Diagnostic, file: SourceFile): boolean =>
   diagnostic.getCategory() === ts.DiagnosticCategory.Error &&
@@ -39,11 +71,10 @@ const isConfigTypeError = (diagnostic: Diagnostic, file: SourceFile): boolean =>
 const assertNoTypeErrors = (file: SourceFile): void => {
   const errors = file.getPreEmitDiagnostics().filter((diagnostic) => isConfigTypeError(diagnostic, file));
   if (errors.length === 0) return;
-  const lines = errors.map(
-    (diagnostic) =>
-      `domain.config.ts:${diagnostic.getLineNumber()} ${ts.flattenDiagnosticMessageText(diagnostic.compilerObject.messageText, '\n')}`,
-  );
-  throw new ConfigError(`Type errors in domain.config.ts:\n${lines.join('\n')}`);
+  throw new UnnamedConfigError((config) => {
+    const lines = errors.map((diagnostic) => `${config}:${diagnostic.getLineNumber()} ${diagnosticText(diagnostic)}`);
+    return `Type errors in ${config}:\n${lines.join('\n')}`;
+  });
 };
 
 const callNamed = (node: Node | undefined, name: string): CallExpression | undefined =>
@@ -115,9 +146,10 @@ const valueAt = (object: ObjectLiteralExpression, [name, ...rest]: OptionPath, p
 
 const propertyLine = (value: Expression): number => value.getParentOrThrow().getStartLineNumber();
 
-const conflict = (old: Expression, current: Expression, option: RenamedOption): ConfigError =>
-  new ConfigError(
-    `domain.config.ts:${propertyLine(old)} sets "${optionPath(option.old)}" and domain.config.ts:${propertyLine(current)} sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`,
+const conflict = (old: Expression, current: Expression, option: RenamedOption): UnnamedConfigError =>
+  new UnnamedConfigError(
+    (config) =>
+      `${config}:${propertyLine(old)} sets "${optionPath(option.old)}" and ${config}:${propertyLine(current)} sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`,
   );
 
 const renamedValue = (config: ObjectLiteralExpression, option: RenamedOption): Located => {
@@ -240,8 +272,9 @@ const readOutcome = (sagaName: string) => (element: Expression): readonly [Class
   const [success, failure] = element.getElements().map((item) => projectClass(item, 'an outcome element'));
   if (success === undefined || failure === undefined) throw unsupported(element, 'each outcome must be a [success, failure] array literal');
   if (success === failure) {
-    throw new ConfigError(
-      `domain.config.ts:${element.getStartLineNumber()} an outcome of saga(${sagaName}) lists ${success.getName() ?? 'a class'} as both success and failure.`,
+    throw new UnnamedConfigError(
+      (config) =>
+        `${config}:${element.getStartLineNumber()} an outcome of saga(${sagaName}) lists ${success.getName() ?? 'a class'} as both success and failure.`,
     );
   }
   return [success, failure];
@@ -288,7 +321,9 @@ const ruleLevel = (setting: Expression): RuleLevel | undefined => {
 
 const ruleEntry = (property: PropertyAssignment): readonly (readonly [RuleId, RuleLevel])[] => {
   const name = propertyName(property);
-  if (!isRuleId(name)) throw new ConfigError(`domain.config.ts:${property.getStartLineNumber()} "rules" names the unknown rule "${name}".`);
+  if (!isRuleId(name)) {
+    throw new UnnamedConfigError((config) => `${config}:${property.getStartLineNumber()} "rules" names the unknown rule "${name}".`);
+  }
   const level = ruleLevel(property.getInitializerOrThrow());
   return level === undefined ? [] : [[name, level]];
 };
@@ -313,11 +348,15 @@ const readSuppression = (element: Expression): DeclaredSuppression => {
   const target = projectClass(targetArgument, 'the first argument of suppress()');
   const spec = objectArgument(call, 1);
   const rule = stringLiteralText(valueOf(spec, 'rule'), call, '"rule" of suppress()');
-  if (!isRuleId(rule)) throw new ConfigError(`domain.config.ts:${call.getStartLineNumber()} suppress() names the unknown rule "${rule}".`);
+  if (!isRuleId(rule)) {
+    throw new UnnamedConfigError((config) => `${config}:${call.getStartLineNumber()} suppress() names the unknown rule "${rule}".`);
+  }
   const member = valueOf(spec, 'member');
   const reason = stringLiteralText(valueOf(spec, 'reason'), call, '"reason" of suppress()');
   if (reason.trim() === '') {
-    throw new ConfigError(`domain.config.ts:${call.getStartLineNumber()} suppress(${target.getName() ?? 'anonymous'}) needs a non-empty "reason".`);
+    throw new UnnamedConfigError(
+      (config) => `${config}:${call.getStartLineNumber()} suppress(${target.getName() ?? 'anonymous'}) needs a non-empty "reason".`,
+    );
   }
   return {
     rule,
@@ -330,11 +369,13 @@ const readSuppression = (element: Expression): DeclaredSuppression => {
 
 const byLine = (left: Deprecation, right: Deprecation): number => left.line - right.line;
 
-export const readDeclaration = (file: SourceFile): ConfigReading => {
+const readReadableConfig = (file: SourceFile): ConfigReading => {
+  assertNoSyntaxErrors(file);
+  assertHelpersResolve(file);
   assertNoTypeErrors(file);
   const exported = file.getExportAssignment((assignment) => !assignment.isExportEquals());
   const call = callNamed(exported?.getExpression(), 'defineDomain');
-  if (!call) throw new ConfigError('domain.config.ts must "export default defineDomain({...})".');
+  if (!call) throw new UnnamedConfigError((config) => `${config} must "export default defineDomain({...})".`);
   const config = objectArgument(call, 0);
   const lifecycles = valueOf(config, 'lifecycles');
   const declaredLifecycles = lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle);
@@ -379,4 +420,13 @@ export const readDeclaration = (file: SourceFile): ConfigReading => {
     },
     deprecations: reads.flatMap((read) => read.deprecations).sort(byLine),
   };
+};
+
+export const readDeclaration = (file: SourceFile, configName: string): ConfigReading => {
+  try {
+    return readReadableConfig(file);
+  } catch (error) {
+    if (error instanceof UnnamedConfigError) throw new ConfigError(error.messageFor(configName));
+    throw error;
+  }
 };

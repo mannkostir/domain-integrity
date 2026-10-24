@@ -37,7 +37,7 @@ const buffersOf = (
   });
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith(analysed));
   const configFile = project.getSourceFileOrThrow('/app/domain.config.ts');
-  return extractEventFlows({ declaration: readDeclaration(configFile).declaration, files, projectRoot: '/app', repositoryRoot: '/app', configFile }).buffers;
+  return extractEventFlows({ declaration: readDeclaration(configFile, 'domain.config.ts').declaration, files, projectRoot: '/app', repositoryRoot: '/app', configFile }).buffers;
 };
 
 const booking = (extra: Readonly<Record<string, string>> = {}, base: string = BASE): Readonly<Record<string, string>> => ({

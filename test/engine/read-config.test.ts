@@ -21,10 +21,12 @@ export class OrderSaga {}
 `,
 };
 
-const read = (config: string, compilerOptionOverrides: CompilerOptions = {}) => {
+const readAs = (configName: string, config: string, compilerOptionOverrides: CompilerOptions = {}) => {
   const project = inMemoryProject({ ...DOMAIN, '/domain.config.ts': config }, compilerOptionOverrides);
-  return readDeclaration(project.getSourceFileOrThrow('/domain.config.ts'));
+  return readDeclaration(project.getSourceFileOrThrow('/domain.config.ts'), configName);
 };
+
+const read = (config: string, compilerOptionOverrides: CompilerOptions = {}) => readAs('domain.config.ts', config, compilerOptionOverrides);
 
 describe('readDeclaration', () => {
   it('applies defaults when optional lists are omitted', () => {
@@ -408,7 +410,7 @@ export default defineDomain({ events: { inProcess: [ExternalEvent] } });
 `,
     });
 
-    expect(() => readDeclaration(project.getSourceFileOrThrow('/domain.config.ts'))).toThrow(/declared in the project/);
+    expect(() => readDeclaration(project.getSourceFileOrThrow('/domain.config.ts'), 'domain.config.ts')).toThrow(/declared in the project/);
   });
 
   it('rejects events that is not an object literal', () => {
@@ -666,5 +668,45 @@ describe('transitions', () => {
 
   it('does not deprecate from', () => {
     expect(read(ORDER_TRANSITIONS('{ from: [OrderStatus.pending] }')).deprecations).toEqual([]);
+  });
+});
+
+describe('config diagnostics', () => {
+  it('names the config in an error about a value it cannot read', () => {
+    expect(() =>
+      readAs('my.config.ts', "import { defineDomain } from 'domain-integrity';\nconst names = ['Audited'];\nexport default defineDomain({ inert: { decorators: names } });\n"),
+    ).toThrow(new ConfigError('my.config.ts:3 expected an array literal. Use literal objects, arrays and direct references.'));
+  });
+
+  it('names the config in its type errors', () => {
+    expect(() => readAs('my.config.ts', "import { defineDomain } from 'domain-integrity';\nconst count: number = 'one';\nexport default defineDomain({});\n")).toThrow(
+      new ConfigError("Type errors in my.config.ts:\nmy.config.ts:2 Type 'string' is not assignable to type 'number'."),
+    );
+  });
+
+  it('names the config when it lacks the defineDomain default export', () => {
+    expect(() => readAs('my.config.ts', 'export default 42;\n')).toThrow(new ConfigError('my.config.ts must "export default defineDomain({...})".'));
+  });
+
+  it('names the config when two names of one option are set', () => {
+    expect(() => readAs('configs/domain.config.ts', configSetting("aggregateBaseClasses: ['A'],\n  aggregates: { baseClasses: ['B'] }"))).toThrow(
+      new ConfigError('configs/domain.config.ts:3 sets "aggregateBaseClasses" and configs/domain.config.ts:4 sets "aggregates.baseClasses". Keep only "aggregates.baseClasses".'),
+    );
+  });
+
+  it('reports only the first syntax error', () => {
+    expect(() => readAs('bad.config.ts', "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ a: 1 b: 2 c: [ });\n")).toThrow(
+      new ConfigError("Syntax error at bad.config.ts:2: ',' expected."),
+    );
+  });
+
+  it('reports a syntax error as a config error', () => {
+    expect(() => readAs('bad.config.ts', "export default defineDomain({ lifecycles: [, });\n")).toThrow(ConfigError);
+  });
+
+  it('says how to install domain-integrity when the config cannot import it', () => {
+    expect(() => readAs('my.config.ts', "\nimport { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n", { paths: {} })).toThrow(
+      new ConfigError('my.config.ts:2 cannot import "domain-integrity". Install it as a dev dependency: npm install --save-dev domain-integrity'),
+    );
   });
 });

@@ -81,9 +81,10 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   }
   const project = loadProject(paths.tsconfig, paths.config, io.cwd);
   const existing = existingConfig(project, paths.config, io.cwd);
-  if (existing !== undefined) reportDeprecations(readDeclaration(existing).deprecations, toPosixRelative(io.cwd, paths.config), io);
+  const configName = toPosixRelative(io.cwd, paths.config);
+  if (existing !== undefined) reportDeprecations(readDeclaration(existing, configName).deprecations, configName, io);
   const config = startingConfig(project, paths.config, existing, options.baseClass);
-  const declaration = config ? readDeclaration(config).declaration : DEFAULT_DECLARATION;
+  const declaration = config ? readDeclaration(config, configName).declaration : DEFAULT_DECLARATION;
   const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, config), projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile: config });
   if (lifecycleAnalyzer.scope(model) === 'nothing-found') {
     throw new ProjectError(noAggregatesForInitMessage(declaration, initRetryCommand(paths, io.cwd, options.yes === true)));
