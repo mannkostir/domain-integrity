@@ -18,8 +18,8 @@ const NO_AGGREGATES = 'No aggregates found.';
 const searchedBaseClasses = (declaration: DomainDeclaration): string =>
   `Searched for classes extending or implementing: ${declaration.aggregateBaseClasses.join(', ')}.`;
 
-const SET_BASE_CLASSES =
-  'Set "aggregates.baseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregates: { baseClasses: [\'MyAggregateBase\'] } })';
+const setBaseClasses = (config: string): string =>
+  `Set "aggregates.baseClasses" in ${config} to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregates: { baseClasses: ['MyAggregateBase'] } })`;
 
 const NO_HANDLERS = 'No event handlers were found either.';
 
@@ -28,13 +28,13 @@ const recognisedHandlers = (declaration: DomainDeclaration): string =>
 
 export const noAggregatesFound = (declaration: DomainDeclaration): string => `${NO_AGGREGATES} ${searchedBaseClasses(declaration)}`;
 
-const nothingFoundMessage = (declaration: DomainDeclaration, fileCount: number, problems: readonly Problem[]): string =>
+const nothingFoundMessage = (config: string, declaration: DomainDeclaration, fileCount: number, problems: readonly Problem[]): string =>
   [
     loadedSourceFiles(fileCount),
     ...problems.map((problem) => `problem: ${problem.message}`),
     NO_AGGREGATES,
     searchedBaseClasses(declaration),
-    SET_BASE_CLASSES,
+    setBaseClasses(config),
     NO_HANDLERS,
     recognisedHandlers(declaration),
   ].join('\n');
@@ -52,15 +52,16 @@ export const runScope = (scopes: readonly CheckScope[]): CheckScope => {
 };
 
 export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[], io: Io): Session => {
-  const project = loadProject(paths.tsconfig, paths.config);
-  const configFile = configSourceFile(project, paths.config);
-  const { declaration, deprecations } = readDeclaration(configFile);
-  reportDeprecations(deprecations, toPosixRelative(io.cwd, paths.config), io);
+  const project = loadProject(paths.tsconfig, paths.config, io.cwd);
+  const configFile = configSourceFile(project, paths.config, io.cwd);
+  const config = toPosixRelative(io.cwd, paths.config);
+  const { declaration, deprecations } = readDeclaration(configFile, config);
+  reportDeprecations(deprecations, config, io);
   const files = analysedSourceFiles(project, configFile);
   const results = runAnalyzers({ declaration, files, projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile }, analyzers);
   const scope = runScope(results.map((result) => result.scope));
-  if (scope === 'nothing-found') throw new ProjectError(nothingFoundMessage(declaration, files.length, results.flatMap((result) => result.problems)));
-  if (scope === 'nothing-declared') return { kind: 'nothing-declared', declaration, results, notice: nothingDeclaredNotice(paths.config, files.length) };
+  if (scope === 'nothing-found') throw new ProjectError(nothingFoundMessage(config, declaration, files.length, results.flatMap((result) => result.problems)));
+  if (scope === 'nothing-declared') return { kind: 'nothing-declared', declaration, results, notice: nothingDeclaredNotice(config, files.length) };
   return { kind: 'checkable', declaration, results };
 };
 

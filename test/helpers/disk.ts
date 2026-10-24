@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Io } from '../../src/cli/io';
+import { DEFAULT_HELP_WIDTH, Io } from '../../src/cli/io';
 import { AGGREGATE_ROOT } from './in-memory';
 
 const HELPERS_ENTRY = fileURLToPath(new URL('../../src/index.ts', import.meta.url));
@@ -64,7 +64,7 @@ const writeProjectInto = (
   });
 };
 
-const freshTempDir = (): string => realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-cli-')));
+const freshTempDir = (): string => realpathSync.native(mkdtempSync(join(tmpdir(), 'domain-integrity-cli-')));
 
 export const writeProject = (
   files: Readonly<Record<string, string>>,
@@ -85,25 +85,34 @@ export const writeNestedProject = (
   return { top, project };
 };
 
-export const captureIo = (cwd: string, answers: readonly boolean[] = []) => {
+export type CaptureOptions = { readonly interactive?: boolean; readonly helpWidth?: number };
+
+export const captureIo = (cwd: string, answers: readonly string[] = [], { interactive = answers.length > 0, helpWidth = DEFAULT_HELP_WIDTH }: CaptureOptions = {}) => {
   const out: string[] = [];
   const err: string[] = [];
+  const asked: string[] = [];
   const pending = [...answers];
   const io: Io = {
     cwd,
     out: (text) => out.push(text),
     err: (text) => err.push(text),
-    prompt: async () => pending.shift() ?? true,
-    isInteractive: answers.length > 0,
+    prompt: async (question) => {
+      asked.push(question);
+      return pending.shift() ?? '';
+    },
+    isInteractive: interactive,
+    helpWidth,
   };
-  return { io, stdout: () => out.join(''), stderr: () => err.join('') };
+  return { io, stdout: () => out.join(''), stderr: () => err.join(''), questions: (): readonly string[] => [...asked] };
 };
 
 export const writeTree = (files: Readonly<Record<string, string>>): string => {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-references-')));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'domain-integrity-references-')));
   Object.entries(files).forEach(([path, text]) => {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), text);
   });
   return dir;
 };
+
+export const HAS_POSIX_FILE_MODES = process.platform !== 'win32';

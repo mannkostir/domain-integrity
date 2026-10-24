@@ -1,21 +1,13 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { run } from '../../src/cli/run';
 import { configSourceFile, loadProject } from '../../src/engine/project';
 import { readDeclaration } from '../../src/engine/read-config';
-import { TICKET_CONFIG, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
+import { HAS_POSIX_FILE_MODES, TICKET_CONFIG, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
 import { AGGREGATE_ROOT } from '../helpers/in-memory';
-
-const readConfig = (dir: string): string => readFileSync(join(dir, 'domain.config.ts'), 'utf8');
-
-const PAYMENT = `
-import { AggregateRoot } from './aggregate-root';
-export class Payment extends AggregateRoot<{ state: 'open' | 'paid' }> {
-  static open(): Payment { return new Payment({ state: 'open' }); }
-  pay(): void { if (this.props.state === 'paid') return; this.props.state = 'paid'; }
-}
-`;
+import { declarationIn, initWithBaseClass, readConfig } from '../helpers/init-project';
+import { FOUR_SPACE_CONFIG, MODEL_SOURCES, PAYMENT, baseClassSource, invoiceExtending, orderWithEnumIn } from '../helpers/init-sources';
 
 const orderIn = (status: string) => `
 import { AggregateRoot } from '../aggregate-root';
@@ -25,44 +17,12 @@ export class Order extends AggregateRoot<{ state: 'open' | '${status}' }> {
 }
 `;
 
-const orderWithEnumIn = (status: string) => `
-import { AggregateRoot } from '../aggregate-root';
-export enum OrderStatus { open = 'OPEN', ${status} = '${status.toUpperCase()}' }
-export class Order extends AggregateRoot<{ status: OrderStatus }> {
-  static open(): Order { return new Order({ status: OrderStatus.open }); }
-  finish(): void { if (this.props.status === OrderStatus.${status}) return; this.props.status = OrderStatus.${status}; }
-}
-`;
-
-const baseClassSource = (name: string): string => AGGREGATE_ROOT.replace('class AggregateRoot<', `class ${name}<`);
-
-const invoiceExtending = (base: string, file: string) => `
-import { ${base} } from './${file}';
-export class Invoice extends ${base}<{ state: 'draft' | 'void'; note: string }> {
-  static draft(note: string): Invoice { return new Invoice({ state: 'draft', note }); }
-  annotate(note: string): void { this.props.note = note; }
-  cancel(): void { if (this.props.state === 'void') return; this.props.state = 'void'; }
-}
-`;
-
 const SHIPMENT_EXTENDING_RECORD = `
 import { Record } from './record';
 export class Shipment extends Record<{ state: 'pending' | 'delivered' }> {
   static pending(): Shipment { return new Shipment({ state: 'pending' }); }
   deliver(): void { if (this.props.state === 'delivered') return; this.props.state = 'delivered'; }
 }
-`;
-
-const MODEL_SOURCES = {
-  'src/model.ts': baseClassSource('Model'),
-  'src/invoice.ts': invoiceExtending('Model', 'model'),
-};
-
-const FOUR_SPACE_CONFIG = `import { defineDomain } from 'domain-integrity';
-
-export default defineDomain({
-    lifecycles: [],
-});
 `;
 
 const CONFIG_WITH_TYPE_ERROR_ON_LINE_6 = `import { defineDomain } from 'domain-integrity';
@@ -93,23 +53,14 @@ const MIXED_BASE_PROJECT = {
   'domain.config.ts': ORDER_CONFIG,
 };
 
-const declarationIn = (dir: string) =>
-  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), join(dir, 'domain.config.ts'))).declaration;
-
 const declaredBaseClasses = (dir: string): readonly string[] => declarationIn(dir).aggregateBaseClasses;
-
-const initWithBaseClass = async (config: string | undefined): Promise<string> => {
-  const dir = writeProject(config === undefined ? MODEL_SOURCES : { ...MODEL_SOURCES, 'domain.config.ts': config });
-  await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
-  return dir;
-};
 
 describe('init --base-class', () => {
   it('declares an aggregate extending the named base class', async () => {
     const dir = writeProject(MODEL_SOURCES);
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
-    expect(readConfig(dir)).toContain("lifecycle(Invoice, { states: { state: { terminal: ['void'] } } })");
+    expect(readConfig(dir)).toContain("    lifecycle(Invoice, {\n      states: {\n        state: { terminal: 'void' },\n      },\n    }),\n");
   });
 
   it('records the named base class in the written config', async () => {
@@ -268,6 +219,13 @@ describe('init --base-class', () => {
     }).toEqual({ withoutFlag: true, withFlag: true });
   });
 
+  it('names the config passed with -c in its type errors', async () => {
+    const { io, stderr } = captureIo(writeProject({ ...MODEL_SOURCES, 'configs/my.config.ts': CONFIG_WITH_TYPE_ERROR_ON_LINE_6 }));
+    await run(['init', '--yes', '-c', 'configs/my.config.ts'], io);
+
+    expect(stderr()).toBe("Type errors in configs/my.config.ts:\nconfigs/my.config.ts:6 Type 'string' is not assignable to type 'number'.\n");
+  });
+
   it('exits 2 and writes nothing for a base class that is not an identifier', async () => {
     const dir = writeProject(MODEL_SOURCES);
     const exitCode = await run(['init', '--yes', '--base-class', 'Not valid'], captureIo(dir).io);
@@ -337,7 +295,7 @@ describe('init --base-class when nothing is declared', () => {
 
   it('explains that the base classes were not saved when every suggestion is declined', async () => {
     const dir = writeProject(MODEL_SOURCES);
-    const { io, stdout } = captureIo(dir, [false]);
+    const { io, stdout } = captureIo(dir, ['n']);
     await run(['init', '--base-class', 'Model'], io);
 
     expect(stdout()).toMatch(
@@ -396,7 +354,7 @@ describe('init without aggregates', () => {
   });
 
   it('leaves --yes out of the command when it was not given', async () => {
-    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES), [true]);
+    const { io, stderr } = captureIo(writeProject(NO_AGGREGATE_SOURCES), ['y']);
     await run(['init'], io);
 
     expect(stderr()).toMatch(/: npx domain-integrity init --base-class <Name>\n$/);
@@ -433,6 +391,53 @@ describe('init without aggregates', () => {
   });
 });
 
+const configImporting = (ticketImport: string): string => `import { defineDomain } from 'domain-integrity';
+${ticketImport}
+export default defineDomain({ lifecycles: [] });
+`;
+
+const NAMESPACE_IMPORT_CONFIG = configImporting("import * as tickets from './src/ticket';");
+
+const TYPE_ONLY_IMPORT_CONFIG = configImporting("import type { TicketStatus } from './src/ticket';");
+
+describe('init beside an import of the aggregate module', () => {
+  it('adds a separate import when the module is imported as a namespace', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': NAMESPACE_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir).split('\n').filter((line) => line.startsWith('import'))).toEqual([
+      "import { defineDomain, lifecycle } from 'domain-integrity';",
+      "import * as tickets from './src/ticket';",
+      "import { Ticket, TicketStatus } from './src/ticket';",
+    ]);
+  });
+
+  it('writes a config that check reads when the module is imported as a namespace', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': NAMESPACE_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+
+  it('imports values beside a type-only import of the module', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': TYPE_ONLY_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir).split('\n').filter((line) => line.startsWith('import'))).toEqual([
+      "import { defineDomain, lifecycle } from 'domain-integrity';",
+      "import type { TicketStatus } from './src/ticket';",
+      "import { Ticket, TicketStatus as TicketStatus2 } from './src/ticket';",
+    ]);
+  });
+
+  it('writes a config that check reads when the module is imported for types only', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': TYPE_ONLY_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+});
+
 describe('init', () => {
   it('writes a config that check can read', async () => {
     const dir = writeProject(TICKET_SOURCES);
@@ -444,8 +449,8 @@ describe('init', () => {
   it('writes a config whose declared lifecycle targets are the suggested aggregates', async () => {
     const dir = writeProject(TICKET_SOURCES);
     await run(['init', '--yes'], captureIo(dir).io);
-    const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'));
-    const { declaration } = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts')));
+    const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'), dir);
+    const { declaration } = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts'), dir), 'domain.config.ts');
 
     expect(declaration.lifecycles.map((lifecycle) => lifecycle.target.getName())).toEqual(['Ticket']);
   });
@@ -455,7 +460,7 @@ describe('init', () => {
 
     return run(['init', '--yes'], captureIo(dir).io).then(() =>
       expect(readConfig(dir)).toMatch(
-        /import \{ Ticket, TicketStatus \} from '\.\/src\/ticket';[\s\S]*lifecycle\(Ticket, \{ states: \{ status: \{ terminal: \[TicketStatus\.closed\] \} \} \}\)/,
+        /import \{ Ticket, TicketStatus \} from '\.\/src\/ticket';[\s\S]*lifecycle\(Ticket, \{\n {6}states: \{\n {8}status: \{ terminal: TicketStatus\.closed \},/,
       ),
     );
   });
@@ -468,7 +473,7 @@ describe('init', () => {
 
     expect({
       keptTicket: config.includes("lifecycle(Ticket, { states: { status: { terminal: [] } } })"),
-      addedPayment: config.includes("lifecycle(Payment, { states: { state: { terminal: ['paid'] } } })"),
+      addedPayment: config.includes("  lifecycle(Payment, {\n    states: {\n      state: { terminal: 'paid' },\n    },\n  }),\n"),
       ticketCount: config.split('lifecycle(Ticket').length - 1,
     }).toEqual({ keptTicket: true, addedPayment: true, ticketCount: 1 });
   });
@@ -504,7 +509,7 @@ describe('init', () => {
 
   it('writes nothing when the only suggestion is declined', async () => {
     const dir = writeProject(TICKET_SOURCES);
-    const { io, stdout } = captureIo(dir, [false]);
+    const { io, stdout } = captureIo(dir, ['n']);
     await run(['init'], io);
 
     expect(stdout()).toBe('Nothing declared.\n');
@@ -521,7 +526,68 @@ describe('init', () => {
     });
   });
 
-  it('exits 2 with a clear message when the config cannot be written', async () => {
+  it('exits 2 when a suggestion needs confirming without a terminal', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+
+    const exitCode = await run(['init'], captureIo(dir).io);
+
+    expect(exitCode).toBe(2);
+  });
+
+  it('reports every aggregate as declared without a terminal', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': TICKET_CONFIG });
+    const { io, stdout } = captureIo(dir);
+
+    const exitCode = await run(['init'], io);
+
+    expect({ exitCode, stdout: stdout() }).toEqual({ exitCode: 0, stdout: 'All discovered aggregates are already declared.\n' });
+  });
+
+  it('reports no state fields without a terminal', async () => {
+    const dir = writeProject({
+      'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'],
+      'src/note.ts': "import { AggregateRoot } from './aggregate-root';\nexport class Note extends AggregateRoot<{ text: string }> {}\n",
+    });
+    const { io, stdout } = captureIo(dir);
+
+    const exitCode = await run(['init'], io);
+
+    expect({ exitCode, stdout: stdout() }).toEqual({
+      exitCode: 0,
+      stdout: 'No state fields found in the discovered aggregates; nothing to declare.\n',
+    });
+  });
+
+  it('explains the unsaved base classes without a terminal when nothing is left to declare', async () => {
+    const dir = writeProject(STATELESS_MODEL_SOURCES);
+    const { io, stdout } = captureIo(dir);
+
+    const exitCode = await run(['init', '--base-class', 'Model'], io);
+
+    expect({ exitCode, stdout: stdout() }).toEqual({
+      exitCode: 0,
+      stdout:
+        "No state fields found in the discovered aggregates; nothing to declare.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregates: { baseClasses: ['Model'] } to defineDomain({...}) in domain.config.ts yourself.\n",
+    });
+  });
+
+  it('creates no config with --base-class when a suggestion needs confirming without a terminal', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+
+    await run(['init', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(existsSync(join(dir, 'domain.config.ts'))).toBe(false);
+  });
+
+  it('leaves an existing config untouched with --base-class when a suggestion needs confirming without a terminal', async () => {
+    const dir = writeProject(MIXED_BASE_PROJECT);
+
+    await run(['init', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toBe(ORDER_CONFIG);
+  });
+
+  it('exits 2 with a clear message when the config cannot be read', async () => {
     const dir = writeProject(TICKET_SOURCES);
     mkdirSync(join(dir, 'domain.config.ts'));
     const { io, stderr } = captureIo(dir);
@@ -529,6 +595,50 @@ describe('init', () => {
     expect({ exitCode: await run(['init', '--yes'], io), mentionsCannot: stderr().includes('Cannot') }).toEqual({
       exitCode: 2,
       mentionsCannot: true,
+    });
+  });
+
+  it('reports a config path that is a directory as unreadable', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+    mkdirSync(join(dir, 'domain.config.ts'));
+    const { io, stderr } = captureIo(dir);
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toBe('Cannot read domain.config.ts: it is a directory\n');
+  });
+
+  it('reports a config path that is a directory as unreadable with --base-class', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    mkdirSync(join(dir, 'domain.config.ts'));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes', '--base-class', 'Model'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot read domain.config.ts: it is a directory\n',
+    });
+  });
+
+  it.runIf(HAS_POSIX_FILE_MODES)('reports an existing config without read permission as unreadable', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ lifecycles: [] });\n" });
+    chmodSync(join(dir, 'domain.config.ts'), 0o000);
+    onTestFinished(() => chmodSync(join(dir, 'domain.config.ts'), 0o644));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot read domain.config.ts: permission denied\n',
+    });
+  });
+
+  it.runIf(HAS_POSIX_FILE_MODES)('names the config that cannot be saved relative to the working directory', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+    mkdirSync(join(dir, 'configs'), { mode: 0o555 });
+    onTestFinished(() => chmodSync(join(dir, 'configs'), 0o755));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes', '-c', 'configs/domain.config.ts'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot write configs/domain.config.ts: permission denied\n',
     });
   });
 
@@ -559,8 +669,8 @@ describe('init', () => {
     expect({
       sales: config.includes("import { Order } from './src/sales/order';"),
       shipping: config.includes("import { Order as Order2 } from './src/shipping/order';"),
-      salesLifecycle: config.includes("lifecycle(Order, { states: { state: { terminal: ['paid'] } } })"),
-      shippingLifecycle: config.includes("lifecycle(Order2, { states: { state: { terminal: ['shipped'] } } })"),
+      salesLifecycle: config.includes("    lifecycle(Order, {\n      states: {\n        state: { terminal: 'paid' },\n"),
+      shippingLifecycle: config.includes("    lifecycle(Order2, {\n      states: {\n        state: { terminal: 'shipped' },\n"),
       check: await run(['check'], captureIo(dir).io),
     }).toEqual({ sales: true, shipping: true, salesLifecycle: true, shippingLifecycle: true, check: 0 });
   });
@@ -576,7 +686,7 @@ describe('init', () => {
 
     expect({
       shipping: config.includes("import { Order as Order2, OrderStatus as OrderStatus2 } from './src/shipping/order';"),
-      shippingLifecycle: config.includes('lifecycle(Order2, { states: { status: { terminal: [OrderStatus2.shipped] } } })'),
+      shippingLifecycle: config.includes('    lifecycle(Order2, {\n      states: {\n        status: { terminal: OrderStatus2.shipped },\n'),
       check: await run(['check'], captureIo(dir).io),
     }).toEqual({ shipping: true, shippingLifecycle: true, check: 0 });
   });
@@ -604,14 +714,14 @@ describe('init', () => {
     expect(readConfig(dir)).toContain("import { defineDomain, lifecycle } from 'domain-integrity';");
   });
 
-  it('indents the lifecycles it adds to an empty hand-written config as before', async () => {
+  it('indents the lifecycles it adds to an empty hand-written config with two spaces', async () => {
     const dir = writeProject({
       ...TICKET_SOURCES,
       'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n",
     });
     await run(['init', '--yes'], captureIo(dir).io);
 
-    expect(readConfig(dir)).toContain('defineDomain({\n    lifecycles: [');
+    expect(readConfig(dir)).toContain('defineDomain({\n  lifecycles: [\n    lifecycle(');
   });
 
   it('writes runtime extensions when the project resolves modules as NodeNext', async () => {

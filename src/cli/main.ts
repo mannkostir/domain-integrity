@@ -1,21 +1,17 @@
 #!/usr/bin/env node
-import { createInterface } from 'node:readline/promises';
-import { Io } from './io';
+import { DEFAULT_HELP_WIDTH, Io } from './io';
 import { run } from './run';
+import { terminalPrompt } from './terminal-prompt';
 
-const prompt = async (question: string): Promise<boolean> => {
-  const readline = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await readline.question(question);
-  readline.close();
-  return !/^n/i.test(answer.trim());
-};
+const terminal = terminalPrompt(process.stdin, process.stdout);
 
 const io: Io = {
   cwd: process.cwd(),
   out: (text) => process.stdout.write(text),
   err: (text) => process.stderr.write(text),
-  prompt,
+  prompt: terminal.prompt,
   isInteractive: Boolean(process.stdin.isTTY),
+  helpWidth: process.stdout.isTTY ? (process.stdout.columns ?? DEFAULT_HELP_WIDTH) : DEFAULT_HELP_WIDTH,
 };
 
 try {
@@ -23,4 +19,6 @@ try {
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? (error.stack ?? String(error)) : String(error)}\n`);
   process.exitCode = 2;
+} finally {
+  terminal.close();
 }

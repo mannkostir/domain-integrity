@@ -26,11 +26,15 @@ const render = (model: EventFlowModel, events: readonly ClassRef[]): string => {
   return ['## Event flows', '', '```mermaid', 'flowchart LR', ...lines, '```'].join('\n');
 };
 
+const offeredName = (event: ClassRef, events: readonly ClassRef[]): string =>
+  events.filter((other) => other.name === event.name).length > 1 ? event.qualifiedName : event.name;
+
 export const eventFlowDiagram = (model: EventFlowModel, only: string | undefined): AnalyzerDiagram => {
   const events = handledEvents(model);
-  if (only === undefined) return { kind: 'diagram', text: render(model, events) };
+  const names = events.map((event) => offeredName(event, events));
+  if (only === undefined) return { kind: 'diagram', text: render(model, events), names };
   const matches = events.filter((event) => isNamed(event, only));
   return matches.length > 1
     ? { kind: 'ambiguous', reference: only, candidates: matches.map((event) => event.qualifiedName) }
-    : { kind: 'diagram', text: render(model, matches) };
+    : { kind: 'diagram', text: render(model, matches), names };
 };

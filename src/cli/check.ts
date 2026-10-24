@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { AnalyzerRun } from '../analysis';
 import { AnalyzerFailure } from '../analyzer';
 import { Finding, Problem } from '../finding';
@@ -27,17 +27,22 @@ export type CheckOptions = {
 
 type Formatter = (report: Report, tool: ToolIdentity) => string;
 
-const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
+export const FORMATS = ['text', 'json', 'sarif'] as const;
+
+type Format = (typeof FORMATS)[number];
+
+export const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
+
+const isFormat = (value: string): value is Format => FORMATS.some((format) => format === value);
 
 const formatterFor = ({ format, showKnown = false }: CheckOptions): Formatter => {
-  const formatters: Readonly<Record<string, Formatter>> = {
+  if (!isFormat(format)) throw new UsageError(`Unknown format "${format}". Use one of: ${FORMATS.join(', ')}.`);
+  const formatters: Readonly<Record<Format, Formatter>> = {
     text: (report) => formatText(report, { showKnown }),
     json: formatJson,
     sarif: formatSarif,
   };
-  const formatter = formatters[format];
-  if (!formatter) throw new UsageError(`Unknown format "${format}". Use one of: ${Object.keys(formatters).join(', ')}.`);
-  return formatter;
+  return formatters[format];
 };
 
 type Outcome = {
@@ -56,9 +61,9 @@ const updateBaseline = ({ problems, failures, findings }: Outcome, options: Chec
     return 2;
   }
   const path = resolve(io.cwd, options.baseline ?? DEFAULT_BASELINE);
-  writeText(path, serializeBaseline(findings, repositoryRoot));
+  writeText(io.cwd, path, serializeBaseline(findings, repositoryRoot));
   const entries = baselineEntries(findings, repositoryRoot).length;
-  io.out(`Baseline written to ${relative(io.cwd, path)} with ${entries} ${entries === 1 ? 'entry' : 'entries'}.\n`);
+  io.out(`Baseline written to ${toPosixRelative(io.cwd, path)} with ${entries} ${entries === 1 ? 'entry' : 'entries'}.\n`);
   return 0;
 };
 
@@ -86,12 +91,14 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   reportInternalErrors(outcome.failures, io);
   if (options.updateBaseline) return updateBaseline(outcome, options, io, paths.repositoryRoot);
   const baselinePath = baselinePathFor(options, io);
-  const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath, packageVersion())) : new Map<string, BaselineEntry>();
+  const baseline = baselinePath
+    ? guardedRead(io.cwd, baselinePath, () => readBaseline(io.cwd, baselinePath, packageVersion()))
+    : new Map<string, BaselineEntry>();
   const { fresh, known, exceeded } = partitionByBaseline(outcome.findings, baseline, paths.repositoryRoot);
   const rules = enabledRules(results.flatMap((result) => result.rules), ruleConfig);
   const complete = isComplete(outcome);
   const stale = complete ? staleEntries(outcome.findings, baseline, paths.repositoryRoot) : [];
-  const applied = baselinePath ? { baseline: { path: relative(io.cwd, baselinePath), stale } } : {};
+  const applied = baselinePath ? { baseline: { path: toPosixRelative(io.cwd, baselinePath), stale } } : {};
   const staleSuppressions = complete ? configured.stale : [];
   io.out(format({ fresh, known, exceeded, suppressed: configured.suppressed, staleSuppressions, problems: outcome.problems, rules, repositoryRoot: paths.repositoryRoot, ...applied }, toolIdentity()));
   if (!complete) return 2;

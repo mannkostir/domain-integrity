@@ -44,12 +44,11 @@ describe('a project with nothing to check', () => {
   });
 
   it('says a tsconfig includes no source files', async () => {
-    const dir = projectFor('no source files');
-    const { io, stderr } = captureIo(dir);
+    const { io, stderr } = captureIo(projectFor('no source files'));
     await run(['check'], io);
 
     expect(stderr()).toBe(
-      `Loaded 0 source files.\n${join(dir, 'tsconfig.json')} includes no source files.\nPass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.\n`,
+      'Loaded 0 source files.\ntsconfig.json includes no source files.\nPass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.\n',
     );
   });
 
@@ -109,11 +108,25 @@ describe('a project with nothing to check', () => {
     expect(stderr()).toBe(
       [
         'Loaded 2 source files.',
-        `Nothing to check: ${join(dir, 'domain.config.ts')} declares no lifecycles, and no event handlers or event flows were found.`,
+        'Nothing to check: domain.config.ts declares no lifecycles, and no event handlers or event flows were found.',
         'Run "domain-integrity init" to declare the lifecycles of the aggregates it finds.',
         '',
       ].join('\n'),
     );
+  });
+
+  it('names the config passed with -c in the notice that it declares nothing', async () => {
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, 'configs/my.config.ts': NOTHING_DECLARED_CONFIG }));
+    await run(['check', '-c', 'configs/my.config.ts'], io);
+
+    expect(stderr()).toContain('Nothing to check: configs/my.config.ts declares no lifecycles');
+  });
+
+  it('names the config passed with -c in the hint to set the base classes', async () => {
+    const { io, stderr } = captureIo(writeProject({ 'src/empty.ts': 'export const nothing = 1;\n', 'configs/my.config.ts': EMPTY_CONFIG }));
+    await run(['check', '-c', 'configs/my.config.ts'], io);
+
+    expect(stderr()).toContain('Set "aggregates.baseClasses" in configs/my.config.ts to the base class');
   });
 
   it('prints a JSON report without findings when nothing is declared', async () => {
@@ -144,7 +157,7 @@ describe('a project with nothing to check', () => {
     expect(stderr()).toBe(
       [
         'Loaded 2 source files.',
-        `Nothing to check: ${join(dir, 'domain.config.ts')} declares no lifecycles, and no event handlers or event flows were found.`,
+        'Nothing to check: domain.config.ts declares no lifecycles, and no event handlers or event flows were found.',
         'Run "domain-integrity init" to declare the lifecycles of the aggregates it finds.',
         'Nothing to show for "Ticket".',
         '',
@@ -160,7 +173,7 @@ describe('a project with nothing to check', () => {
     expect(stderr()).toBe(
       [
         'Loaded 2 source files.',
-        `Nothing to check: ${join(dir, 'domain.config.ts')} declares no lifecycles, and no event handlers or event flows were found.`,
+        'Nothing to check: domain.config.ts declares no lifecycles, and no event handlers or event flows were found.',
         'Run "domain-integrity init" to declare the lifecycles of the aggregates it finds.',
         '',
       ].join('\n'),

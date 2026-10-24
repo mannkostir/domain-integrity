@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AnalyzerRun } from '../../src/analysis';
 import { analyse } from '../../src/analyzer';
 import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
-import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeProject, writeTree } from '../helpers/disk';
+import { EVENT_FLOW_SOURCES, HAS_POSIX_FILE_MODES, TICKET_CONFIG, TICKET_PROJECT, TICKET_SOURCES, captureIo, writeNestedProject, writeProject, writeTree } from '../helpers/disk';
 import { parseSarif } from '../helpers/sarif-log';
 
 describe('check', () => {
@@ -20,6 +20,15 @@ describe('check', () => {
     await run(['check', '--format', 'json'], io);
 
     expect(JSON.parse(stdout()).findings.map((finding: { details: { method: string } }) => finding.details.method)).toEqual(['rename']);
+  });
+
+  it('exits 2 and lists the formats for an unknown format', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+
+    expect({ code: await run(['check', '--format', 'xml'], io), stderr: stderr() }).toEqual({
+      code: 2,
+      stderr: 'Unknown format "xml". Use one of: text, json, sarif.\n',
+    });
   });
 
   it('exits 0 for findings already in the baseline', async () => {
@@ -70,7 +79,7 @@ describe('check', () => {
 
     expect({
       code: await run(['check'], io),
-      explained: stderr().includes(`${join(dir, 'tsconfig.json')} includes no source files other than ${join(dir, 'domain.config.ts')}.`),
+      explained: stderr().includes('tsconfig.json includes no source files other than domain.config.ts.'),
     }).toEqual({ code: 2, explained: true });
   });
 
@@ -159,6 +168,76 @@ const MISSING_FIELD_PROJECT = {
   'domain.config.ts': TICKET_PROJECT['domain.config.ts'].replace('status: {', 'missing: {'),
 };
 
+const MISSING_TSCONFIG_TAIL = 'Run domain-integrity from the project root, or pass -p with the path to your tsconfig.json or the directory that contains it.';
+
+describe('project and config paths', () => {
+  it('names the missing tsconfig.json in the cwd and how to point at the right one', async () => {
+    const { io, stderr } = captureIo(writeTree({ 'src/a.ts': 'export const a = 1;\n' }));
+    await run(['check'], io);
+
+    expect(stderr()).toBe(`tsconfig not found: tsconfig.json. ${MISSING_TSCONFIG_TAIL}\n`);
+  });
+
+  it('exits 2 when the tsconfig is missing', async () => {
+    const { io } = captureIo(writeTree({ 'src/a.ts': 'export const a = 1;\n' }));
+
+    expect(await run(['check'], io)).toBe(2);
+  });
+
+  it('checks the project of the tsconfig.json inside a directory passed with -p', async () => {
+    const { top } = writeNestedProject(TICKET_PROJECT);
+    const { io, stdout } = captureIo(top);
+    await run(['check', '-p', 'pkg', '-c', 'pkg/domain.config.ts'], io);
+
+    expect(stdout()).toContain('terminal-state-leak  Ticket.rename()');
+  });
+
+  it('names the missing tsconfig.json inside a directory passed with -p', async () => {
+    const { io, stderr } = captureIo(writeTree({ 'src/a.ts': 'export const a = 1;\n' }));
+    await run(['check', '-p', 'src'], io);
+
+    expect(stderr()).toBe(`tsconfig not found: src/tsconfig.json. ${MISSING_TSCONFIG_TAIL}\n`);
+  });
+
+  it('names the config passed with -c when it is missing and how to create or point at one', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_SOURCES));
+    await run(['check', '-c', 'config/domain.config.ts'], io);
+
+    expect(stderr()).toBe('config/domain.config.ts not found. Run "domain-integrity init" to create it, or pass -c with the path to your config file.\n');
+  });
+
+  it('names the config passed with -c in its type errors', async () => {
+    const config = "import { defineDomain } from 'domain-integrity';\nconst count: number = 'one';\nexport default defineDomain({});\n";
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, 'my.config.ts': config }));
+    await run(['check', '-c', 'my.config.ts'], io);
+
+    expect(stderr()).toBe("Type errors in my.config.ts:\nmy.config.ts:2 Type 'string' is not assignable to type 'number'.\n");
+  });
+
+  it('reports only the first syntax error of the config passed with -c', async () => {
+    const config = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ a: 1 b: 2 c: [ });\n";
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, 'configs/bad.config.ts': config }));
+    await run(['check', '-c', 'configs/bad.config.ts'], io);
+
+    expect(stderr()).toBe("Syntax error at configs/bad.config.ts:2: ',' expected.\n");
+  });
+
+  it('says how to install domain-integrity when the config cannot import it', async () => {
+    const config = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n";
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, 'my.config.ts': config }, { paths: {} }));
+    await run(['check', '-c', 'my.config.ts'], io);
+
+    expect(stderr()).toBe('my.config.ts:1 cannot import "domain-integrity". Install it as a dev dependency: npm install --save-dev domain-integrity\n');
+  });
+
+  it('exits 2 for a syntax error in the config', async () => {
+    const config = "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ a: 1 b: 2 });\n";
+    const { io } = captureIo(writeProject({ ...TICKET_SOURCES, 'domain.config.ts': config }));
+
+    expect(await run(['check'], io)).toBe(2);
+  });
+});
+
 describe('check exit codes', () => {
   it('exits 0 when the only finding is a warning', async () => {
     const { io, stdout } = captureIo(writeProject(WARNING_ONLY_PROJECT));
@@ -184,6 +263,22 @@ export default defineDomain({ lifecycles: [lifecycle(Ticket, { states: { status:
       code: 2,
       cannot: true,
     });
+  });
+
+  it('names the missing directory of the baseline relative to the working directory', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['check', '--update-baseline', '--baseline', 'missing-dir/b.json'], io);
+
+    expect(stderr()).toBe('Cannot write missing-dir/b.json: the directory missing-dir does not exist. Create it first.\n');
+  });
+
+  it('names a baseline path that cannot be written relative to the working directory', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    mkdirSync(join(dir, 'taken'));
+    const { io, stderr } = captureIo(dir);
+    await run(['check', '--update-baseline', '--baseline', 'taken'], io);
+
+    expect(stderr()).toBe('Cannot write taken: it is a directory\n');
   });
 
   it('does not write the baseline when there are problems', async () => {
@@ -288,6 +383,41 @@ describe('check with a baseline', () => {
       code: 2,
       notFound: true,
     });
+  });
+
+  it('names a missing explicit baseline relative to the working directory', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['check', '--baseline', 'nope.json'], io);
+
+    expect(stderr()).toBe('Baseline nope.json not found. Create it with --update-baseline.\n');
+  });
+
+  it('names an invalid default baseline relative to the working directory', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeFileSync(join(dir, DEFAULT_BASELINE), 'not json');
+    const { io, stderr } = captureIo(dir);
+    await run(['check'], io);
+
+    expect(stderr()).toBe('Baseline domain-integrity.baseline.json is not valid JSON.\n');
+  });
+
+  it('names a baseline outside the working directory by its relative path', async () => {
+    const { top, project } = writeNestedProject(TICKET_PROJECT);
+    writeFileSync(join(top, 'b.json'), 'not json');
+    const { io, stderr } = captureIo(project);
+    await run(['check', '--baseline', '../b.json'], io);
+
+    expect(stderr()).toBe('Baseline ../b.json is not valid JSON.\n');
+  });
+
+  it.runIf(HAS_POSIX_FILE_MODES)('says a baseline that cannot be read is not permitted', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, 'locked.json', [TICKET_ENTRY]);
+    chmodSync(join(dir, 'locked.json'), 0o000);
+    const { io, stderr } = captureIo(dir);
+    await run(['check', '--baseline', 'locked.json'], io);
+
+    expect(stderr()).toBe('Cannot read baseline locked.json: permission denied\n');
   });
 
   it('lists stale baseline entries in the text output', async () => {
@@ -415,7 +545,51 @@ describe('show', () => {
 
     expect(await run(['show', 'src/ticket.ts:Ticket'], io)).toBe(0);
   });
+
+  it('lists the declared aggregates for an unknown name', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['show', 'Nope'], io);
+
+    expect(stderr()).toBe('No declared aggregate or event named "Nope". Use one of: Ticket.\n');
+  });
+
+  it('lists the declared aggregates before the handled events for an unknown name', async () => {
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, ...EVENT_FLOW_SOURCES, 'domain.config.ts': TICKET_CONFIG }));
+    await run(['show', 'Nope'], io);
+
+    expect(stderr()).toBe('No declared aggregate or event named "Nope". Use one of: Ticket, Paid, Refunded.\n');
+  });
+
+  it('lists a name offered by two analyzers once', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['show', 'Nope'], io, [offering(['Ticket', 'Paid']), offering(['Paid', 'Refunded'])]);
+
+    expect(stderr()).toBe('No declared aggregate or event named "Nope". Use one of: Ticket, Paid, Refunded.\n');
+  });
+
+  it('names no alternatives when no analyzer offers a name', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['show', 'Nope'], io, [offering([])]);
+
+    expect(stderr()).toBe('No declared aggregate or event named "Nope".\n');
+  });
 });
+
+const offering = (names: readonly string[]): AnalyzerRun => (input) =>
+  analyse(
+    {
+      id: 'offering',
+      rules: [],
+      extract: () => 'model',
+      problems: () => [],
+      suggest: () => [],
+      check: () => [],
+      diagram: () => ({ kind: 'diagram', text: '', names }),
+      summarize: () => '',
+      scope: () => 'checkable',
+    },
+    input,
+  );
 
 const sameNamedTicket = (closed: string): string => `
 import { AggregateRoot } from '../aggregate-root';
@@ -533,6 +707,54 @@ describe('context', () => {
     const { io, stderr } = captureIo(dir);
 
     expect({ code: await run(['context', '--write', 'docs'], io), cannot: stderr().includes('Cannot') }).toEqual({ code: 2, cannot: true });
+  });
+
+  it('names a target that cannot be read relative to the working directory', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    mkdirSync(join(dir, 'docs'));
+    const { io, stderr } = captureIo(dir);
+    await run(['context', '--write', 'docs'], io);
+
+    expect(stderr()).toBe('Cannot read docs: it is a directory\n');
+  });
+
+  it.runIf(HAS_POSIX_FILE_MODES)('says a target that cannot be read is not permitted', async () => {
+    const dir = writeProject({ ...TICKET_PROJECT, 'AGENTS.md': '# Agents\n' });
+    chmodSync(join(dir, 'AGENTS.md'), 0o000);
+    const { io, stderr } = captureIo(dir);
+    await run(['context', '--write', 'AGENTS.md'], io);
+
+    expect(stderr()).toBe('Cannot read AGENTS.md: permission denied\n');
+  });
+
+  it.runIf(HAS_POSIX_FILE_MODES)('says a target in a read-only directory is not permitted', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    mkdirSync(join(dir, 'locked'), { mode: 0o555 });
+    const { io, stderr } = captureIo(dir);
+    await run(['context', '--write', 'locked/AGENTS.md'], io);
+
+    expect(stderr()).toBe('Cannot write locked/AGENTS.md: permission denied\n');
+  });
+
+  it.runIf(HAS_POSIX_FILE_MODES)('says a target below a file has a part that is not a directory', async () => {
+    const dir = writeProject({ ...TICKET_PROJECT, 'notes.txt': 'notes\n' });
+    const { io, stderr } = captureIo(dir);
+    await run(['context', '--write', 'notes.txt/AGENTS.md'], io);
+
+    expect(stderr()).toBe('Cannot write notes.txt/AGENTS.md: a part of the path is not a directory\n');
+  });
+
+  it('exits 2 when the directory of the target does not exist', async () => {
+    const { io } = captureIo(writeProject(TICKET_PROJECT));
+
+    expect(await run(['context', '--write', 'missing/dir/AGENTS.md'], io)).toBe(2);
+  });
+
+  it('names the missing directory of the target relative to the working directory', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['context', '--write', 'missing/dir/AGENTS.md'], io);
+
+    expect(stderr()).toBe('Cannot write missing/dir/AGENTS.md: the directory missing/dir does not exist. Create it first.\n');
   });
 
   it('leaves exactly one marker block when run twice', async () => {
