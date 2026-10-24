@@ -7,23 +7,11 @@ import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/pr
 import { readDeclaration } from '../engine/read-config';
 import { addLifecycles, openConfig, recordBaseClasses } from './config-writer';
 import { reportDeprecations } from './deprecations';
+import { reviewSuggestions } from './init-prompt';
 import { initRetryCommand, noAggregatesForInitMessage } from './init-retry';
 import { Io, Paths } from './io';
 import { moduleSpecifiers } from './module-specifier';
 import { toPosixRelative } from '../engine/path';
-
-const describeSuggestion = (suggestion: LifecycleSuggestion, root: string): string => {
-  const fields = suggestion.fields
-    .map((field) => `${field.field.name} [terminal: ${field.terminal.map((value) => value.label).join(', ') || 'none'}]`)
-    .join('; ');
-  return `${suggestion.className} (${toPosixRelative(root, suggestion.file)}): ${fields}. Declare? [Y/n] `;
-};
-
-const confirmEach = (suggestions: readonly LifecycleSuggestion[], io: Io, root: string): Promise<readonly LifecycleSuggestion[]> =>
-  suggestions.reduce<Promise<readonly LifecycleSuggestion[]>>(async (accepted, suggestion) => {
-    const previous = await accepted;
-    return (await io.prompt(describeSuggestion(suggestion, root))) ? [...previous, suggestion] : previous;
-  }, Promise.resolve([]));
 
 export type InitOptions = { readonly yes?: boolean; readonly baseClass?: readonly string[] };
 
@@ -76,9 +64,6 @@ const nothingWrittenMessage = (reason: string, options: InitOptions, configPath:
 
 export const initCommand = async (paths: Paths, options: InitOptions, io: Io): Promise<number> => {
   assertIdentifiers(options.baseClass ?? []);
-  if (!options.yes && !io.isInteractive) {
-    throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
-  }
   const project = loadProject(paths.tsconfig, paths.config);
   const existing = existingConfig(project, paths.config);
   if (existing !== undefined) reportDeprecations(readDeclaration(existing).deprecations, toPosixRelative(io.cwd, paths.config), io);
@@ -103,7 +88,10 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
     );
     return 0;
   }
-  const accepted = options.yes ? suggestions : await confirmEach(suggestions, io, paths.repositoryRoot);
+  if (!options.yes && !io.isInteractive) {
+    throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
+  }
+  const accepted = options.yes ? suggestions : await reviewSuggestions(suggestions, io, paths.repositoryRoot);
   if (accepted.length === 0) {
     io.out(nothingWrittenMessage('Nothing declared.', options, toPosixRelative(io.cwd, paths.config), declaration));
     return 0;
