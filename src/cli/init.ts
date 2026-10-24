@@ -76,9 +76,6 @@ const nothingWrittenMessage = (reason: string, options: InitOptions, configPath:
 
 export const initCommand = async (paths: Paths, options: InitOptions, io: Io): Promise<number> => {
   assertIdentifiers(options.baseClass ?? []);
-  if (!options.yes && !io.isInteractive) {
-    throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
-  }
   const project = loadProject(paths.tsconfig, paths.config);
   const existing = existingConfig(project, paths.config);
   if (existing !== undefined) reportDeprecations(readDeclaration(existing).deprecations, toPosixRelative(io.cwd, paths.config), io);
@@ -102,6 +99,9 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
       ),
     );
     return 0;
+  }
+  if (!options.yes && !io.isInteractive) {
+    throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
   }
   const accepted = options.yes ? suggestions : await confirmEach(suggestions, io, paths.repositoryRoot);
   if (accepted.length === 0) {

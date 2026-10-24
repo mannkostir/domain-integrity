@@ -1129,6 +1129,67 @@ describe('init', () => {
     });
   });
 
+  it('exits 2 when a suggestion needs confirming without a terminal', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+
+    const exitCode = await run(['init'], captureIo(dir).io);
+
+    expect(exitCode).toBe(2);
+  });
+
+  it('reports every aggregate as declared without a terminal', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': TICKET_CONFIG });
+    const { io, stdout } = captureIo(dir);
+
+    const exitCode = await run(['init'], io);
+
+    expect({ exitCode, stdout: stdout() }).toEqual({ exitCode: 0, stdout: 'All discovered aggregates are already declared.\n' });
+  });
+
+  it('reports no state fields without a terminal', async () => {
+    const dir = writeProject({
+      'src/aggregate-root.ts': TICKET_SOURCES['src/aggregate-root.ts'],
+      'src/note.ts': "import { AggregateRoot } from './aggregate-root';\nexport class Note extends AggregateRoot<{ text: string }> {}\n",
+    });
+    const { io, stdout } = captureIo(dir);
+
+    const exitCode = await run(['init'], io);
+
+    expect({ exitCode, stdout: stdout() }).toEqual({
+      exitCode: 0,
+      stdout: 'No state fields found in the discovered aggregates; nothing to declare.\n',
+    });
+  });
+
+  it('explains the unsaved base classes without a terminal when nothing is left to declare', async () => {
+    const dir = writeProject(STATELESS_MODEL_SOURCES);
+    const { io, stdout } = captureIo(dir);
+
+    const exitCode = await run(['init', '--base-class', 'Model'], io);
+
+    expect({ exitCode, stdout: stdout() }).toEqual({
+      exitCode: 0,
+      stdout:
+        "No state fields found in the discovered aggregates; nothing to declare.\nNo config was written to domain.config.ts, so the --base-class names were not saved. For check to find the same aggregates, add aggregates: { baseClasses: ['Model'] } to defineDomain({...}) in domain.config.ts yourself.\n",
+    });
+  });
+
+  it('creates no config with --base-class when a suggestion needs confirming without a terminal', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+
+    await run(['init', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(existsSync(join(dir, 'domain.config.ts'))).toBe(false);
+  });
+
+  it('leaves an existing config untouched with --base-class when a suggestion needs confirming without a terminal', async () => {
+    const dir = writeProject(MIXED_BASE_PROJECT);
+
+    await run(['init', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toBe(ORDER_CONFIG);
+  });
+
   it('exits 2 with a clear message when the config cannot be written', async () => {
     const dir = writeProject(TICKET_SOURCES);
     mkdirSync(join(dir, 'domain.config.ts'));
