@@ -37,14 +37,14 @@ The installed-dependencies re-run measured main (a8068cb) with the same commits 
 | Repository | Findings | `undispatched-events` | Why |
 |---|---|---|---|
 | kyhsa93 | 11 `terminal-state-leak` | silent | no event method: each command pushes `new …Event(…)` onto the private `_events` itself, and `@nestjs/cqrs` is used only for buses and handlers; the getter `domainEvents` hands out a copy, which `AccountRepositoryImpl` reads to publish |
-| bitloops | 5 `terminal-state-leak` | silent | no project event method: `addDomainEvent` is inherited from `Domain.Aggregate` in `ddd-tactical-core-boilerplate`, which declares it only in a `.d.ts` |
+| bitloops | 5 `terminal-state-leak` | silent | no project event method: `addDomainEvent` is inherited from `Domain.Aggregate` in `ddd-tactical-core-boilerplate`, which declares it only in a declaration file |
 | undb | 2 `outside-mutation` | silent | not installed; `AggregateRoot.addDomainEvent` in `packages/domain` pushes onto `#domainEvents`, which is reassigned through the public setter `domainEvents` and from `filter` in `removeEvents`, so it is not a plain event array; the outbox services in `persistence` read the events |
 | domain-driven-hexagon | 0 | silent | drained: `AggregateRoot.addEvent` only pushes onto `_domainEvents`, and the getter `domainEvents` is read in `AggregateRoot.publishEvents`, which `SqlRepositoryBase` calls |
 | ddd-forum | 1 `handler-payload-mismatch` | silent | not push-only: `addDomainEvent` also passes `this` to `DomainEvents.markAggregateForDispatch` and logs; the Sequelize hooks call `DomainEvents.dispatchEventsForAggregate` |
 | typescript-ddd-example | none, exits 2 without a config | silent | with an empty config outside the repository it exits 0 with no finding, because its event method is `record`, which is not a default raise method; with `events: { raiseMethods: ['record'] }` it stays silent, because `pullDomainEvents` drains `domainEvents` by copying and resetting it and `CourseCreator` and `CoursesCounterIncrementer` publish the copy |
-| Private reference repo | 1 `transition-drift`, 1 `terminal-state-leak` | silent | not installed; `addEvent` checks for a duplicate with `.some(…)` before pushing, so it is not push-only; the base command handler reads the getter `domainEvents` and publishes |
+| Private reference repo | 1 `transition-drift`, 1 `terminal-state-leak` | silent | unchanged, its dependencies were already present; `addEvent` checks for a duplicate with `.some(…)` before pushing, so it is not push-only; the base command handler reads the getter `domainEvents` and publishes |
 | daruma-backend | 13 `terminal-state-leak` | silent | no project event method: the aggregates call `apply` of `@nestjs/cqrs` `AggregateRoot`, which now resolves to the installed `.d.ts` and has no body in the project; before the install it did not resolve |
-| Booking-System | 1 `undispatched-events` | fires | `AggregateRoot._domainEvents` at `addDomainEvent` with 9 raisers, as before: the buffer is only pushed and reset, the trivial getter `domainEvents` is never read, and the event bus is never called |
+| Booking-System | 1 `undispatched-events` | fires | `AggregateRoot._domainEvents` at `addDomainEvent` with 9 raisers, as before: the buffer is only pushed and reset, the trivial getter `domainEvents` is never read, and the project's `EventBus.publish` calls publish events built in place, never ones taken from the buffer |
 | ticket-sale | 6 `terminal-state-leak` | silent | no array buffer: `addEvent` adds to the `Set` `events`, which `DomainEventManager` iterates to publish |
 
 ## Summary
@@ -75,7 +75,7 @@ These steps applied to every repository:
 
 - The repository was cloned with `--depth 1`.
 - `node_modules/domain-integrity` was symlinked to the local build so that `domain.config.ts` type-checks.
-- npm dependencies were installed with `npm install --ignore-scripts` in every public repository except undb, a Bun workspace; see the installed-dependencies re-run above.
+- npm dependencies were installed with `npm install --ignore-scripts` in every public repository except undb, a Bun workspace, with the extra steps listed per repository below; see the installed-dependencies re-run above.
 - `init --yes` was run, then `check --format json`.
 
 Per-repository setup:
