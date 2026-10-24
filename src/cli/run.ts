@@ -25,8 +25,6 @@ const pathsFrom = (options: CommonOptions, io: Io): Paths => {
   return { tsconfig, config: resolve(io.cwd, options.config), projectRoot, repositoryRoot: findRepositoryRoot(projectRoot, existsSync) };
 };
 
-const HELP_WIDTH = 80;
-
 const EXAMPLES = [
   'domain-integrity init',
   'domain-integrity check',
@@ -56,7 +54,7 @@ const buildProgram = (io: Io, outcome: { exitCode: number }, analyzers: readonly
       .version(packageVersion(), '-V, --version', 'print the version')
       .exitOverride()
       .configureOutput({ writeOut: io.out, writeErr: io.err })
-      .configureHelp({ helpWidth: HELP_WIDTH })
+      .configureHelp({ helpWidth: io.helpWidth })
       .addHelpText('after', EXAMPLES_FOOTER),
   );
 

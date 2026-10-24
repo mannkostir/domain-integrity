@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Io } from '../../src/cli/io';
+import { DEFAULT_HELP_WIDTH, Io } from '../../src/cli/io';
 import { AGGREGATE_ROOT } from './in-memory';
 
 const HELPERS_ENTRY = fileURLToPath(new URL('../../src/index.ts', import.meta.url));
@@ -85,9 +85,9 @@ export const writeNestedProject = (
   return { top, project };
 };
 
-export type CaptureOptions = { readonly interactive?: boolean };
+export type CaptureOptions = { readonly interactive?: boolean; readonly helpWidth?: number };
 
-export const captureIo = (cwd: string, answers: readonly string[] = [], { interactive = answers.length > 0 }: CaptureOptions = {}) => {
+export const captureIo = (cwd: string, answers: readonly string[] = [], { interactive = answers.length > 0, helpWidth = DEFAULT_HELP_WIDTH }: CaptureOptions = {}) => {
   const out: string[] = [];
   const err: string[] = [];
   const asked: string[] = [];
@@ -101,6 +101,7 @@ export const captureIo = (cwd: string, answers: readonly string[] = [], { intera
       return pending.shift() ?? '';
     },
     isInteractive: interactive,
+    helpWidth,
   };
   return { io, stdout: () => out.join(''), stderr: () => err.join(''), questions: (): readonly string[] => [...asked] };
 };

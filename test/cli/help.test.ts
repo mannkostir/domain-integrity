@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { run } from '../../src/cli/run';
 import { captureIo, writeTree } from '../helpers/disk';
 
-const helpFor = async (argv: readonly string[]) => {
-  const { io, stdout, stderr } = captureIo(writeTree({}));
+const helpFor = async (argv: readonly string[], helpWidth = 80) => {
+  const { io, stdout, stderr } = captureIo(writeTree({}), [], { helpWidth });
   const code = await run(argv, io);
   return { code, stdout: stdout(), stderr: stderr() };
 };
@@ -71,6 +71,25 @@ Options:
 Docs: https://github.com/mannkostir/domain-integrity#readme
 `;
 
+const NARROW_SHOW_HELP = `Usage: domain-integrity show [options] [name]
+
+print Mermaid diagrams of lifecycles and event flows
+
+Arguments:
+  name                  aggregate class, event, or path:Class to
+                        show; all when omitted
+
+Options:
+  -p, --project <path>  path to tsconfig.json, or the directory
+                        that contains it (default:
+                        "tsconfig.json")
+  -c, --config <path>   path to the config file (default:
+                        "domain.config.ts")
+  -h, --help            display help for command
+
+Docs: https://github.com/mannkostir/domain-integrity#readme
+`;
+
 const CONTEXT_HELP = `Usage: domain-integrity context [options]
 
 print or write the domain summary for coding agents
@@ -104,6 +123,12 @@ describe('help', () => {
     const result = await helpFor(['show', '--help']);
 
     expect(result).toEqual({ code: 0, stdout: SHOW_HELP, stderr: '' });
+  });
+
+  it('wraps the help to a narrower terminal', async () => {
+    const result = await helpFor(['show', '--help'], 64);
+
+    expect(result).toEqual({ code: 0, stdout: NARROW_SHOW_HELP, stderr: '' });
   });
 
   it('describes how context writes into a file', async () => {
