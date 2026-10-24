@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { UsageError } from '../engine/errors';
+import { fileErrorReason } from '../engine/file-error';
+import { shownPath } from '../engine/path';
 import { Finding, RuleId } from '../finding';
 import { IDENTITY_FIELD_KINDS, IDENTITY_FIELDS, Identity, IdentityFieldKind, identityOf, serializeIdentity } from './identity';
 
@@ -70,11 +72,11 @@ const readEntry = (value: unknown): EntryReading => {
   return { kind: 'entry', entry: { identity, count } };
 };
 
-const read = (path: string, name: string): string => {
+const read = (cwd: string, path: string, name: string): string => {
   try {
     return readFileSync(path, 'utf8');
   } catch (error) {
-    throw new UsageError(`Cannot read baseline ${name}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new UsageError(`Cannot read baseline ${name}: ${fileErrorReason(cwd, path, error)}`);
   }
 };
 
@@ -116,9 +118,10 @@ export const parseBaseline = (name: string, content: string, toolVersion: string
   return entriesOf(name, parsed.findings);
 };
 
-export const readBaseline = (path: string, name: string, toolVersion: string): Baseline => {
+export const readBaseline = (cwd: string, path: string, toolVersion: string): Baseline => {
+  const name = shownPath(cwd, path);
   if (!existsSync(path)) throw new UsageError(`Baseline ${name} not found. Create it with --update-baseline.`);
-  return parseBaseline(name, read(path, name), toolVersion);
+  return parseBaseline(name, read(cwd, path, name), toolVersion);
 };
 
 type Group = { readonly identity: Identity; readonly findings: readonly Finding[] };

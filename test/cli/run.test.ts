@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AnalyzerRun } from '../../src/analysis';
@@ -278,7 +278,7 @@ export default defineDomain({ lifecycles: [lifecycle(Ticket, { states: { status:
     const { io, stderr } = captureIo(dir);
     await run(['check', '--update-baseline', '--baseline', 'taken'], io);
 
-    expect(stderr()).toBe(`Cannot write taken: EISDIR: illegal operation on a directory, open '${join(dir, 'taken')}'\n`);
+    expect(stderr()).toBe('Cannot write taken: it is a directory\n');
   });
 
   it('does not write the baseline when there are problems', async () => {
@@ -408,6 +408,16 @@ describe('check with a baseline', () => {
     await run(['check', '--baseline', '../b.json'], io);
 
     expect(stderr()).toBe('Baseline ../b.json is not valid JSON.\n');
+  });
+
+  it('says a baseline that cannot be read is not permitted', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeBaseline(dir, 'locked.json', [TICKET_ENTRY]);
+    chmodSync(join(dir, 'locked.json'), 0o000);
+    const { io, stderr } = captureIo(dir);
+    await run(['check', '--baseline', 'locked.json'], io);
+
+    expect(stderr()).toBe('Cannot read baseline locked.json: permission denied\n');
   });
 
   it('lists stale baseline entries in the text output', async () => {
@@ -705,7 +715,33 @@ describe('context', () => {
     const { io, stderr } = captureIo(dir);
     await run(['context', '--write', 'docs'], io);
 
-    expect(stderr()).toBe('Cannot read docs: EISDIR: illegal operation on a directory, read\n');
+    expect(stderr()).toBe('Cannot read docs: it is a directory\n');
+  });
+
+  it('says a target that cannot be read is not permitted', async () => {
+    const dir = writeProject({ ...TICKET_PROJECT, 'AGENTS.md': '# Agents\n' });
+    chmodSync(join(dir, 'AGENTS.md'), 0o000);
+    const { io, stderr } = captureIo(dir);
+    await run(['context', '--write', 'AGENTS.md'], io);
+
+    expect(stderr()).toBe('Cannot read AGENTS.md: permission denied\n');
+  });
+
+  it('says a target in a read-only directory is not permitted', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    mkdirSync(join(dir, 'locked'), { mode: 0o555 });
+    const { io, stderr } = captureIo(dir);
+    await run(['context', '--write', 'locked/AGENTS.md'], io);
+
+    expect(stderr()).toBe('Cannot write locked/AGENTS.md: permission denied\n');
+  });
+
+  it('says a target below a file has a part that is not a directory', async () => {
+    const dir = writeProject({ ...TICKET_PROJECT, 'notes.txt': 'notes\n' });
+    const { io, stderr } = captureIo(dir);
+    await run(['context', '--write', 'notes.txt/AGENTS.md'], io);
+
+    expect(stderr()).toBe('Cannot write notes.txt/AGENTS.md: a part of the path is not a directory\n');
   });
 
   it('exits 2 when the directory of the target does not exist', async () => {

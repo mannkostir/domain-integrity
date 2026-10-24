@@ -1,18 +1,15 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { UsageError } from '../engine/errors';
+import { errorCodeOf, fileErrorReason } from '../engine/file-error';
 import { shownPath } from '../engine/path';
-
-const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-const isNotFound = (error: unknown): boolean => error instanceof Error && 'code' in error && error.code === 'ENOENT';
 
 export const guardedRead = <T>(cwd: string, path: string, read: () => T): T => {
   try {
     return read();
   } catch (error) {
     if (error instanceof UsageError) throw error;
-    throw new UsageError(`Cannot read ${shownPath(cwd, path)}: ${reasonOf(error)}`);
+    throw new UsageError(`Cannot read ${shownPath(cwd, path)}: ${fileErrorReason(cwd, path, error)}`);
   }
 };
 
@@ -21,9 +18,9 @@ export const readText = (cwd: string, path: string): string => guardedRead(cwd, 
 const writeFailure = (cwd: string, path: string, error: unknown): UsageError => {
   const directory = dirname(path);
   const reason =
-    isNotFound(error) && !existsSync(directory)
+    errorCodeOf(error) === 'ENOENT' && !existsSync(directory)
       ? `the directory ${shownPath(cwd, directory)} does not exist. Create it first.`
-      : reasonOf(error);
+      : fileErrorReason(cwd, path, error);
   return new UsageError(`Cannot write ${shownPath(cwd, path)}: ${reason}`);
 };
 

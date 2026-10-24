@@ -1,6 +1,6 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { UsageError } from '../../src/engine/errors';
 import { Finding, FindingOf } from '../../src/finding';
@@ -45,27 +45,31 @@ const baselineOf = (findings: readonly Finding[], counts: readonly number[]) =>
 
 describe('baseline file', () => {
   it('rejects a missing baseline file with a usage error', () => {
-    expect(() => readBaseline('/definitely/missing/baseline.json', 'baseline.json', VERSION)).toThrow(UsageError);
+    expect(() => readBaseline('/definitely/missing', '/definitely/missing/baseline.json', VERSION)).toThrow(UsageError);
   });
 
   it('names a missing baseline file by its shown name', () => {
-    expect(() => readBaseline('/definitely/missing/baseline.json', 'baseline.json', VERSION)).toThrow(
+    expect(() => readBaseline('/definitely/missing', '/definitely/missing/baseline.json', VERSION)).toThrow(
       new UsageError('Baseline baseline.json not found. Create it with --update-baseline.'),
     );
   });
 
   it('rejects an unreadable baseline path with a read error naming its shown name', () => {
-    expect(() => readBaseline(mkdtempSync(join(tmpdir(), 'baseline-dir-')), 'baseline-dir', VERSION)).toThrow(
-      new UsageError('Cannot read baseline baseline-dir: EISDIR: illegal operation on a directory, read'),
-    );
+    const cwd = mkdtempSync(join(tmpdir(), 'baseline-cwd-'));
+    mkdirSync(join(cwd, 'baseline-dir'));
+
+    expect(() => readBaseline(cwd, join(cwd, 'baseline-dir'), VERSION)).toThrow(new UsageError('Cannot read baseline baseline-dir: it is a directory'));
   });
 
   it('rejects invalid JSON naming the shown name', () => {
-    expect(() => readBaseline(tempFile('not json'), 'baseline.json', VERSION)).toThrow(new UsageError('Baseline baseline.json is not valid JSON.'));
+    const path = tempFile('not json');
+
+    expect(() => readBaseline(dirname(path), path, VERSION)).toThrow(new UsageError('Baseline baseline.json is not valid JSON.'));
   });
 
   it('reads a written baseline from disk', () => {
-    const baseline = readBaseline(tempFile(serializeBaseline([unhandled()], ROOT)), 'baseline.json', VERSION);
+    const path = tempFile(serializeBaseline([unhandled()], ROOT));
+    const baseline = readBaseline(dirname(path), path, VERSION);
 
     expect([...baseline.values()].map((entry) => entry.count)).toEqual([1]);
   });
