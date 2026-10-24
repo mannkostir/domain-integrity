@@ -167,8 +167,13 @@ const bindsName = (declaration: ImportDeclaration, name: string): boolean =>
 const bindingOf = (file: SourceFile, name: string): ImportDeclaration | undefined =>
   file.getImportDeclarations().find((declaration) => bindsName(declaration, name));
 
+const acceptsNamedValueImports = (declaration: ImportDeclaration): boolean =>
+  !declaration.isTypeOnly() && declaration.getNamespaceImport() === undefined;
+
 const addNamedImport = (file: SourceFile, name: string, alias: string | undefined, moduleSpecifier: string): void => {
-  const existing = file.getImportDeclaration((declaration) => declaration.getModuleSpecifierValue() === moduleSpecifier);
+  const existing = file.getImportDeclaration(
+    (declaration) => declaration.getModuleSpecifierValue() === moduleSpecifier && acceptsNamedValueImports(declaration),
+  );
   const specifier = { name, alias };
   if (existing) existing.addNamedImport(specifier);
   else file.addImportDeclaration({ moduleSpecifier, namedImports: [specifier] });
@@ -179,10 +184,14 @@ const ensureNamedImport = (file: SourceFile, name: string, moduleSpecifier: stri
 };
 
 const importsExportOf = (declaration: ImportDeclaration, local: string, name: string, target: string): boolean =>
+  !declaration.isTypeOnly() &&
   declaration.getModuleSpecifierSourceFile()?.getFilePath() === target &&
   declaration
     .getNamedImports()
-    .some((specifier) => specifier.getName() === name && (specifier.getAliasNode() ?? specifier.getNameNode()).getText() === local);
+    .some(
+      (specifier) =>
+        !specifier.isTypeOnly() && specifier.getName() === name && (specifier.getAliasNode() ?? specifier.getNameNode()).getText() === local,
+    );
 
 const candidateLocalName = (name: string, attempt: number): string => (attempt === 1 ? name : `${name}${attempt}`);
 

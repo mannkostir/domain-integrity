@@ -391,6 +391,53 @@ describe('init without aggregates', () => {
   });
 });
 
+const configImporting = (ticketImport: string): string => `import { defineDomain } from 'domain-integrity';
+${ticketImport}
+export default defineDomain({ lifecycles: [] });
+`;
+
+const NAMESPACE_IMPORT_CONFIG = configImporting("import * as tickets from './src/ticket';");
+
+const TYPE_ONLY_IMPORT_CONFIG = configImporting("import type { TicketStatus } from './src/ticket';");
+
+describe('init beside an import of the aggregate module', () => {
+  it('adds a separate import when the module is imported as a namespace', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': NAMESPACE_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir).split('\n').filter((line) => line.startsWith('import'))).toEqual([
+      "import { defineDomain, lifecycle } from 'domain-integrity';",
+      "import * as tickets from './src/ticket';",
+      "import { Ticket, TicketStatus } from './src/ticket';",
+    ]);
+  });
+
+  it('writes a config that check reads when the module is imported as a namespace', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': NAMESPACE_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+
+  it('imports values beside a type-only import of the module', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': TYPE_ONLY_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir).split('\n').filter((line) => line.startsWith('import'))).toEqual([
+      "import { defineDomain, lifecycle } from 'domain-integrity';",
+      "import type { TicketStatus } from './src/ticket';",
+      "import { Ticket, TicketStatus as TicketStatus2 } from './src/ticket';",
+    ]);
+  });
+
+  it('writes a config that check reads when the module is imported for types only', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': TYPE_ONLY_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+});
+
 describe('init', () => {
   it('writes a config that check can read', async () => {
     const dir = writeProject(TICKET_SOURCES);
