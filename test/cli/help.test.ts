@@ -106,6 +106,24 @@ Options:
 Docs: https://github.com/mannkostir/domain-integrity#readme
 `;
 
+const INIT_HELP = `Usage: domain-integrity init [options]
+
+suggest and write lifecycle declarations to the config
+
+Options:
+  -p, --project <path>  path to tsconfig.json, or the directory that contains it
+                        (default: "tsconfig.json")
+  -c, --config <path>   path to the config file (default: "domain.config.ts")
+  -y, --yes             accept every suggestion without prompting
+  --base-class <name>   discover aggregates extending or implementing this class
+                        or interface (repeatable); replaces AggregateRoot and
+                        Entity in a new config, adds to the base classes of an
+                        existing one
+  -h, --help            display help for command
+
+Docs: https://github.com/mannkostir/domain-integrity#readme
+`;
+
 describe('help', () => {
   it('describes the commands and ends with examples and the docs link', async () => {
     const result = await helpFor(['--help']);
@@ -135,5 +153,11 @@ describe('help', () => {
     const result = await helpFor(['context', '--help']);
 
     expect(result).toEqual({ code: 0, stdout: CONTEXT_HELP, stderr: '' });
+  });
+
+  it('describes how init chooses and records base classes', async () => {
+    const result = await helpFor(['init', '--help']);
+
+    expect(result).toEqual({ code: 0, stdout: INIT_HELP, stderr: '' });
   });
 });
