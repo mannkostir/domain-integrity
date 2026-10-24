@@ -2,11 +2,13 @@ import {
   ArrayLiteralExpression,
   ImportDeclaration,
   IndentationText,
+  NewLineKind,
   Node,
   ObjectLiteralExpression,
   Project,
   QuoteKind,
   SourceFile,
+  SyntaxKind,
   ts,
 } from 'ts-morph';
 import { FieldSuggestion, LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
@@ -31,18 +33,59 @@ const configObject = (file: SourceFile): ObjectLiteralExpression => {
 
 const INDENTATIONS: readonly IndentationText[] = Object.values(IndentationText);
 
-const leadingWhitespace = (node: Node): string =>
-  node.getSourceFile().getFullText().slice(node.getStartLinePos(), node.getStart());
+const lineIndentationOf = (node: Node): string =>
+  /^[ \t]*/.exec(node.getSourceFile().getFullText().slice(node.getStartLinePos()))?.[0] ?? '';
 
-const indentationOf = (config: ObjectLiteralExpression): IndentationText | undefined => {
+const startsLine = (node: Node): boolean => node.getStart() === node.getStartLinePos() + lineIndentationOf(node).length;
+
+const indentationOf = (config: ObjectLiteralExpression): IndentationText => {
   const first = config.getProperties()[0];
-  const written = first === undefined ? undefined : leadingWhitespace(first);
-  return INDENTATIONS.find((indentation) => indentation === written);
+  const written = first !== undefined && startsLine(first) ? lineIndentationOf(first) : undefined;
+  return INDENTATIONS.find((indentation) => indentation === written) ?? IndentationText.TwoSpaces;
 };
 
-const useIndentationOf = (file: SourceFile): void => {
-  const indentationText = indentationOf(configObject(file));
-  if (indentationText !== undefined) file.getProject().manipulationSettings.set({ indentationText });
+const newLineKindOf = (file: SourceFile): NewLineKind =>
+  file.getFullText().includes('\r\n') ? NewLineKind.CarriageReturnLineFeed : NewLineKind.LineFeed;
+
+const quoteKindOf = (file: SourceFile): QuoteKind =>
+  file.getFirstDescendantByKind(SyntaxKind.StringLiteral)?.getQuoteKind() ?? QuoteKind.Single;
+
+const useLayoutOf = (file: SourceFile): void => {
+  file.getProject().manipulationSettings.set({
+    indentationText: indentationOf(configObject(file)),
+    newLineKind: newLineKindOf(file),
+    quoteKind: quoteKindOf(file),
+  });
+};
+
+const quoteKindIn = (file: SourceFile): QuoteKind => file.getProject().manipulationSettings.getQuoteKind();
+
+const scannerOf = (text: string): ts.Scanner =>
+  ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, text);
+
+const stringLiteralValue = (source: string): string | undefined => {
+  const scanner = scannerOf(source);
+  if (scanner.scan() !== ts.SyntaxKind.StringLiteral) return undefined;
+  const value = scanner.getTokenValue();
+  return scanner.scan() === ts.SyntaxKind.EndOfFileToken ? value : undefined;
+};
+
+const SINGLE_QUOTED_ESCAPES: ReadonlyMap<string, string> = new Map([
+  ['\\"', '"'],
+  ["'", "\\'"],
+]);
+
+const inSingleQuotes = (value: string): string =>
+  `'${JSON.stringify(value)
+    .slice(1, -1)
+    .replace(/\\.|'/g, (written) => SINGLE_QUOTED_ESCAPES.get(written) ?? written)}'`;
+
+const inQuotes = (value: string, quoteKind: QuoteKind): string =>
+  quoteKind === QuoteKind.Double ? JSON.stringify(value) : inSingleQuotes(value);
+
+const requoted = (source: string, quoteKind: QuoteKind): string => {
+  const value = stringLiteralValue(source);
+  return value === undefined ? source : inQuotes(value, quoteKind);
 };
 
 const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
@@ -54,18 +97,16 @@ const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
   return array;
 };
 
-const quoted = (name: string): string => `'${name}'`;
-
 const listedNames = (array: ArrayLiteralExpression): readonly string[] =>
   array.getElements().flatMap((element) => (Node.isStringLiteral(element) ? [element.getLiteralValue()] : []));
 
 const uniqueNames = (names: readonly string[]): readonly string[] => names.filter((name, index) => names.indexOf(name) === index);
 
-const appendMissingNames = (array: ArrayLiteralExpression, names: readonly string[]): void => {
+const appendMissingNames = (array: ArrayLiteralExpression, names: readonly string[], quoteKind: QuoteKind): void => {
   const listed = listedNames(array);
   uniqueNames(names)
     .filter((name) => !listed.includes(name))
-    .forEach((name) => array.addElement(quoted(name)));
+    .forEach((name) => array.addElement(inQuotes(name, quoteKind)));
 };
 
 const arrayInitializer = (property: Node | undefined, option: string): ArrayLiteralExpression | undefined => {
@@ -94,17 +135,20 @@ export const recordBaseClasses = (
   names: readonly string[],
   implicitBaseClasses: readonly string[],
 ): void => {
-  useIndentationOf(file);
+  useLayoutOf(file);
+  const quoteKind = quoteKindIn(file);
   const config = configObject(file);
   const group = aggregatesGroup(config);
   const listed =
     arrayInitializer(group === undefined ? undefined : propertyNamed(group, 'baseClasses'), 'aggregates.baseClasses') ??
     arrayInitializer(propertyNamed(config, 'aggregateBaseClasses'), 'aggregateBaseClasses');
   if (listed !== undefined) {
-    appendMissingNames(listed, names);
+    appendMissingNames(listed, names, quoteKind);
     return;
   }
-  const baseClasses = `[${uniqueNames([...implicitBaseClasses, ...names]).map(quoted).join(', ')}]`;
+  const baseClasses = `[${uniqueNames([...implicitBaseClasses, ...names])
+    .map((name) => inQuotes(name, quoteKind))
+    .join(', ')}]`;
   if (group !== undefined) group.insertPropertyAssignment(0, { name: 'baseClasses', initializer: baseClasses });
   else config.insertPropertyAssignment(0, { name: 'aggregates', initializer: `{ baseClasses: ${baseClasses} }` });
 };
@@ -163,7 +207,7 @@ const terminalSources = (
   { field, terminal }: FieldSuggestion,
 ): readonly string[] => {
   const reference = field.enumReference;
-  if (reference === undefined) return terminal.map((value) => value.source);
+  if (reference === undefined) return terminal.map((value) => requoted(value.source, quoteKindIn(file)));
   const local = bindExport(file, specifierOf, reference.name, reference.file);
   return terminal.map((value) => renamedEnumSource(value.source, reference.name, local));
 };
@@ -191,9 +235,6 @@ const lifecycleLines = (
   return [`lifecycle(${target}, {`, ...indented(unit, ['states: {', ...indented(unit, fields), '},']), '}),'];
 };
 
-const lineIndentationOf = (node: Node): string =>
-  /^[ \t]*/.exec(node.getSourceFile().getFullText().slice(node.getStartLinePos()))?.[0] ?? '';
-
 const asText = (lines: Lines): string => lines.map((line) => `${line}\n`).join('');
 
 const isSingleLine = (array: ArrayLiteralExpression): boolean => array.getStartLineNumber() === array.getEndLineNumber();
@@ -201,7 +242,7 @@ const isSingleLine = (array: ArrayLiteralExpression): boolean => array.getStartL
 const closingBracketPosition = (array: ArrayLiteralExpression): number => array.getEnd() - 1;
 
 const separatorOffsetIn = (trivia: string): number | undefined => {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, trivia);
+  const scanner = scannerOf(trivia);
   return scanner.scan() === ts.SyntaxKind.CommaToken ? scanner.getTokenStart() : undefined;
 };
 
@@ -230,50 +271,41 @@ const existingLinesOf = (array: ArrayLiteralExpression): Lines => {
   return [...pieces.slice(0, elementCount).map((piece) => `${piece},`), ...trailing];
 };
 
-const spreadOverLines = (array: ArrayLiteralExpression, added: Lines, elementIndent: string, closingIndent: string): string =>
-  `[\n${asText(indented(elementIndent, [...existingLinesOf(array), ...added]))}${closingIndent}]`;
+const spreadOverLines = (array: ArrayLiteralExpression, added: Lines, elementIndent: string, closingIndent: string): void => {
+  const lines = asText(indented(elementIndent, [...existingLinesOf(array), ...added]));
+  array.getSourceFile().replaceText([array.getStart(), array.getEnd()], `[\n${lines}${closingIndent}]`);
+};
 
-const appendBeforeClosingBracket = (array: ArrayLiteralExpression, added: Lines, elementIndent: string, closingIndent: string): string => {
-  const text = array.getSourceFile().getFullText();
+const appendBeforeClosingBracket = (array: ArrayLiteralExpression, added: Lines, elementIndent: string, closingIndent: string): void => {
+  const file = array.getSourceFile();
+  const text = file.getFullText();
   const last = array.getElements().at(-1);
   const afterLast = last?.getEnd() ?? array.getStart() + 1;
-  const separator = last !== undefined && !array.compilerNode.elements.hasTrailingComma ? ',' : '';
-  const tail = text.slice(afterLast, closingBracketPosition(array));
-  const closingLineStart = tail.lastIndexOf('\n') + 1;
-  const closingLinePrefix = tail.slice(closingLineStart);
-  const head = `${text.slice(array.getStart(), afterLast)}${separator}`;
-  const addedText = asText(indented(elementIndent, added));
-  return closingLineStart > 0 && closingLinePrefix.trim() === ''
-    ? `${head}${tail.slice(0, closingLineStart)}${addedText}${closingLinePrefix}]`
-    : `${head}${tail}\n${addedText}${closingIndent}]`;
+  const closingBracket = closingBracketPosition(array);
+  const contentEnd = afterLast + text.slice(afterLast, closingBracket).trimEnd().length;
+  const needsSeparator = last !== undefined && !array.compilerNode.elements.hasTrailingComma;
+  file.replaceText([contentEnd, closingBracket], `\n${asText(indented(elementIndent, added))}${closingIndent}`);
+  if (needsSeparator) file.insertText(afterLast, ',');
 };
 
 const appendElements = (array: ArrayLiteralExpression, added: Lines, unit: string): void => {
   const closingIndent = lineIndentationOf(array.getParentOrThrow());
   const elementIndent = `${closingIndent}${unit}`;
-  const layout = isSingleLine(array) ? spreadOverLines : appendBeforeClosingBracket;
-  array.getSourceFile().replaceText([array.getStart(), array.getEnd()], layout(array, added, elementIndent, closingIndent));
+  const append = isSingleLine(array) ? spreadOverLines : appendBeforeClosingBracket;
+  append(array, added, elementIndent, closingIndent);
 };
 
-const createConfig = (project: Project, configPath: string): SourceFile => {
-  project.manipulationSettings.set({ indentationText: IndentationText.TwoSpaces });
-  return project.createSourceFile(configPath, INITIAL_CONFIG);
-};
+const createConfig = (project: Project, configPath: string): SourceFile => project.createSourceFile(configPath, INITIAL_CONFIG);
 
 export const openConfig = (project: Project, configPath: string): SourceFile =>
   project.addSourceFileAtPathIfExists(configPath) ?? createConfig(project, configPath);
-
-const useSingleQuotes = (file: SourceFile): void => {
-  file.getProject().manipulationSettings.set({ quoteKind: QuoteKind.Single });
-};
 
 export const addLifecycles = (
   file: SourceFile,
   specifierOf: ModuleSpecifiers,
   suggestions: readonly LifecycleSuggestion[],
 ): void => {
-  useSingleQuotes(file);
-  useIndentationOf(file);
+  useLayoutOf(file);
   const lifecycles = lifecyclesArray(file);
   ensureNamedImport(file, 'lifecycle', 'domain-integrity');
   const unit = file.getProject().manipulationSettings.getIndentationText();
