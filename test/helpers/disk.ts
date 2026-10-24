@@ -64,7 +64,7 @@ const writeProjectInto = (
   });
 };
 
-const freshTempDir = (): string => realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-cli-')));
+const freshTempDir = (): string => realpathSync.native(mkdtempSync(join(tmpdir(), 'domain-integrity-cli-')));
 
 export const writeProject = (
   files: Readonly<Record<string, string>>,
@@ -106,7 +106,7 @@ export const captureIo = (cwd: string, answers: readonly string[] = [], { intera
 };
 
 export const writeTree = (files: Readonly<Record<string, string>>): string => {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-references-')));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'domain-integrity-references-')));
   Object.entries(files).forEach(([path, text]) => {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), text);
