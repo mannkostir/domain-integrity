@@ -256,6 +256,22 @@ export default defineDomain({ lifecycles: [lifecycle(Ticket, { states: { status:
     });
   });
 
+  it('names the missing directory of the baseline relative to the working directory', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['check', '--update-baseline', '--baseline', 'missing-dir/b.json'], io);
+
+    expect(stderr()).toBe('Cannot write missing-dir/b.json: the directory missing-dir does not exist. Create it first.\n');
+  });
+
+  it('names a baseline path that cannot be written relative to the working directory', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    mkdirSync(join(dir, 'taken'));
+    const { io, stderr } = captureIo(dir);
+    await run(['check', '--update-baseline', '--baseline', 'taken'], io);
+
+    expect(stderr()).toBe(`Cannot write taken: EISDIR: illegal operation on a directory, open '${join(dir, 'taken')}'\n`);
+  });
+
   it('does not write the baseline when there are problems', async () => {
     const dir = writeProject(MISSING_FIELD_PROJECT);
     const { io, stderr } = captureIo(dir);
@@ -358,6 +374,31 @@ describe('check with a baseline', () => {
       code: 2,
       notFound: true,
     });
+  });
+
+  it('names a missing explicit baseline relative to the working directory', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['check', '--baseline', 'nope.json'], io);
+
+    expect(stderr()).toBe('Baseline nope.json not found. Create it with --update-baseline.\n');
+  });
+
+  it('names an invalid default baseline relative to the working directory', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    writeFileSync(join(dir, DEFAULT_BASELINE), 'not json');
+    const { io, stderr } = captureIo(dir);
+    await run(['check'], io);
+
+    expect(stderr()).toBe('Baseline domain-integrity.baseline.json is not valid JSON.\n');
+  });
+
+  it('names a baseline outside the working directory by its relative path', async () => {
+    const { top, project } = writeNestedProject(TICKET_PROJECT);
+    writeFileSync(join(top, 'b.json'), 'not json');
+    const { io, stderr } = captureIo(project);
+    await run(['check', '--baseline', '../b.json'], io);
+
+    expect(stderr()).toBe('Baseline ../b.json is not valid JSON.\n');
   });
 
   it('lists stale baseline entries in the text output', async () => {
@@ -647,6 +688,28 @@ describe('context', () => {
     const { io, stderr } = captureIo(dir);
 
     expect({ code: await run(['context', '--write', 'docs'], io), cannot: stderr().includes('Cannot') }).toEqual({ code: 2, cannot: true });
+  });
+
+  it('names a target that cannot be read relative to the working directory', async () => {
+    const dir = writeProject(TICKET_PROJECT);
+    mkdirSync(join(dir, 'docs'));
+    const { io, stderr } = captureIo(dir);
+    await run(['context', '--write', 'docs'], io);
+
+    expect(stderr()).toBe('Cannot read docs: EISDIR: illegal operation on a directory, read\n');
+  });
+
+  it('exits 2 when the directory of the target does not exist', async () => {
+    const { io } = captureIo(writeProject(TICKET_PROJECT));
+
+    expect(await run(['context', '--write', 'missing/dir/AGENTS.md'], io)).toBe(2);
+  });
+
+  it('names the missing directory of the target relative to the working directory', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['context', '--write', 'missing/dir/AGENTS.md'], io);
+
+    expect(stderr()).toBe('Cannot write missing/dir/AGENTS.md: the directory missing/dir does not exist. Create it first.\n');
   });
 
   it('leaves exactly one marker block when run twice', async () => {

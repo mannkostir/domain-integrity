@@ -4,7 +4,7 @@ import { AnalyzerRun } from '../analysis';
 import { AnalyzerFailure } from '../analyzer';
 import { Finding, Problem } from '../finding';
 import { UsageError } from '../engine/errors';
-import { toPosixRelative } from '../engine/path';
+import { shownPath, toPosixRelative } from '../engine/path';
 import { BaselineEntry, baselineEntries, partitionByBaseline, readBaseline, serializeBaseline, staleEntries } from '../report/baseline';
 import { formatJson } from '../report/json';
 import { formatSarif } from '../report/sarif';
@@ -56,7 +56,7 @@ const updateBaseline = ({ problems, failures, findings }: Outcome, options: Chec
     return 2;
   }
   const path = resolve(io.cwd, options.baseline ?? DEFAULT_BASELINE);
-  writeText(path, serializeBaseline(findings, repositoryRoot));
+  writeText(io.cwd, path, serializeBaseline(findings, repositoryRoot));
   const entries = baselineEntries(findings, repositoryRoot).length;
   io.out(`Baseline written to ${relative(io.cwd, path)} with ${entries} ${entries === 1 ? 'entry' : 'entries'}.\n`);
   return 0;
@@ -86,7 +86,9 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   reportInternalErrors(outcome.failures, io);
   if (options.updateBaseline) return updateBaseline(outcome, options, io, paths.repositoryRoot);
   const baselinePath = baselinePathFor(options, io);
-  const baseline = baselinePath ? guardedRead(baselinePath, () => readBaseline(baselinePath, packageVersion())) : new Map<string, BaselineEntry>();
+  const baseline = baselinePath
+    ? guardedRead(io.cwd, baselinePath, () => readBaseline(baselinePath, shownPath(io.cwd, baselinePath), packageVersion()))
+    : new Map<string, BaselineEntry>();
   const { fresh, known, exceeded } = partitionByBaseline(outcome.findings, baseline, paths.repositoryRoot);
   const rules = enabledRules(results.flatMap((result) => result.rules), ruleConfig);
   const complete = isComplete(outcome);

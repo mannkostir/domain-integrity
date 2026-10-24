@@ -112,7 +112,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   try {
     await writeLifecycles(project, config ?? openConfig(project, paths.config), accepted);
   } catch (error) {
-    throw new UsageError(`Cannot write ${paths.config}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new UsageError(`Cannot write ${configName}: ${error instanceof Error ? error.message : String(error)}`);
   }
   io.out(
     `Declared ${accepted.length} aggregate${accepted.length === 1 ? '' : 's'} in ${toPosixRelative(io.cwd, paths.config)}. Review the terminal states, then run "domain-integrity check".\n`,

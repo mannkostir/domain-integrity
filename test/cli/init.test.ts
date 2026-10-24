@@ -539,6 +539,15 @@ describe('init', () => {
     });
   });
 
+  it('names the config that cannot be written relative to the working directory', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+    mkdirSync(join(dir, 'domain.config.ts'));
+    const { io, stderr } = captureIo(dir);
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toBe('Cannot write domain.config.ts: EISDIR: illegal operation on a directory, read\n');
+  });
+
   it('does not duplicate an import the config already binds', async () => {
     const dir = writeProject({
       ...TICKET_SOURCES,

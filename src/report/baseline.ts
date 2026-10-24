@@ -70,55 +70,55 @@ const readEntry = (value: unknown): EntryReading => {
   return { kind: 'entry', entry: { identity, count } };
 };
 
-const read = (path: string): string => {
+const read = (path: string, name: string): string => {
   try {
     return readFileSync(path, 'utf8');
   } catch (error) {
-    throw new UsageError(`Cannot read baseline ${path}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new UsageError(`Cannot read baseline ${name}: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
-const parseJson = (path: string, content: string): unknown => {
+const parseJson = (name: string, content: string): unknown => {
   try {
     return JSON.parse(content);
   } catch {
-    throw new UsageError(`Baseline ${path} is not valid JSON.`);
+    throw new UsageError(`Baseline ${name} is not valid JSON.`);
   }
 };
 
-const versionError = (path: string, version: unknown, toolVersion: string): UsageError =>
+const versionError = (name: string, version: unknown, toolVersion: string): UsageError =>
   version === 1
     ? new UsageError(
-        `Baseline ${path} uses format version 1, which domain-integrity ${toolVersion} no longer reads. Regenerate it with check --update-baseline; that accepts every current finding, so review the report first.`,
+        `Baseline ${name} uses format version 1, which domain-integrity ${toolVersion} no longer reads. Regenerate it with check --update-baseline; that accepts every current finding, so review the report first.`,
       )
-    : new UsageError(`Baseline ${path} has format version ${describeVersion(version)}; this version reads ${BASELINE_VERSION}.`);
+    : new UsageError(`Baseline ${name} has format version ${describeVersion(version)}; this version reads ${BASELINE_VERSION}.`);
 
-const entriesOf = (path: string, findings: readonly unknown[]): Baseline => {
+const entriesOf = (name: string, findings: readonly unknown[]): Baseline => {
   const entries = new Map<string, BaselineEntry>();
   const indexes = new Map<string, number>();
   findings.forEach((value, index) => {
     const reading = readEntry(value);
-    if (reading.kind === 'invalid') throw new UsageError(`Baseline ${path} entry ${index}: ${reading.reason}.`);
+    if (reading.kind === 'invalid') throw new UsageError(`Baseline ${name} entry ${index}: ${reading.reason}.`);
     const canonical = serializeIdentity(reading.entry.identity);
     const earlier = indexes.get(canonical);
-    if (earlier !== undefined) throw new UsageError(`Baseline ${path} entry ${index} repeats entry ${earlier}.`);
+    if (earlier !== undefined) throw new UsageError(`Baseline ${name} entry ${index} repeats entry ${earlier}.`);
     indexes.set(canonical, index);
     entries.set(canonical, reading.entry);
   });
   return entries;
 };
 
-export const parseBaseline = (path: string, content: string, toolVersion: string): Baseline => {
-  const parsed = parseJson(path, content);
-  if (!isRecord(parsed)) throw new UsageError(`Baseline ${path} is not a domain-integrity baseline.`);
-  if (parsed.version !== BASELINE_VERSION) throw versionError(path, parsed.version, toolVersion);
-  if (!Array.isArray(parsed.findings)) throw new UsageError(`Baseline ${path} is not a domain-integrity baseline.`);
-  return entriesOf(path, parsed.findings);
+export const parseBaseline = (name: string, content: string, toolVersion: string): Baseline => {
+  const parsed = parseJson(name, content);
+  if (!isRecord(parsed)) throw new UsageError(`Baseline ${name} is not a domain-integrity baseline.`);
+  if (parsed.version !== BASELINE_VERSION) throw versionError(name, parsed.version, toolVersion);
+  if (!Array.isArray(parsed.findings)) throw new UsageError(`Baseline ${name} is not a domain-integrity baseline.`);
+  return entriesOf(name, parsed.findings);
 };
 
-export const readBaseline = (path: string, toolVersion: string): Baseline => {
-  if (!existsSync(path)) throw new UsageError(`Baseline ${path} not found. Create it with --update-baseline.`);
-  return parseBaseline(path, read(path), toolVersion);
+export const readBaseline = (path: string, name: string, toolVersion: string): Baseline => {
+  if (!existsSync(path)) throw new UsageError(`Baseline ${name} not found. Create it with --update-baseline.`);
+  return parseBaseline(name, read(path, name), toolVersion);
 };
 
 type Group = { readonly identity: Identity; readonly findings: readonly Finding[] };
