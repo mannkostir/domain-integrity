@@ -36,13 +36,24 @@ jobs:
       - run: npm install --global npm@^11.15.0
       - run: npm ci
       - run: npm run build
+      - id: pack
+        shell: bash
+        run: |
+          packed_name="$(npm pack --json --pack-destination "$RUNNER_TEMP" \
+            | node -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(0, "utf8"))[0].filename)')"
+          echo "tarball=$RUNNER_TEMP/$packed_name" >> "$GITHUB_OUTPUT"
+      - shell: bash
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: bash scripts/test-pack.sh "$TARBALL"
       - shell: bash
         env:
           PRERELEASE: ${{ github.event.release.prerelease }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
         run: |
           dist_tag=latest
           if [ "$PRERELEASE" = true ]; then dist_tag=next; fi
-          npm stage publish --provenance --access public --tag "$dist_tag"
+          npm stage publish "$TARBALL" --provenance --access public --tag "$dist_tag"
   move-major-tag:
     needs: publish
     if: startsWith(github.event.release.tag_name, 'v0.') && !github.event.release.prerelease
