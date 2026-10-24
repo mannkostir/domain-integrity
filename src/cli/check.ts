@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { AnalyzerRun } from '../analysis';
 import { AnalyzerFailure } from '../analyzer';
 import { Finding, Problem } from '../finding';
@@ -63,7 +63,7 @@ const updateBaseline = ({ problems, failures, findings }: Outcome, options: Chec
   const path = resolve(io.cwd, options.baseline ?? DEFAULT_BASELINE);
   writeText(io.cwd, path, serializeBaseline(findings, repositoryRoot));
   const entries = baselineEntries(findings, repositoryRoot).length;
-  io.out(`Baseline written to ${relative(io.cwd, path)} with ${entries} ${entries === 1 ? 'entry' : 'entries'}.\n`);
+  io.out(`Baseline written to ${toPosixRelative(io.cwd, path)} with ${entries} ${entries === 1 ? 'entry' : 'entries'}.\n`);
   return 0;
 };
 
@@ -98,7 +98,7 @@ export const checkCommand = (paths: Paths, options: CheckOptions, io: Io, analyz
   const rules = enabledRules(results.flatMap((result) => result.rules), ruleConfig);
   const complete = isComplete(outcome);
   const stale = complete ? staleEntries(outcome.findings, baseline, paths.repositoryRoot) : [];
-  const applied = baselinePath ? { baseline: { path: relative(io.cwd, baselinePath), stale } } : {};
+  const applied = baselinePath ? { baseline: { path: toPosixRelative(io.cwd, baselinePath), stale } } : {};
   const staleSuppressions = complete ? configured.stale : [];
   io.out(format({ fresh, known, exceeded, suppressed: configured.suppressed, staleSuppressions, problems: outcome.problems, rules, repositoryRoot: paths.repositoryRoot, ...applied }, toolIdentity()));
   if (!complete) return 2;

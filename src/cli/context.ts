@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { AnalyzerRun } from '../analysis';
 import { SummaryOutcome } from '../analyzer';
+import { toPosixRelative } from '../engine/path';
 import { readText, writeText } from './files';
 import { failuresAmong, reportInternalErrors } from './internal-errors';
 import { Io, Paths } from './io';
@@ -15,7 +16,7 @@ const writeSummary = (summary: string, write: string, io: Io): void => {
   const target = resolve(io.cwd, write);
   const existing = existsSync(target) ? readText(io.cwd, target) : undefined;
   writeText(io.cwd, target, replaceSection(existing, summary));
-  io.out(`Updated ${relative(io.cwd, target)}.\n`);
+  io.out(`Updated ${toPosixRelative(io.cwd, target)}.\n`);
 };
 
 export const contextCommand = (paths: Paths, write: string | undefined, io: Io, analyzers: readonly AnalyzerRun[]): number => {

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { ts } from 'ts-morph';
 import { ProjectError } from './errors';
+import { toTypeScriptPath } from './path';
 
 export type ReferenceRead =
   | { readonly kind: 'read'; readonly references: readonly string[] }
@@ -52,9 +53,10 @@ const diagnosticText = (diagnostic: ts.Diagnostic): string => ts.flattenDiagnost
 
 export const readReferencesFromDisk: ReadReferences = (tsconfig) => {
   if (!existsSync(tsconfig)) return { kind: 'missing' };
-  const { config, error } = ts.readConfigFile(tsconfig, ts.sys.readFile);
+  const configFileName = toTypeScriptPath(tsconfig);
+  const { config, error } = ts.readConfigFile(configFileName, ts.sys.readFile);
   if (error) return { kind: 'unreadable', reason: diagnosticText(error) };
-  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, dirname(tsconfig), undefined, tsconfig);
+  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, dirname(configFileName), undefined, configFileName);
   return {
     kind: 'read',
     references: (parsed.projectReferences ?? []).map((reference) => resolve(ts.resolveProjectReferencePath(reference))),
