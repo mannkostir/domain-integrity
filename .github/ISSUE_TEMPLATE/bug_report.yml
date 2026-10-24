@@ -1,0 +1,62 @@
+name: Bug report
+description: A crash, a wrong exit code, broken output, a config error that looks wrong, or a problem with init, show or context.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for crashes, internal errors, wrong exit codes, broken text, JSON or SARIF output, config errors that look wrong, and problems with `init`, `show` or `context`.
+
+        - A finding on code that is correct goes in the [false finding form](https://github.com/mannkostir/domain-integrity/issues/new?template=false_finding.yml).
+        - A vulnerability goes through the [security policy](https://github.com/mannkostir/domain-integrity/security/policy), never in a public issue.
+
+        This is a public issue tracker. Never paste private or proprietary code: reduce the reproduction and strip anything proprietary.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What the command did, including its exit code.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: A minimal project, its `tsconfig.json` and `domain.config.ts`, and the exact command, or a link to a public repository and commit.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: domain-integrity version
+      description: The output of `npx domain-integrity --version`; on 0.2.x, use `npm ls domain-integrity`. For the GitHub Action, give the ref you use, such as `@v0`.
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: The output of `node --version`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+    validations:
+      required: false
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The full output of the command, including any `internal error` line and its stack trace.
+      render: text
+    validations:
+      required: false

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/mannkostir/domain-integrity/security/advisories/new
+    about: Report security vulnerabilities privately, as the security policy describes, never in a public issue.
+  - name: Documentation
+    url: https://github.com/mannkostir/domain-integrity#readme
+    about: Commands, the rule reference, rules and suppressions, and what the analysis does not see.
