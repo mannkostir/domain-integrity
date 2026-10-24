@@ -238,6 +238,24 @@ export default defineDomain({
 `);
   });
 
+  it('falls back to nesting with two spaces in a config indented with three spaces', async () => {
+    const config = await initIn({ ...TICKET_SOURCES, 'domain.config.ts': configText({ imports: [DEFINE_DOMAIN_IMPORT], body: ['   lifecycles: [],'] }) });
+
+    expect(config).toBe(`import { defineDomain, lifecycle } from 'domain-integrity';
+import { Ticket, TicketStatus } from './src/ticket';
+
+export default defineDomain({
+   lifecycles: [
+     lifecycle(Ticket, {
+       states: {
+         status: { terminal: TicketStatus.closed },
+       },
+     }),
+   ],
+});
+`);
+  });
+
   it('spreads a single-line lifecycles array over lines and keeps the existing element text', async () => {
     const config = await initIn({ ...TICKET_SOURCES, 'src/payment.ts': PAYMENT, 'domain.config.ts': SINGLE_LINE_LIFECYCLES_CONFIG });
 
