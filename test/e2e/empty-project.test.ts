@@ -44,12 +44,11 @@ describe('a project with nothing to check', () => {
   });
 
   it('says a tsconfig includes no source files', async () => {
-    const dir = projectFor('no source files');
-    const { io, stderr } = captureIo(dir);
+    const { io, stderr } = captureIo(projectFor('no source files'));
     await run(['check'], io);
 
     expect(stderr()).toBe(
-      `Loaded 0 source files.\n${join(dir, 'tsconfig.json')} includes no source files.\nPass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.\n`,
+      'Loaded 0 source files.\ntsconfig.json includes no source files.\nPass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.\n',
     );
   });
 

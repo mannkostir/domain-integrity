@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { AnalyzerRun, DEFAULT_ANALYZERS } from '../analysis';
 import { DomainIntegrityError } from '../engine/errors';
@@ -15,8 +15,12 @@ type CommonOptions = { readonly project: string; readonly config: string };
 
 const collect = (value: string, previous: readonly string[] | undefined): readonly string[] => [...(previous ?? []), value];
 
+const isDirectory = (path: string): boolean => statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false;
+
+const tsconfigAt = (given: string): string => (isDirectory(given) ? join(given, DEFAULT_TSCONFIG) : given);
+
 const pathsFrom = (options: CommonOptions, io: Io): Paths => {
-  const tsconfig = resolve(io.cwd, options.project);
+  const tsconfig = tsconfigAt(resolve(io.cwd, options.project));
   const projectRoot = dirname(tsconfig);
   return { tsconfig, config: resolve(io.cwd, options.config), projectRoot, repositoryRoot: findRepositoryRoot(projectRoot, existsSync) };
 };

@@ -52,8 +52,8 @@ export const runScope = (scopes: readonly CheckScope[]): CheckScope => {
 };
 
 export const openSession = (paths: Paths, analyzers: readonly AnalyzerRun[], io: Io): Session => {
-  const project = loadProject(paths.tsconfig, paths.config);
-  const configFile = configSourceFile(project, paths.config);
+  const project = loadProject(paths.tsconfig, paths.config, io.cwd);
+  const configFile = configSourceFile(project, paths.config, io.cwd);
   const { declaration, deprecations } = readDeclaration(configFile);
   reportDeprecations(deprecations, toPosixRelative(io.cwd, paths.config), io);
   const files = analysedSourceFiles(project, configFile);

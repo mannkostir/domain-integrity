@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ProjectError } from '../../src/engine/errors';
+import { shownPath } from '../../src/engine/path';
 import { ReferenceRead, readReferencesFromDisk, referencedTsconfigs } from '../../src/engine/references';
 import { writeTree } from '../helpers/disk';
 
@@ -9,9 +10,11 @@ const graph = (edges: Readonly<Record<string, ReferenceRead>>) => (tsconfig: str
 
 const read = (...references: string[]): ReferenceRead => ({ kind: 'read', references });
 
+const shown = (path: string): string => shownPath('/r', path);
+
 describe('referencedTsconfigs', () => {
   it('returns nothing for a tsconfig without references', () => {
-    expect(referencedTsconfigs('/r/tsconfig.json', graph({ '/r/tsconfig.json': read() }))).toEqual([]);
+    expect(referencedTsconfigs('/r/tsconfig.json', graph({ '/r/tsconfig.json': read() }), shown)).toEqual([]);
   });
 
   it('follows nested references depth-first', () => {
@@ -22,7 +25,7 @@ describe('referencedTsconfigs', () => {
       '/r/libs/orders/tsconfig.lib.json': read(),
     });
 
-    expect(referencedTsconfigs('/r/tsconfig.json', edges)).toEqual([
+    expect(referencedTsconfigs('/r/tsconfig.json', edges, shown)).toEqual([
       '/r/apps/api/tsconfig.json',
       '/r/libs/orders/tsconfig.json',
       '/r/libs/orders/tsconfig.lib.json',
@@ -35,14 +38,14 @@ describe('referencedTsconfigs', () => {
       '/r/a/tsconfig.json': read('/r/tsconfig.json'),
     });
 
-    expect(referencedTsconfigs('/r/tsconfig.json', edges)).toEqual(['/r/a/tsconfig.json']);
+    expect(referencedTsconfigs('/r/tsconfig.json', edges, shown)).toEqual(['/r/a/tsconfig.json']);
   });
 
   it('names the referrer of a missing tsconfig', () => {
     const edges = graph({ '/r/tsconfig.json': read('/r/gone/tsconfig.json') });
 
-    expect(() => referencedTsconfigs('/r/tsconfig.json', edges)).toThrow(
-      new ProjectError('tsconfig not found: /r/gone/tsconfig.json (referenced from /r/tsconfig.json)'),
+    expect(() => referencedTsconfigs('/r/tsconfig.json', edges, shown)).toThrow(
+      new ProjectError('tsconfig not found: gone/tsconfig.json (referenced from tsconfig.json). Correct the path in the "references" of tsconfig.json.'),
     );
   });
 
@@ -52,9 +55,23 @@ describe('referencedTsconfigs', () => {
       '/r/bad/tsconfig.json': { kind: 'unreadable', reason: 'boom' },
     });
 
-    expect(() => referencedTsconfigs('/r/tsconfig.json', edges)).toThrow(
-      new ProjectError('Cannot load /r/bad/tsconfig.json (referenced from /r/tsconfig.json): boom'),
+    expect(() => referencedTsconfigs('/r/tsconfig.json', edges, shown)).toThrow(
+      new ProjectError('Cannot load bad/tsconfig.json (referenced from tsconfig.json): boom'),
     );
+  });
+
+  it('names a missing entry tsconfig and how to point at the right one', () => {
+    expect(() => referencedTsconfigs('/r/tsconfig.json', graph({}), shown)).toThrow(
+      new ProjectError(
+        'tsconfig not found: tsconfig.json. Run domain-integrity from the project root, or pass -p with the path to your tsconfig.json or the directory that contains it.',
+      ),
+    );
+  });
+
+  it('names an unreadable entry tsconfig', () => {
+    const edges = graph({ '/r/tsconfig.json': { kind: 'unreadable', reason: 'boom' } });
+
+    expect(() => referencedTsconfigs('/r/tsconfig.json', edges, shown)).toThrow(new ProjectError('Cannot load tsconfig.json: boom'));
   });
 });
 

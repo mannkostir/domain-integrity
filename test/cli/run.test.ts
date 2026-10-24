@@ -5,7 +5,7 @@ import { AnalyzerRun } from '../../src/analysis';
 import { analyse } from '../../src/analyzer';
 import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
-import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeProject, writeTree } from '../helpers/disk';
+import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeNestedProject, writeProject, writeTree } from '../helpers/disk';
 import { parseSarif } from '../helpers/sarif-log';
 
 describe('check', () => {
@@ -70,7 +70,7 @@ describe('check', () => {
 
     expect({
       code: await run(['check'], io),
-      explained: stderr().includes(`${join(dir, 'tsconfig.json')} includes no source files other than ${join(dir, 'domain.config.ts')}.`),
+      explained: stderr().includes('tsconfig.json includes no source files other than domain.config.ts.'),
     }).toEqual({ code: 2, explained: true });
   });
 
@@ -158,6 +158,45 @@ const MISSING_FIELD_PROJECT = {
   ...TICKET_PROJECT,
   'domain.config.ts': TICKET_PROJECT['domain.config.ts'].replace('status: {', 'missing: {'),
 };
+
+const MISSING_TSCONFIG_TAIL = 'Run domain-integrity from the project root, or pass -p with the path to your tsconfig.json or the directory that contains it.';
+
+describe('project and config paths', () => {
+  it('names the missing tsconfig.json in the cwd and how to point at the right one', async () => {
+    const { io, stderr } = captureIo(writeTree({ 'src/a.ts': 'export const a = 1;\n' }));
+    await run(['check'], io);
+
+    expect(stderr()).toBe(`tsconfig not found: tsconfig.json. ${MISSING_TSCONFIG_TAIL}\n`);
+  });
+
+  it('exits 2 when the tsconfig is missing', async () => {
+    const { io } = captureIo(writeTree({ 'src/a.ts': 'export const a = 1;\n' }));
+
+    expect(await run(['check'], io)).toBe(2);
+  });
+
+  it('checks the project of the tsconfig.json inside a directory passed with -p', async () => {
+    const { top } = writeNestedProject(TICKET_PROJECT);
+    const { io, stdout } = captureIo(top);
+    await run(['check', '-p', 'pkg', '-c', 'pkg/domain.config.ts'], io);
+
+    expect(stdout()).toContain('terminal-state-leak  Ticket.rename()');
+  });
+
+  it('names the missing tsconfig.json inside a directory passed with -p', async () => {
+    const { io, stderr } = captureIo(writeTree({ 'src/a.ts': 'export const a = 1;\n' }));
+    await run(['check', '-p', 'src'], io);
+
+    expect(stderr()).toBe(`tsconfig not found: src/tsconfig.json. ${MISSING_TSCONFIG_TAIL}\n`);
+  });
+
+  it('names the config passed with -c when it is missing and how to create or point at one', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_SOURCES));
+    await run(['check', '-c', 'config/domain.config.ts'], io);
+
+    expect(stderr()).toBe('config/domain.config.ts not found. Run "domain-integrity init" to create it, or pass -c with the path to your config file.\n');
+  });
+});
 
 describe('check exit codes', () => {
   it('exits 0 when the only finding is a warning', async () => {

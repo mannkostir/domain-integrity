@@ -45,8 +45,8 @@ const assertIdentifiers = (names: readonly string[]): void => {
   }
 };
 
-const existingConfig = (project: Project, configPath: string): SourceFile | undefined =>
-  project.getFileSystem().fileExistsSync(configPath) ? configSourceFile(project, configPath) : undefined;
+const existingConfig = (project: Project, configPath: string, cwd: string): SourceFile | undefined =>
+  project.getFileSystem().fileExistsSync(configPath) ? configSourceFile(project, configPath, cwd) : undefined;
 
 const configWithBaseClasses = (project: Project, configPath: string, existing: SourceFile | undefined, names: readonly string[]): SourceFile => {
   const config = existing ?? openConfig(project, configPath);
@@ -79,8 +79,8 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   if (!options.yes && !io.isInteractive) {
     throw new UsageError('init needs an interactive terminal to confirm suggestions; pass --yes to accept them all.');
   }
-  const project = loadProject(paths.tsconfig, paths.config);
-  const existing = existingConfig(project, paths.config);
+  const project = loadProject(paths.tsconfig, paths.config, io.cwd);
+  const existing = existingConfig(project, paths.config, io.cwd);
   if (existing !== undefined) reportDeprecations(readDeclaration(existing).deprecations, toPosixRelative(io.cwd, paths.config), io);
   const config = startingConfig(project, paths.config, existing, options.baseClass);
   const declaration = config ? readDeclaration(config).declaration : DEFAULT_DECLARATION;
