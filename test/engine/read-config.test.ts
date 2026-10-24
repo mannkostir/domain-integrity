@@ -710,3 +710,72 @@ describe('config diagnostics', () => {
     );
   });
 });
+
+const NAMED = 'configs/custom.config.ts';
+
+const BAD_CONFIGS: readonly (readonly [string, string, CompilerOptions, string])[] = [
+  [
+    'a value it cannot read',
+    "import { defineDomain } from 'domain-integrity';\nconst names = ['Audited'];\nexport default defineDomain({ inert: { decorators: names } });\n",
+    {},
+    `${NAMED}:3 expected an array literal. Use literal objects, arrays and direct references.`,
+  ],
+  [
+    'two names of one option',
+    configSetting("aggregateBaseClasses: ['A'],\n  aggregates: { baseClasses: ['B'] }"),
+    {},
+    `${NAMED}:3 sets "aggregateBaseClasses" and ${NAMED}:4 sets "aggregates.baseClasses". Keep only "aggregates.baseClasses".`,
+  ],
+  [
+    'an unknown rule',
+    configSetting("rules: {\n    // @ts-expect-error\n    'no-such-rule': 'off',\n  }"),
+    {},
+    `${NAMED}:5 "rules" names the unknown rule "no-such-rule".`,
+  ],
+  [
+    'a suppression without a reason',
+    SUPPRESSIONS("suppress(Order, { rule: 'unhandled-event', reason: '  ' })"),
+    {},
+    `${NAMED}:4 suppress(Order) needs a non-empty "reason".`,
+  ],
+  [
+    'a saga outcome with one class twice',
+    "import { defineDomain, saga } from 'domain-integrity';\nimport { OrderSaga, PaymentFailed } from './src/payments';\nexport default defineDomain({ events: { sagas: [saga(OrderSaga, { outcomes: [[PaymentFailed, PaymentFailed]] })] } });\n",
+    {},
+    `${NAMED}:3 an outcome of saga(OrderSaga) lists PaymentFailed as both success and failure.`,
+  ],
+  [
+    'a syntax error',
+    "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ a: 1 b: 2 c: [ });\n",
+    {},
+    `Syntax error at ${NAMED}:2: ',' expected.`,
+  ],
+  [
+    'an unresolved helpers import',
+    "\nimport { defineDomain } from 'domain-integrity';\nexport default defineDomain({});\n",
+    { paths: {} },
+    `${NAMED}:2 cannot import "domain-integrity". Install it as a dev dependency: npm install --save-dev domain-integrity`,
+  ],
+  [
+    'type errors',
+    "import { defineDomain } from 'domain-integrity';\nconst count: number = 'one';\nexport default defineDomain({});\n",
+    {},
+    `Type errors in ${NAMED}:\n${NAMED}:2 Type 'string' is not assignable to type 'number'.`,
+  ],
+  [
+    'a missing defineDomain default export',
+    'export default 42;\n',
+    {},
+    `${NAMED} must "export default defineDomain({...})".`,
+  ],
+];
+
+describe('config errors', () => {
+  it.each(BAD_CONFIGS)('reports %s as a ConfigError', (_shape, config, overrides) => {
+    expect(() => readAs(NAMED, config, overrides)).toThrow(ConfigError);
+  });
+
+  it.each(BAD_CONFIGS)('names the given config in the message for %s', (_shape, config, overrides, message) => {
+    expect(() => readAs(NAMED, config, overrides)).toThrow(new ConfigError(message));
+  });
+});
