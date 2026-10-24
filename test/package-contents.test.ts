@@ -1,24 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { MANIFEST } from './helpers/manifest';
+import { packedPaths } from './helpers/pack';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
-
-type PackedFile = { readonly path: string };
-
-type PackResult = { readonly files: readonly PackedFile[] };
-
-const packedPaths = (): readonly string[] => {
-  const output = execFileSync('npm', ['pack', '--dry-run', '--json'], { cwd: ROOT, encoding: 'utf8' });
-  const [result] = JSON.parse(output) as readonly [PackResult];
-  return result.files.map((file) => file.path);
-};
-
-const readRootFile = (name: string): string => readFileSync(join(ROOT, name), 'utf8');
-
-const packageVersion = (): string => (JSON.parse(readRootFile('package.json')) as { readonly version: string }).version;
+const readChangelog = (): string => readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
 
 const releaseHeadings = (changelog: string): readonly string[] =>
   changelog
@@ -34,9 +19,9 @@ describe('published package', () => {
   });
 
   it('has a changelog section for the current version', () => {
-    const version = packageVersion();
+    const version = MANIFEST.version;
 
-    const headings = releaseHeadings(readRootFile('CHANGELOG.md'));
+    const headings = releaseHeadings(readChangelog());
 
     expect(headings).toContain(version);
   });
