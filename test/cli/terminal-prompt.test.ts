@@ -52,4 +52,14 @@ describe('terminalPrompt', () => {
 
     await expect(answer).rejects.toThrow('init stopped before every suggestion was answered; nothing was written.');
   });
+
+  it('ends the question line when the input ends before an answer', async () => {
+    const output = new PassThrough();
+    const written = collected(output);
+    const terminal = terminalPrompt(endedInput(''), output);
+
+    await terminal.prompt('Declare? ').catch(() => undefined);
+
+    expect(written()).toBe('Declare? \n');
+  });
 });

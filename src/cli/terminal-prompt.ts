@@ -26,7 +26,10 @@ const ask = async (lines: Lines, output: NodeJS.WritableStream, question: string
     lines.readline.prompt();
   }
   const line = await lines.next();
-  if (line.done === true) throw new UsageError(STOPPED);
+  if (line.done === true) {
+    output.write('\n');
+    throw new UsageError(STOPPED);
+  }
   return line.value;
 };
 

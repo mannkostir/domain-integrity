@@ -85,7 +85,9 @@ export const writeNestedProject = (
   return { top, project };
 };
 
-export const captureIo = (cwd: string, answers: readonly string[] = []) => {
+export type CaptureOptions = { readonly interactive?: boolean };
+
+export const captureIo = (cwd: string, answers: readonly string[] = [], { interactive = answers.length > 0 }: CaptureOptions = {}) => {
   const out: string[] = [];
   const err: string[] = [];
   const asked: string[] = [];
@@ -98,7 +100,7 @@ export const captureIo = (cwd: string, answers: readonly string[] = []) => {
       asked.push(question);
       return pending.shift() ?? '';
     },
-    isInteractive: answers.length > 0,
+    isInteractive: interactive,
   };
   return { io, stdout: () => out.join(''), stderr: () => err.join(''), questions: (): readonly string[] => [...asked] };
 };

@@ -453,6 +453,16 @@ export class Switch extends AggregateRoot<{ state: 'on' | 'off' }> {
 }
 `;
 
+const LIGHT = `
+import { AggregateRoot } from './aggregate-root';
+export enum LightState { off = 'OFF', on = 'ON' }
+export class Light extends AggregateRoot<{ state: LightState }> {
+  static off(): Light { return new Light({ state: LightState.off }); }
+  turnOn(): void { if (this.props.state === LightState.on) return; this.props.state = LightState.on; }
+  turnOff(): void { if (this.props.state === LightState.off) return; this.props.state = LightState.off; }
+}
+`;
+
 const TAB_CONFIG = `import { defineDomain } from 'domain-integrity';
 
 export default defineDomain({
@@ -649,6 +659,12 @@ export default defineDomain({
   ],
 });
 `);
+  });
+
+  it('imports only the aggregate when an enum field gets no terminal values', async () => {
+    const config = await initIn({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/light.ts': LIGHT });
+
+    expect(config).toContain("import { defineDomain, lifecycle } from 'domain-integrity';\nimport { Light } from './src/light';\n\n");
   });
 
   it('nests with four spaces in a four-space config', async () => {
@@ -1394,6 +1410,16 @@ export class Parcel extends AggregateRoot<{ state: 'packed' | 'sent'; label: 'bl
 `,
 };
 
+const SEPARATED = `
+import { AggregateRoot } from './aggregate-root';
+export class Separated extends AggregateRoot<{ state: 'open' | 'a,b' | 'c' }> {
+  static open(): Separated { return new Separated({ state: 'open' }); }
+  finish(): void { if (this.props.state === 'c') return; this.props.state = 'c'; }
+}
+`;
+
+const SEPARATED_SOURCES = { 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/separated.ts': SEPARATED };
+
 const initAnswering = async (files: Readonly<Record<string, string>>, answers: readonly string[]) => {
   const dir = writeProject(files);
   const captured = captureIo(dir, answers);
@@ -1403,6 +1429,16 @@ const initAnswering = async (files: Readonly<Record<string, string>>, answers: r
 
 const configAfterAnswering = async (files: Readonly<Record<string, string>>, answers: readonly string[]): Promise<string> =>
   readConfig((await initAnswering(files, answers)).dir);
+
+const initWithEndingInput = async (dir: string): Promise<number> => {
+  const input = new PassThrough();
+  input.end('e\n');
+  const terminal = terminalPrompt(input, new PassThrough());
+  const { io } = captureIo(dir, [], { interactive: true });
+  const exitCode = await run(['init'], { ...io, prompt: terminal.prompt });
+  terminal.close();
+  return exitCode;
+};
 
 describe('init prompt', () => {
   it('asks whether to declare, skip or edit each suggestion', async () => {
@@ -1466,6 +1502,31 @@ describe('init prompt', () => {
     const config = await configAfterAnswering(INVITATION_SOURCES, ['e', 'rejected,rejected']);
 
     expect(config).toContain("state: { terminal: 'rejected' },");
+  });
+
+  it('shows a dash as the current value of a field without terminal values', async () => {
+    const { questions } = await initAnswering({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/switch.ts': SWITCH }, ['e', '']);
+
+    expect(questions()[1]).toBe('state terminal values [-] (known: on, off; comma-separated, - for none, Enter to keep): ');
+  });
+
+  it('writes a typed value that contains a comma', async () => {
+    const config = await configAfterAnswering(SEPARATED_SOURCES, ['e', ' a,b ']);
+
+    expect(config).toContain("state: { terminal: 'a,b' },");
+  });
+
+  it('imports only the aggregate when an edited enum field has no terminal values', async () => {
+    const config = await configAfterAnswering(TICKET_SOURCES, ['e', '-']);
+
+    expect(config).toContain("import { defineDomain, lifecycle } from 'domain-integrity';\nimport { Ticket } from './src/ticket';\n\n");
+  });
+
+  it('writes a config that check accepts with noUnusedLocals when an edited enum field has no terminal values', async () => {
+    const dir = writeProject(TICKET_SOURCES, { noUnusedLocals: true });
+    await run(['init'], captureIo(dir, ['e', '-']).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(0);
   });
 
   it('writes no terminal values for a dash', async () => {
@@ -1542,16 +1603,19 @@ describe('init prompt', () => {
     expect(await run(['check'], captureIo(dir).io)).toBe(0);
   });
 
-  it('exits 2 and writes no config when the input ends during the prompt', async () => {
+  it('exits 2 when the input ends during the prompt', async () => {
     const dir = writeProject(TICKET_SOURCES);
-    const input = new PassThrough();
-    input.end('e\n');
-    const terminal = terminalPrompt(input, new PassThrough());
-    const { io } = captureIo(dir, ['unused']);
 
-    const exitCode = await run(['init'], { ...io, prompt: terminal.prompt });
-    terminal.close();
+    const exitCode = await initWithEndingInput(dir);
 
-    expect({ exitCode, written: existsSync(join(dir, 'domain.config.ts')) }).toEqual({ exitCode: 2, written: false });
+    expect(exitCode).toBe(2);
+  });
+
+  it('writes no config when the input ends during the prompt', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+
+    await initWithEndingInput(dir);
+
+    expect(existsSync(join(dir, 'domain.config.ts'))).toBe(false);
   });
 });

@@ -45,10 +45,15 @@ const typedValues = (field: StateField, labels: readonly string[]): Interpretati
   return valid(field.values.filter((value) => labels.includes(value.label)));
 };
 
+const valuesLabelled = (field: StateField, label: string): readonly StateValue[] =>
+  field.values.filter((value) => value.label === label);
+
 const interpretTerminalEntry = (suggestion: FieldSuggestion, entry: string): Interpretation<readonly StateValue[]> => {
   const trimmed = entry.trim();
   if (trimmed === '') return valid(suggestion.terminal);
   if (trimmed === NO_TERMINAL_VALUES) return valid([]);
+  const labelled = valuesLabelled(suggestion.field, trimmed);
+  if (labelled.length > 0) return valid(labelled);
   return typedValues(
     suggestion.field,
     trimmed
@@ -65,8 +70,10 @@ const declareQuestion = (suggestion: LifecycleSuggestion, root: string): string 
   return `${suggestion.className} (${toPosixRelative(root, suggestion.file)}): ${fields}. Declare? [Y/n/e] `;
 };
 
+const currentTerminalLabels = (terminal: readonly StateValue[]): string => labelsOf(terminal) || NO_TERMINAL_VALUES;
+
 const terminalQuestion = (suggestion: FieldSuggestion): string =>
-  `${suggestion.field.name} terminal values [${terminalLabels(suggestion.terminal)}] (known: ${labelsOf(suggestion.field.values)}; comma-separated, ${NO_TERMINAL_VALUES} for none, Enter to keep): `;
+  `${suggestion.field.name} terminal values [${currentTerminalLabels(suggestion.terminal)}] (known: ${labelsOf(suggestion.field.values)}; comma-separated, ${NO_TERMINAL_VALUES} for none, Enter to keep): `;
 
 const askUntilValid = async <T>(io: Io, question: string, interpret: (answer: string) => Interpretation<T>): Promise<T> => {
   const interpretation = interpret(await io.prompt(question));

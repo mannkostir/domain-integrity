@@ -213,7 +213,7 @@ const terminalSources = (
 ): readonly string[] => {
   const reference = field.enumReference;
   const written = terminal.map((value) => writtenSource(value.source, quoteKindIn(file)));
-  if (reference === undefined) return written;
+  if (reference === undefined || written.length === 0) return written;
   const local = bindExport(file, specifierOf, reference.name, reference.file);
   return written.map((source) => renamedEnumSource(source, reference.name, local));
 };
