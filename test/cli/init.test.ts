@@ -1,10 +1,10 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { run } from '../../src/cli/run';
 import { configSourceFile, loadProject } from '../../src/engine/project';
 import { readDeclaration } from '../../src/engine/read-config';
-import { TICKET_CONFIG, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
+import { HAS_POSIX_FILE_MODES, TICKET_CONFIG, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
 import { AGGREGATE_ROOT } from '../helpers/in-memory';
 import { declarationIn, initWithBaseClass, readConfig } from '../helpers/init-project';
 import { FOUR_SPACE_CONFIG, MODEL_SOURCES, PAYMENT, baseClassSource, invoiceExtending, orderWithEnumIn } from '../helpers/init-sources';
@@ -219,6 +219,13 @@ describe('init --base-class', () => {
     }).toEqual({ withoutFlag: true, withFlag: true });
   });
 
+  it('names the config passed with -c in its type errors', async () => {
+    const { io, stderr } = captureIo(writeProject({ ...MODEL_SOURCES, 'configs/my.config.ts': CONFIG_WITH_TYPE_ERROR_ON_LINE_6 }));
+    await run(['init', '--yes', '-c', 'configs/my.config.ts'], io);
+
+    expect(stderr()).toBe("Type errors in configs/my.config.ts:\nconfigs/my.config.ts:6 Type 'string' is not assignable to type 'number'.\n");
+  });
+
   it('exits 2 and writes nothing for a base class that is not an identifier', async () => {
     const dir = writeProject(MODEL_SOURCES);
     const exitCode = await run(['init', '--yes', '--base-class', 'Not valid'], captureIo(dir).io);
@@ -384,6 +391,53 @@ describe('init without aggregates', () => {
   });
 });
 
+const configImporting = (ticketImport: string): string => `import { defineDomain } from 'domain-integrity';
+${ticketImport}
+export default defineDomain({ lifecycles: [] });
+`;
+
+const NAMESPACE_IMPORT_CONFIG = configImporting("import * as tickets from './src/ticket';");
+
+const TYPE_ONLY_IMPORT_CONFIG = configImporting("import type { TicketStatus } from './src/ticket';");
+
+describe('init beside an import of the aggregate module', () => {
+  it('adds a separate import when the module is imported as a namespace', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': NAMESPACE_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir).split('\n').filter((line) => line.startsWith('import'))).toEqual([
+      "import { defineDomain, lifecycle } from 'domain-integrity';",
+      "import * as tickets from './src/ticket';",
+      "import { Ticket, TicketStatus } from './src/ticket';",
+    ]);
+  });
+
+  it('writes a config that check reads when the module is imported as a namespace', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': NAMESPACE_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+
+  it('imports values beside a type-only import of the module', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': TYPE_ONLY_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir).split('\n').filter((line) => line.startsWith('import'))).toEqual([
+      "import { defineDomain, lifecycle } from 'domain-integrity';",
+      "import type { TicketStatus } from './src/ticket';",
+      "import { Ticket, TicketStatus as TicketStatus2 } from './src/ticket';",
+    ]);
+  });
+
+  it('writes a config that check reads when the module is imported for types only', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': TYPE_ONLY_IMPORT_CONFIG });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+});
+
 describe('init', () => {
   it('writes a config that check can read', async () => {
     const dir = writeProject(TICKET_SOURCES);
@@ -395,8 +449,8 @@ describe('init', () => {
   it('writes a config whose declared lifecycle targets are the suggested aggregates', async () => {
     const dir = writeProject(TICKET_SOURCES);
     await run(['init', '--yes'], captureIo(dir).io);
-    const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'));
-    const { declaration } = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts')));
+    const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'), dir);
+    const { declaration } = readDeclaration(configSourceFile(project, join(dir, 'domain.config.ts'), dir), 'domain.config.ts');
 
     expect(declaration.lifecycles.map((lifecycle) => lifecycle.target.getName())).toEqual(['Ticket']);
   });
@@ -533,7 +587,7 @@ describe('init', () => {
     expect(readConfig(dir)).toBe(ORDER_CONFIG);
   });
 
-  it('exits 2 with a clear message when the config cannot be written', async () => {
+  it('exits 2 with a clear message when the config cannot be read', async () => {
     const dir = writeProject(TICKET_SOURCES);
     mkdirSync(join(dir, 'domain.config.ts'));
     const { io, stderr } = captureIo(dir);
@@ -541,6 +595,50 @@ describe('init', () => {
     expect({ exitCode: await run(['init', '--yes'], io), mentionsCannot: stderr().includes('Cannot') }).toEqual({
       exitCode: 2,
       mentionsCannot: true,
+    });
+  });
+
+  it('reports a config path that is a directory as unreadable', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+    mkdirSync(join(dir, 'domain.config.ts'));
+    const { io, stderr } = captureIo(dir);
+    await run(['init', '--yes'], io);
+
+    expect(stderr()).toBe('Cannot read domain.config.ts: it is a directory\n');
+  });
+
+  it('reports a config path that is a directory as unreadable with --base-class', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    mkdirSync(join(dir, 'domain.config.ts'));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes', '--base-class', 'Model'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot read domain.config.ts: it is a directory\n',
+    });
+  });
+
+  it.runIf(HAS_POSIX_FILE_MODES)('reports an existing config without read permission as unreadable', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ lifecycles: [] });\n" });
+    chmodSync(join(dir, 'domain.config.ts'), 0o000);
+    onTestFinished(() => chmodSync(join(dir, 'domain.config.ts'), 0o644));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot read domain.config.ts: permission denied\n',
+    });
+  });
+
+  it.runIf(HAS_POSIX_FILE_MODES)('names the config that cannot be saved relative to the working directory', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+    mkdirSync(join(dir, 'configs'), { mode: 0o555 });
+    onTestFinished(() => chmodSync(join(dir, 'configs'), 0o755));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes', '-c', 'configs/domain.config.ts'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot write configs/domain.config.ts: permission denied\n',
     });
   });
 

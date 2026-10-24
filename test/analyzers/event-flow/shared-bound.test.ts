@@ -49,7 +49,7 @@ const receivedBySites = (): readonly (readonly string[] | 'any')[] => {
   });
   const config = project.getSourceFileOrThrow('/app/domain.config.ts');
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
-  const model = extractEventFlows({ declaration: readDeclaration(config).declaration, files, projectRoot: '/app', repositoryRoot: '/app' });
+  const model = extractEventFlows({ declaration: readDeclaration(config, 'domain.config.ts').declaration, files, projectRoot: '/app', repositoryRoot: '/app' });
   return model.unresolved.map((site) => (site.receives.kind === 'any' ? 'any' : site.receives.events));
 };
 

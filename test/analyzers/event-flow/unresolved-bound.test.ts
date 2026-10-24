@@ -53,7 +53,7 @@ const findingsFor = (handlerFile: string, handler: string, events: string = SHIP
   });
   const config = project.getSourceFileOrThrow('/app/domain.config.ts');
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith('/app/src/'));
-  return unhandledEvent(extractEventFlows({ declaration: readDeclaration(config).declaration, files, projectRoot: '/app', repositoryRoot: '/app' })).map((finding) => finding.details.event);
+  return unhandledEvent(extractEventFlows({ declaration: readDeclaration(config, 'domain.config.ts').declaration, files, projectRoot: '/app', repositoryRoot: '/app' })).map((finding) => finding.details.event);
 };
 
 const ENVELOPE_EVENTS = `

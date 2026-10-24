@@ -14,8 +14,8 @@ const summaryText = (outcomes: readonly SummaryOutcome[]): string =>
 
 const writeSummary = (summary: string, write: string, io: Io): void => {
   const target = resolve(io.cwd, write);
-  const existing = existsSync(target) ? readText(target) : undefined;
-  writeText(target, replaceSection(existing, summary));
+  const existing = existsSync(target) ? readText(io.cwd, target) : undefined;
+  writeText(io.cwd, target, replaceSection(existing, summary));
   io.out(`Updated ${toPosixRelative(io.cwd, target)}.\n`);
 };
 

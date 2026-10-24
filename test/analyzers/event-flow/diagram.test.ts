@@ -10,7 +10,7 @@ const MODEL = flowModel({
 
 describe('eventFlowDiagram', () => {
   it('draws every event with its handlers', () => {
-    expect(eventFlowDiagram(MODEL, undefined)).toEqual({
+    expect(eventFlowDiagram(MODEL, undefined)).toMatchObject({
       kind: 'diagram',
       text: [
         '## Event flows',
@@ -38,7 +38,7 @@ describe('eventFlowDiagram', () => {
   });
 
   it('restricts to a named event and contributes nothing for an unknown name', () => {
-    expect([eventFlowDiagram(MODEL, 'Failed'), eventFlowDiagram(MODEL, 'Order')]).toEqual([
+    expect([eventFlowDiagram(MODEL, 'Failed'), eventFlowDiagram(MODEL, 'Order')]).toMatchObject([
       { kind: 'diagram', text: ['## Event flows', '', '```mermaid', 'flowchart LR', '  event_0["Failed"] --> handler_0["(inline)"]', '```'].join('\n') },
       { kind: 'diagram', text: '' },
     ]);
@@ -55,5 +55,34 @@ describe('eventFlowDiagram', () => {
     });
 
     expect(eventFlowDiagram(shared, 'Paid')).toEqual({ kind: 'ambiguous', reference: 'Paid', candidates: ['src/a.ts:Paid', 'src/b.ts:Paid'] });
+  });
+});
+
+describe('eventFlowDiagram names', () => {
+  it('names every handled event in name order when the named one is unknown', () => {
+    expect(eventFlowDiagram(MODEL, 'Order')).toMatchObject({ names: ['Failed', 'Paid'] });
+  });
+
+  it('names every handled event when one of them is selected', () => {
+    expect(eventFlowDiagram(MODEL, 'Paid')).toMatchObject({ names: ['Failed', 'Paid'] });
+  });
+
+  it('leaves events no handler registers for out of the names', () => {
+    const model = flowModel({ events: new Map([['Paid', eventClass('Paid')], ['Failed', eventClass('Failed')]]) });
+
+    expect(eventFlowDiagram(model, undefined)).toMatchObject({ names: ['Paid'] });
+  });
+
+  it('names same-named handled events by their qualified names', () => {
+    const shared = flowModel({
+      classes: new Map([
+        ['src/a.ts:Paid', { ...classRef('Paid'), id: 'src/a.ts:Paid', qualifiedName: 'src/a.ts:Paid' }],
+        ['src/b.ts:Paid', { ...classRef('Paid'), id: 'src/b.ts:Paid', qualifiedName: 'src/b.ts:Paid' }],
+        ['Failed', classRef('Failed')],
+      ]),
+      registrations: [registration({ event: 'src/a.ts:Paid' }), registration({ event: 'src/b.ts:Paid' }), registration({ event: 'Failed' })],
+    });
+
+    expect(eventFlowDiagram(shared, undefined)).toMatchObject({ names: ['Failed', 'src/a.ts:Paid', 'src/b.ts:Paid'] });
   });
 });

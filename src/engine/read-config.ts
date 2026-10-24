@@ -3,6 +3,7 @@ import {
   ClassDeclaration,
   Diagnostic,
   Expression,
+  ImportDeclaration,
   Node,
   ObjectLiteralExpression,
   PropertyAssignment,
@@ -24,26 +25,62 @@ import { RULE_ANALYZERS, RuleId, RuleLevel } from '../finding';
 import { OptionPath, RENAMED_OPTIONS, RenamedOption, optionPath } from './renamed-options';
 import { SET, UNSET, literalToken } from './value-token';
 
-const unsupported = (node: Node, what: string): ConfigError =>
-  new ConfigError(
-    `domain.config.ts:${node.getStartLineNumber()} ${what}. Use literal objects, arrays and direct references.`,
-  );
+class ConfigLineError extends Error {
+  constructor(
+    readonly line: number,
+    readonly detail: string,
+  ) {
+    super(`Line ${line}: ${detail}`);
+  }
+}
+
+class RenamedOptionConflictError extends Error {
+  constructor(
+    readonly option: RenamedOption,
+    readonly oldLine: number,
+    readonly currentLine: number,
+  ) {
+    super(`"${optionPath(option.old)}" at line ${oldLine} conflicts with "${optionPath(option.current)}" at line ${currentLine}`);
+  }
+}
+
+const unsupported = (node: Node, what: string): ConfigLineError =>
+  new ConfigLineError(node.getStartLineNumber(), `${what}. Use literal objects, arrays and direct references.`);
 
 const FILE_NOT_LISTED_IN_PROJECT_CODE = 6307;
+
+const HELPERS_MODULE = 'domain-integrity';
+
+const diagnosticText = (diagnostic: Diagnostic): string =>
+  ts.flattenDiagnosticMessageText(diagnostic.compilerObject.messageText, '\n');
+
+const assertNoSyntaxErrors = (file: SourceFile, configName: string): void => {
+  const [first] = file.getProject().getProgram().getSyntacticDiagnostics(file);
+  if (first === undefined) return;
+  throw new ConfigError(`Syntax error at ${configName}:${first.getLineNumber()}: ${diagnosticText(first)}`);
+};
+
+const isUnresolvedHelpersImport = (declaration: ImportDeclaration): boolean =>
+  declaration.getModuleSpecifierValue() === HELPERS_MODULE && declaration.getModuleSpecifierSourceFile() === undefined;
+
+const assertHelpersResolve = (file: SourceFile, configName: string): void => {
+  const unresolved = file.getImportDeclarations().find(isUnresolvedHelpersImport);
+  if (unresolved === undefined) return;
+  throw new ConfigError(
+    `${configName}:${unresolved.getStartLineNumber()} cannot import "${HELPERS_MODULE}". Install it as a dev dependency: npm install --save-dev ${HELPERS_MODULE}`,
+  );
+};
 
 const isConfigTypeError = (diagnostic: Diagnostic, file: SourceFile): boolean =>
   diagnostic.getCategory() === ts.DiagnosticCategory.Error &&
   diagnostic.getCode() !== FILE_NOT_LISTED_IN_PROJECT_CODE &&
   diagnostic.getSourceFile()?.getFilePath() === file.getFilePath();
 
-const assertNoTypeErrors = (file: SourceFile): void => {
+const assertNoTypeErrors = (file: SourceFile, configName: string): void => {
   const errors = file.getPreEmitDiagnostics().filter((diagnostic) => isConfigTypeError(diagnostic, file));
   if (errors.length === 0) return;
-  const lines = errors.map(
-    (diagnostic) =>
-      `domain.config.ts:${diagnostic.getLineNumber()} ${ts.flattenDiagnosticMessageText(diagnostic.compilerObject.messageText, '\n')}`,
-  );
-  throw new ConfigError(`Type errors in domain.config.ts:\n${lines.join('\n')}`);
+  const lines = errors.map((diagnostic) => `${configName}:${diagnostic.getLineNumber()} ${diagnosticText(diagnostic)}`);
+  throw new ConfigError(`Type errors in ${configName}:\n${lines.join('\n')}`);
 };
 
 const callNamed = (node: Node | undefined, name: string): CallExpression | undefined =>
@@ -115,16 +152,11 @@ const valueAt = (object: ObjectLiteralExpression, [name, ...rest]: OptionPath, p
 
 const propertyLine = (value: Expression): number => value.getParentOrThrow().getStartLineNumber();
 
-const conflict = (old: Expression, current: Expression, option: RenamedOption): ConfigError =>
-  new ConfigError(
-    `domain.config.ts:${propertyLine(old)} sets "${optionPath(option.old)}" and domain.config.ts:${propertyLine(current)} sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`,
-  );
-
 const renamedValue = (config: ObjectLiteralExpression, option: RenamedOption): Located => {
   const current = valueAt(config, option.current);
   const old = valueAt(config, option.old);
   if (old === undefined) return { expression: current, deprecations: [] };
-  if (current !== undefined) throw conflict(old, current, option);
+  if (current !== undefined) throw new RenamedOptionConflictError(option, propertyLine(old), propertyLine(current));
   return {
     expression: old,
     deprecations: [{ line: propertyLine(old), old: optionPath(option.old), replacement: optionPath(option.current) }],
@@ -240,8 +272,9 @@ const readOutcome = (sagaName: string) => (element: Expression): readonly [Class
   const [success, failure] = element.getElements().map((item) => projectClass(item, 'an outcome element'));
   if (success === undefined || failure === undefined) throw unsupported(element, 'each outcome must be a [success, failure] array literal');
   if (success === failure) {
-    throw new ConfigError(
-      `domain.config.ts:${element.getStartLineNumber()} an outcome of saga(${sagaName}) lists ${success.getName() ?? 'a class'} as both success and failure.`,
+    throw new ConfigLineError(
+      element.getStartLineNumber(),
+      `an outcome of saga(${sagaName}) lists ${success.getName() ?? 'a class'} as both success and failure.`,
     );
   }
   return [success, failure];
@@ -288,7 +321,9 @@ const ruleLevel = (setting: Expression): RuleLevel | undefined => {
 
 const ruleEntry = (property: PropertyAssignment): readonly (readonly [RuleId, RuleLevel])[] => {
   const name = propertyName(property);
-  if (!isRuleId(name)) throw new ConfigError(`domain.config.ts:${property.getStartLineNumber()} "rules" names the unknown rule "${name}".`);
+  if (!isRuleId(name)) {
+    throw new ConfigLineError(property.getStartLineNumber(), `"rules" names the unknown rule "${name}".`);
+  }
   const level = ruleLevel(property.getInitializerOrThrow());
   return level === undefined ? [] : [[name, level]];
 };
@@ -313,11 +348,13 @@ const readSuppression = (element: Expression): DeclaredSuppression => {
   const target = projectClass(targetArgument, 'the first argument of suppress()');
   const spec = objectArgument(call, 1);
   const rule = stringLiteralText(valueOf(spec, 'rule'), call, '"rule" of suppress()');
-  if (!isRuleId(rule)) throw new ConfigError(`domain.config.ts:${call.getStartLineNumber()} suppress() names the unknown rule "${rule}".`);
+  if (!isRuleId(rule)) {
+    throw new ConfigLineError(call.getStartLineNumber(), `suppress() names the unknown rule "${rule}".`);
+  }
   const member = valueOf(spec, 'member');
   const reason = stringLiteralText(valueOf(spec, 'reason'), call, '"reason" of suppress()');
   if (reason.trim() === '') {
-    throw new ConfigError(`domain.config.ts:${call.getStartLineNumber()} suppress(${target.getName() ?? 'anonymous'}) needs a non-empty "reason".`);
+    throw new ConfigLineError(call.getStartLineNumber(), `suppress(${target.getName() ?? 'anonymous'}) needs a non-empty "reason".`);
   }
   return {
     rule,
@@ -330,11 +367,10 @@ const readSuppression = (element: Expression): DeclaredSuppression => {
 
 const byLine = (left: Deprecation, right: Deprecation): number => left.line - right.line;
 
-export const readDeclaration = (file: SourceFile): ConfigReading => {
-  assertNoTypeErrors(file);
-  const exported = file.getExportAssignment((assignment) => !assignment.isExportEquals());
-  const call = callNamed(exported?.getExpression(), 'defineDomain');
-  if (!call) throw new ConfigError('domain.config.ts must "export default defineDomain({...})".');
+const defineDomainCall = (file: SourceFile): CallExpression | undefined =>
+  callNamed(file.getExportAssignment((assignment) => !assignment.isExportEquals())?.getExpression(), 'defineDomain');
+
+const readDefineDomain = (call: CallExpression): ConfigReading => {
   const config = objectArgument(call, 0);
   const lifecycles = valueOf(config, 'lifecycles');
   const declaredLifecycles = lifecycles === undefined ? [] : arrayElements(lifecycles).map(readLifecycle);
@@ -379,4 +415,26 @@ export const readDeclaration = (file: SourceFile): ConfigReading => {
     },
     deprecations: reads.flatMap((read) => read.deprecations).sort(byLine),
   };
+};
+
+const conflictMessage = ({ option, oldLine, currentLine }: RenamedOptionConflictError, configName: string): string =>
+  `${configName}:${oldLine} sets "${optionPath(option.old)}" and ${configName}:${currentLine} sets "${optionPath(option.current)}". Keep only "${optionPath(option.current)}".`;
+
+const namedIn = (configName: string, error: unknown): unknown => {
+  if (error instanceof ConfigLineError) return new ConfigError(`${configName}:${error.line} ${error.detail}`);
+  if (error instanceof RenamedOptionConflictError) return new ConfigError(conflictMessage(error, configName));
+  return error;
+};
+
+export const readDeclaration = (file: SourceFile, configName: string): ConfigReading => {
+  assertNoSyntaxErrors(file, configName);
+  assertHelpersResolve(file, configName);
+  assertNoTypeErrors(file, configName);
+  const call = defineDomainCall(file);
+  if (!call) throw new ConfigError(`${configName} must "export default defineDomain({...})".`);
+  try {
+    return readDefineDomain(call);
+  } catch (error) {
+    throw namedIn(configName, error);
+  }
 };

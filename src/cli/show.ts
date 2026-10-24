@@ -16,10 +16,19 @@ const diagramText = (outcomes: readonly DiagramOutcome[]): string =>
 const firstAmbiguity = (outcomes: readonly DiagramOutcome[]): AmbiguousReference | undefined =>
   outcomes.find((outcome): outcome is AmbiguousReference => outcome.kind === 'ambiguous');
 
-const nothingToShowError = (aggregate: string | undefined): UsageError =>
+const offeredNames = (outcomes: readonly DiagramOutcome[]): readonly string[] => [
+  ...new Set(outcomes.flatMap((outcome) => (outcome.kind === 'diagram' ? outcome.names : []))),
+];
+
+const unknownNameMessage = (name: string, offered: readonly string[]): string =>
+  offered.length === 0
+    ? `No declared aggregate or event named "${name}".`
+    : `No declared aggregate or event named "${name}". Use one of: ${offered.join(', ')}.`;
+
+const nothingToShowError = (aggregate: string | undefined, outcomes: readonly DiagramOutcome[]): UsageError =>
   new UsageError(
     aggregate
-      ? `No declared aggregate or event named "${aggregate}".`
+      ? unknownNameMessage(aggregate, offeredNames(outcomes))
       : 'No declared aggregates or event flows to show. Run "domain-integrity init" first.',
   );
 
@@ -36,7 +45,7 @@ export const showCommand = (paths: Paths, aggregate: string | undefined, io: Io,
   const ambiguity = firstAmbiguity(outcomes);
   if (ambiguity) throw ambiguityError(ambiguity);
   const output = diagramText(outcomes);
-  if (output.length === 0 && failures.length === 0) throw nothingToShowError(aggregate);
+  if (output.length === 0 && failures.length === 0) throw nothingToShowError(aggregate, outcomes);
   if (output.length > 0) io.out(`${output}\n`);
   return failures.length > 0 ? 2 : 0;
 };

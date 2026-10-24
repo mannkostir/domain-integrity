@@ -43,7 +43,7 @@ export const checkJson = async (dir: string) => {
 export const readConfig = (dir: string): string => readFileSync(join(dir, 'domain.config.ts'), 'utf8');
 
 export const declarationIn = (dir: string) =>
-  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts')), join(dir, 'domain.config.ts'))).declaration;
+  readDeclaration(configSourceFile(loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'), dir), join(dir, 'domain.config.ts'), dir), 'domain.config.ts').declaration;
 
 export const initWithBaseClass = async (config: string | undefined): Promise<string> => {
   const dir = writeProject(config === undefined ? MODEL_SOURCES : { ...MODEL_SOURCES, 'domain.config.ts': config });

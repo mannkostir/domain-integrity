@@ -26,7 +26,7 @@ const healthy: Analyzer<string, never> = {
   problems: (model) => [{ ...MISSING_FIELD, message: `problem in ${model}` }],
   suggest: () => [],
   check: () => [],
-  diagram: (model) => ({ kind: 'diagram', text: `diagram of ${model}` }),
+  diagram: (model) => ({ kind: 'diagram', text: `diagram of ${model}`, names: [model] }),
   summarize: (model, root) => `summary of ${model} at ${root}`,
   scope: () => 'nothing-found',
 };
@@ -68,7 +68,7 @@ describe('analyse', () => {
   });
 
   it('returns the diagram of a healthy analyzer', () => {
-    expect(analyse(healthy, INPUT).diagram(undefined)).toEqual({ kind: 'diagram', text: 'diagram of model' });
+    expect(analyse(healthy, INPUT).diagram(undefined)).toEqual({ kind: 'diagram', text: 'diagram of model', names: ['model'] });
   });
 
   it('returns the summary of a healthy analyzer', () => {

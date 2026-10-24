@@ -21,7 +21,7 @@ const extract = (analysedPrefix = '/app/src/', extra: Readonly<Record<string, st
   const project = inMemoryProject({ ...SOURCES, ...extra, '/app/domain.config.ts': CONFIG });
   const config = project.getSourceFileOrThrow('/app/domain.config.ts');
   const files = project.getSourceFiles().filter((file) => file.getFilePath().startsWith(analysedPrefix));
-  return extractEventFlows({ declaration: readDeclaration(config).declaration, files, projectRoot: '/app', repositoryRoot: '/app' });
+  return extractEventFlows({ declaration: readDeclaration(config, 'domain.config.ts').declaration, files, projectRoot: '/app', repositoryRoot: '/app' });
 };
 
 describe('extractEventFlows', () => {

@@ -1,28 +1,27 @@
-import { existsSync } from 'node:fs';
 import { Project, SourceFile, ts } from 'ts-morph';
 import { ConfigError, ProjectError } from './errors';
-import { toNativePath } from './path';
-import { readReferencesFromDisk, referencedTsconfigs } from './references';
+import { shownPath } from './path';
+import { ShowPath, readReferencesFromDisk, referencedTsconfigs } from './references';
 
 const isProjectSource = (file: SourceFile): boolean => !file.isDeclarationFile() && !file.isInNodeModules();
 
 export const loadedSourceFiles = (count: number): string => `Loaded ${count} ${count === 1 ? 'source file' : 'source files'}.`;
 
-const includesClause = (tsconfigPath: string, references: readonly string[]): string =>
-  references.length === 0 ? `${tsconfigPath} includes` : `${tsconfigPath} and the tsconfigs it references include`;
+const includesClause = (tsconfig: string, references: readonly string[]): string =>
+  references.length === 0 ? `${tsconfig} includes` : `${tsconfig} and the tsconfigs it references include`;
 
-const noSourcesSentence = (includes: string, configFile: SourceFile | undefined): string =>
-  configFile === undefined ? `${includes} no source files.` : `${includes} no source files other than ${toNativePath(configFile.getFilePath())}.`;
+const noSourcesSentence = (includes: string, config: string | undefined): string =>
+  config === undefined ? `${includes} no source files.` : `${includes} no source files other than ${config}.`;
 
-const emptyProgramMessage = (tsconfigPath: string, references: readonly string[], configFile: SourceFile | undefined): string =>
+const emptyProgramMessage = (tsconfig: string, references: readonly string[], config: string | undefined): string =>
   [
     loadedSourceFiles(0),
-    noSourcesSentence(includesClause(tsconfigPath, references), configFile),
+    noSourcesSentence(includesClause(tsconfig, references), config),
     ...(references.length === 0 ? ['Pass -p with a tsconfig that includes your code, or add "references" to the tsconfigs that do.'] : []),
   ].join('\n');
 
-const loadFailure = (tsconfigPath: string, error: unknown): ProjectError =>
-  new ProjectError(`Cannot load ${tsconfigPath}: ${error instanceof Error ? error.message : String(error)}`);
+const loadFailure = (tsconfig: string, error: unknown): ProjectError =>
+  new ProjectError(`Cannot load ${tsconfig}: ${error instanceof Error ? error.message : String(error)}`);
 
 const TYPESCRIPT_EXTENSIONS: readonly string[] = [ts.Extension.Ts, ts.Extension.Tsx, ts.Extension.Mts, ts.Extension.Cts];
 
@@ -44,36 +43,38 @@ const addSupportedFilesOf = (project: Project, reference: string): void => {
     .forEach((file) => project.removeSourceFile(file));
 };
 
-const projectFrom = (tsconfigPath: string, references: readonly string[]): Project => {
+const projectFrom = (tsconfigPath: string, references: readonly string[], shown: ShowPath): Project => {
   try {
     const project = new Project({ tsConfigFilePath: tsconfigPath });
     references.forEach((reference) => addSupportedFilesOf(project, reference));
     project.resolveSourceFileDependencies();
     return project;
   } catch (error) {
-    throw loadFailure(tsconfigPath, error);
+    throw loadFailure(shown(tsconfigPath), error);
   }
 };
 
 export const analysedSourceFiles = (project: Project, excluded?: SourceFile): SourceFile[] =>
   project.getSourceFiles().filter((file) => file !== excluded && isProjectSource(file));
 
-export const loadProject = (tsconfigPath: string, configPath: string): Project => {
-  if (!existsSync(tsconfigPath)) throw new ProjectError(`tsconfig not found: ${tsconfigPath}`);
-  const references = referencedTsconfigs(tsconfigPath, readReferencesFromDisk);
-  const project = projectFrom(tsconfigPath, references);
+export const loadProject = (tsconfigPath: string, configPath: string, cwd: string): Project => {
+  const shown: ShowPath = (path) => shownPath(cwd, path);
+  const references = referencedTsconfigs(tsconfigPath, readReferencesFromDisk, shown);
+  const project = projectFrom(tsconfigPath, references, shown);
   const configFile = project.getSourceFile(configPath);
   if (analysedSourceFiles(project, configFile).length === 0) {
-    throw new ProjectError(emptyProgramMessage(tsconfigPath, references, configFile));
+    throw new ProjectError(emptyProgramMessage(shown(tsconfigPath), references, configFile && shown(configFile.getFilePath())));
   }
   return project;
 };
 
-export const configSourceFile = (project: Project, configPath: string): SourceFile => {
+export const configSourceFile = (project: Project, configPath: string, cwd: string): SourceFile => {
   const loaded = project.getSourceFile(configPath);
   if (loaded) return loaded;
   if (!project.getFileSystem().fileExistsSync(configPath)) {
-    throw new ConfigError(`${configPath} not found. Run "domain-integrity init" to create it.`);
+    throw new ConfigError(
+      `${shownPath(cwd, configPath)} not found. Run "domain-integrity init" to create it, or pass -c with the path to your config file.`,
+    );
   }
   return project.addSourceFileAtPath(configPath);
 };

@@ -11,20 +11,34 @@ export type ReferenceRead =
 
 export type ReadReferences = (tsconfig: string) => ReferenceRead;
 
-const referencesOf = (tsconfig: string, referrer: string | undefined, read: ReadReferences): readonly string[] => {
+export type ShowPath = (path: string) => string;
+
+const missingTsconfigMessage = (tsconfig: string): string =>
+  `tsconfig not found: ${tsconfig}. Run domain-integrity from the project root, or pass -p with the path to your tsconfig.json or the directory that contains it.`;
+
+const missingReferenceMessage = (tsconfig: string, referrer: string): string =>
+  `tsconfig not found: ${tsconfig} (referenced from ${referrer}). Correct the path in the "references" of ${referrer}.`;
+
+const missingMessage = (tsconfig: string, referrer: string | undefined): string =>
+  referrer === undefined ? missingTsconfigMessage(tsconfig) : missingReferenceMessage(tsconfig, referrer);
+
+const unreadableMessage = (tsconfig: string, referrer: string | undefined, reason: string): string =>
+  referrer === undefined ? `Cannot load ${tsconfig}: ${reason}` : `Cannot load ${tsconfig} (referenced from ${referrer}): ${reason}`;
+
+const referencesOf = (tsconfig: string, referrer: string | undefined, read: ReadReferences, shown: ShowPath): readonly string[] => {
   const result = read(tsconfig);
   if (result.kind === 'read') return result.references;
-  const origin = referrer === undefined ? '' : ` (referenced from ${referrer})`;
+  const shownReferrer = referrer === undefined ? undefined : shown(referrer);
   throw new ProjectError(
-    result.kind === 'missing' ? `tsconfig not found: ${tsconfig}${origin}` : `Cannot load ${tsconfig}${origin}: ${result.reason}`,
+    result.kind === 'missing' ? missingMessage(shown(tsconfig), shownReferrer) : unreadableMessage(shown(tsconfig), shownReferrer, result.reason),
   );
 };
 
-export const referencedTsconfigs = (entry: string, read: ReadReferences): readonly string[] => {
+export const referencedTsconfigs = (entry: string, read: ReadReferences, shown: ShowPath): readonly string[] => {
   const visited = new Set<string>([entry]);
   const reached: string[] = [];
   const visit = (tsconfig: string, referrer: string | undefined): void => {
-    referencesOf(tsconfig, referrer, read).forEach((reference) => {
+    referencesOf(tsconfig, referrer, read, shown).forEach((reference) => {
       if (visited.has(reference)) return;
       visited.add(reference);
       reached.push(reference);

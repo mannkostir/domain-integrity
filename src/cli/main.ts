@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Io } from './io';
+import { DEFAULT_HELP_WIDTH, Io } from './io';
 import { run } from './run';
 import { terminalPrompt } from './terminal-prompt';
 
@@ -11,6 +11,7 @@ const io: Io = {
   err: (text) => process.stderr.write(text),
   prompt: terminal.prompt,
   isInteractive: Boolean(process.stdin.isTTY),
+  helpWidth: process.stdout.isTTY ? (process.stdout.columns ?? DEFAULT_HELP_WIDTH) : DEFAULT_HELP_WIDTH,
 };
 
 try {
