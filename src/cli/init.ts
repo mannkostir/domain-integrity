@@ -3,10 +3,12 @@ import { lifecycleAnalyzer } from '../analyzers/lifecycle/analyzer';
 import { LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
 import { DEFAULT_DECLARATION, DomainDeclaration } from '../engine/declaration';
 import { ProjectError, UsageError } from '../engine/errors';
+import { fileErrorReason } from '../engine/file-error';
 import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
 import { addLifecycles, openConfig, recordBaseClasses } from './config-writer';
 import { reportDeprecations } from './deprecations';
+import { guardedRead } from './files';
 import { reviewSuggestions } from './init-prompt';
 import { initRetryCommand, noAggregatesForInitMessage } from './init-retry';
 import { Io, Paths } from './io';
@@ -33,25 +35,41 @@ const assertIdentifiers = (names: readonly string[]): void => {
   }
 };
 
-const existingConfig = (project: Project, configPath: string, cwd: string): SourceFile | undefined =>
-  project.getFileSystem().fileExistsSync(configPath) ? configSourceFile(project, configPath, cwd) : undefined;
+type ConfigLocation = { readonly path: string; readonly name: string; readonly cwd: string };
 
-const configWithBaseClasses = (project: Project, configPath: string, existing: SourceFile | undefined, names: readonly string[]): SourceFile => {
-  const config = existing ?? openConfig(project, configPath);
-  recordBaseClasses(config, names, existing === undefined ? [] : DEFAULT_DECLARATION.aggregateBaseClasses);
+const existingConfig = (project: Project, location: ConfigLocation): SourceFile | undefined =>
+  project.getFileSystem().fileExistsSync(location.path)
+    ? guardedRead(location.cwd, location.path, () => configSourceFile(project, location.path, location.cwd))
+    : undefined;
+
+const openedConfig = (project: Project, location: ConfigLocation): SourceFile =>
+  guardedRead(location.cwd, location.path, () => openConfig(project, location.path));
+
+const configWithBaseClasses = (project: Project, location: ConfigLocation, existing: SourceFile | undefined, names: readonly string[]): SourceFile => {
+  const config = existing ?? openedConfig(project, location);
+  recordBaseClasses(config, location.name, names, existing === undefined ? [] : DEFAULT_DECLARATION.aggregateBaseClasses);
   return config;
 };
 
-const startingConfig = (project: Project, configPath: string, existing: SourceFile | undefined, baseClasses: readonly string[] | undefined): SourceFile | undefined =>
-  baseClasses === undefined ? existing : configWithBaseClasses(project, configPath, existing, baseClasses);
+const startingConfig = (project: Project, location: ConfigLocation, existing: SourceFile | undefined, baseClasses: readonly string[] | undefined): SourceFile | undefined =>
+  baseClasses === undefined ? existing : configWithBaseClasses(project, location, existing, baseClasses);
+
+const saveConfig = async (config: SourceFile, location: ConfigLocation): Promise<void> => {
+  try {
+    await config.save();
+  } catch (error) {
+    throw new UsageError(`Cannot write ${location.name}: ${fileErrorReason(location.cwd, location.path, error)}`);
+  }
+};
 
 const writeLifecycles = async (
   project: Project,
   config: SourceFile,
+  location: ConfigLocation,
   accepted: readonly LifecycleSuggestion[],
 ): Promise<void> => {
-  addLifecycles(config, moduleSpecifiers(project), accepted);
-  await config.save();
+  addLifecycles(config, location.name, moduleSpecifiers(project), accepted);
+  await saveConfig(config, location);
 };
 
 const unsavedBaseClassesNote = (configPath: string, baseClasses: readonly string[]): string =>
@@ -65,10 +83,11 @@ const nothingWrittenMessage = (reason: string, options: InitOptions, configPath:
 export const initCommand = async (paths: Paths, options: InitOptions, io: Io): Promise<number> => {
   assertIdentifiers(options.baseClass ?? []);
   const project = loadProject(paths.tsconfig, paths.config, io.cwd);
-  const existing = existingConfig(project, paths.config, io.cwd);
   const configName = toPosixRelative(io.cwd, paths.config);
+  const location: ConfigLocation = { path: paths.config, name: configName, cwd: io.cwd };
+  const existing = existingConfig(project, location);
   if (existing !== undefined) reportDeprecations(readDeclaration(existing, configName).deprecations, configName, io);
-  const config = startingConfig(project, paths.config, existing, options.baseClass);
+  const config = startingConfig(project, location, existing, options.baseClass);
   const declaration = config ? readDeclaration(config, configName).declaration : DEFAULT_DECLARATION;
   const model = lifecycleAnalyzer.extract({ declaration, files: analysedSourceFiles(project, config), projectRoot: paths.projectRoot, repositoryRoot: paths.repositoryRoot, configFile: config });
   if (lifecycleAnalyzer.scope(model) === 'nothing-found') {
@@ -83,7 +102,7 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
           ? 'All discovered aggregates are already declared.'
           : 'No state fields found in the discovered aggregates; nothing to declare.',
         options,
-        toPosixRelative(io.cwd, paths.config),
+        configName,
         declaration,
       ),
     );
@@ -94,16 +113,12 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
   }
   const accepted = options.yes ? suggestions : await reviewSuggestions(suggestions, io, paths.repositoryRoot);
   if (accepted.length === 0) {
-    io.out(nothingWrittenMessage('Nothing declared.', options, toPosixRelative(io.cwd, paths.config), declaration));
+    io.out(nothingWrittenMessage('Nothing declared.', options, configName, declaration));
     return 0;
   }
-  try {
-    await writeLifecycles(project, config ?? openConfig(project, paths.config), accepted);
-  } catch (error) {
-    throw new UsageError(`Cannot write ${configName}: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  await writeLifecycles(project, config ?? openedConfig(project, location), location, accepted);
   io.out(
-    `Declared ${accepted.length} aggregate${accepted.length === 1 ? '' : 's'} in ${toPosixRelative(io.cwd, paths.config)}. Review the terminal states, then run "domain-integrity check".\n`,
+    `Declared ${accepted.length} aggregate${accepted.length === 1 ? '' : 's'} in ${configName}. Review the terminal states, then run "domain-integrity check".\n`,
   );
   return 0;
 };

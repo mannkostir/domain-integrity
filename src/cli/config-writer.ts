@@ -23,11 +23,11 @@ export default defineDomain({
 });
 `;
 
-const configObject = (file: SourceFile): ObjectLiteralExpression => {
+const configObject = (file: SourceFile, configName: string): ObjectLiteralExpression => {
   const call = file.getExportAssignment((assignment) => !assignment.isExportEquals())?.getExpression();
   const config = Node.isCallExpression(call) ? call.getArguments()[0] : undefined;
   if (!Node.isObjectLiteralExpression(config)) {
-    throw new ConfigError(`${file.getBaseName()} must "export default defineDomain({...})".`);
+    throw new ConfigError(`${configName} must "export default defineDomain({...})".`);
   }
   return config;
 };
@@ -67,9 +67,9 @@ const importsQuoteKind = (file: SourceFile): QuoteKind | undefined => {
 const quoteKindOf = (file: SourceFile): QuoteKind =>
   importsQuoteKind(file) ?? file.getFirstDescendantByKind(SyntaxKind.StringLiteral)?.getQuoteKind() ?? QuoteKind.Single;
 
-const useLayoutOf = (file: SourceFile): void => {
+const useLayoutOf = (file: SourceFile, configName: string): void => {
   file.getProject().manipulationSettings.set({
-    indentationText: indentationOf(configObject(file)),
+    indentationText: indentationOf(configObject(file, configName)),
     newLineKind: newLineKindOf(file),
     quoteKind: quoteKindOf(file),
   });
@@ -105,10 +105,10 @@ const appendMissingNames = (array: ArrayLiteralExpression, names: readonly strin
     .forEach((name) => array.addElement(inQuotes(name, quoteKind)));
 };
 
-const arrayInitializer = (property: Node | undefined, option: string): ArrayLiteralExpression | undefined => {
+const arrayInitializer = (property: Node | undefined, option: string, configName: string): ArrayLiteralExpression | undefined => {
   if (property === undefined) return undefined;
   const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError(`"${option}" in ${property.getSourceFile().getBaseName()} must be an array literal.`);
+  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError(`"${option}" in ${configName} must be an array literal.`);
   return array;
 };
 
@@ -118,35 +118,36 @@ const propertyNamed = (object: ObjectLiteralExpression, name: string): Node | un
     return Node.isStringLiteral(nameNode) ? nameNode.getLiteralText() === name : nameNode?.getText() === name;
   });
 
-const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
-  const config = configObject(file);
+const lifecyclesArray = (file: SourceFile, configName: string): ArrayLiteralExpression => {
+  const config = configObject(file, configName);
   const property =
     propertyNamed(config, 'lifecycles') ?? config.addPropertyAssignment({ name: 'lifecycles', initializer: '[]' });
   const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError(`"lifecycles" in ${file.getBaseName()} must be an array literal.`);
+  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError(`"lifecycles" in ${configName} must be an array literal.`);
   return array;
 };
 
-const aggregatesGroup = (config: ObjectLiteralExpression): ObjectLiteralExpression | undefined => {
+const aggregatesGroup = (config: ObjectLiteralExpression, configName: string): ObjectLiteralExpression | undefined => {
   const property = propertyNamed(config, 'aggregates');
   if (property === undefined) return undefined;
   const group = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-  if (!Node.isObjectLiteralExpression(group)) throw new ConfigError(`"aggregates" in ${config.getSourceFile().getBaseName()} must be an object literal.`);
+  if (!Node.isObjectLiteralExpression(group)) throw new ConfigError(`"aggregates" in ${configName} must be an object literal.`);
   return group;
 };
 
 export const recordBaseClasses = (
   file: SourceFile,
+  configName: string,
   names: readonly string[],
   implicitBaseClasses: readonly string[],
 ): void => {
-  useLayoutOf(file);
+  useLayoutOf(file, configName);
   const quoteKind = quoteKindIn(file);
-  const config = configObject(file);
-  const group = aggregatesGroup(config);
+  const config = configObject(file, configName);
+  const group = aggregatesGroup(config, configName);
   const listed =
-    arrayInitializer(group === undefined ? undefined : propertyNamed(group, 'baseClasses'), 'aggregates.baseClasses') ??
-    arrayInitializer(propertyNamed(config, 'aggregateBaseClasses'), 'aggregateBaseClasses');
+    arrayInitializer(group === undefined ? undefined : propertyNamed(group, 'baseClasses'), 'aggregates.baseClasses', configName) ??
+    arrayInitializer(propertyNamed(config, 'aggregateBaseClasses'), 'aggregateBaseClasses', configName);
   if (listed !== undefined) {
     appendMissingNames(listed, names, quoteKind);
     return;
@@ -311,11 +312,12 @@ export const openConfig = (project: Project, configPath: string): SourceFile =>
 
 export const addLifecycles = (
   file: SourceFile,
+  configName: string,
   specifierOf: ModuleSpecifiers,
   suggestions: readonly LifecycleSuggestion[],
 ): void => {
-  useLayoutOf(file);
-  const lifecycles = lifecyclesArray(file);
+  useLayoutOf(file, configName);
+  const lifecycles = lifecyclesArray(file, configName);
   ensureNamedImport(file, 'lifecycle', 'domain-integrity');
   const unit = file.getProject().manipulationSettings.getIndentationText();
   const added = suggestions.flatMap((suggestion) => lifecycleLines(file, specifierOf, suggestion, unit));

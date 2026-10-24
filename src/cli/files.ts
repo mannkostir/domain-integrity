@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { UsageError } from '../engine/errors';
+import { DomainIntegrityError, UsageError } from '../engine/errors';
 import { errorCodeOf, fileErrorReason } from '../engine/file-error';
 import { shownPath } from '../engine/path';
 
@@ -8,7 +8,7 @@ export const guardedRead = <T>(cwd: string, path: string, read: () => T): T => {
   try {
     return read();
   } catch (error) {
-    if (error instanceof UsageError) throw error;
+    if (error instanceof DomainIntegrityError) throw error;
     throw new UsageError(`Cannot read ${shownPath(cwd, path)}: ${fileErrorReason(cwd, path, error)}`);
   }
 };

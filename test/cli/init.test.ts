@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { run } from '../../src/cli/run';
 import { configSourceFile, loadProject } from '../../src/engine/project';
 import { readDeclaration } from '../../src/engine/read-config';
@@ -540,7 +540,7 @@ describe('init', () => {
     expect(readConfig(dir)).toBe(ORDER_CONFIG);
   });
 
-  it('exits 2 with a clear message when the config cannot be written', async () => {
+  it('exits 2 with a clear message when the config cannot be read', async () => {
     const dir = writeProject(TICKET_SOURCES);
     mkdirSync(join(dir, 'domain.config.ts'));
     const { io, stderr } = captureIo(dir);
@@ -551,13 +551,48 @@ describe('init', () => {
     });
   });
 
-  it('names the config that cannot be written relative to the working directory', async () => {
+  it('reports a config path that is a directory as unreadable', async () => {
     const dir = writeProject(TICKET_SOURCES);
     mkdirSync(join(dir, 'domain.config.ts'));
     const { io, stderr } = captureIo(dir);
     await run(['init', '--yes'], io);
 
-    expect(stderr()).toBe('Cannot write domain.config.ts: EISDIR: illegal operation on a directory, read\n');
+    expect(stderr()).toBe('Cannot read domain.config.ts: it is a directory\n');
+  });
+
+  it('reports a config path that is a directory as unreadable with --base-class', async () => {
+    const dir = writeProject(MODEL_SOURCES);
+    mkdirSync(join(dir, 'domain.config.ts'));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes', '--base-class', 'Model'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot read domain.config.ts: it is a directory\n',
+    });
+  });
+
+  it('reports an existing config without read permission as unreadable', async () => {
+    const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ lifecycles: [] });\n" });
+    chmodSync(join(dir, 'domain.config.ts'), 0o000);
+    onTestFinished(() => chmodSync(join(dir, 'domain.config.ts'), 0o644));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot read domain.config.ts: permission denied\n',
+    });
+  });
+
+  it('names the config that cannot be saved relative to the working directory', async () => {
+    const dir = writeProject(TICKET_SOURCES);
+    mkdirSync(join(dir, 'configs'), { mode: 0o555 });
+    onTestFinished(() => chmodSync(join(dir, 'configs'), 0o755));
+    const { io, stderr } = captureIo(dir);
+
+    expect({ exitCode: await run(['init', '--yes', '-c', 'configs/domain.config.ts'], io), stderr: stderr() }).toEqual({
+      exitCode: 2,
+      stderr: 'Cannot write configs/domain.config.ts: permission denied\n',
+    });
   });
 
   it('does not duplicate an import the config already binds', async () => {
