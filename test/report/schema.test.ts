@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,6 +14,7 @@ import { Report } from '../../src/report/text';
 import { IDENTITY_FIELDS } from '../../src/report/identity';
 import { captureIo } from '../helpers/disk';
 import { JSON_FIXTURES } from '../helpers/fixtures';
+import { packedPaths } from '../helpers/pack';
 import { TOOL, finding, unreachableFinding } from '../helpers/model';
 import { REPORT_SCHEMA, validateReport } from '../helpers/schema';
 
@@ -127,9 +127,9 @@ describe('report schema', () => {
   });
 
   it('ships the schema in the package tarball', () => {
-    const [pack] = JSON.parse(execSync('npm pack --dry-run --json --ignore-scripts', { cwd: ROOT, encoding: 'utf8' })) as [{ files: { path: string }[] }];
+    const paths = packedPaths();
 
-    expect(pack.files.map((file) => file.path)).toContain('schema/report.schema.json');
+    expect(paths).toContain('schema/report.schema.json');
   });
 
   const manifest = (): { exports: Record<string, string> } => JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));

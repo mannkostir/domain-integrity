@@ -1,0 +1,97 @@
+name: False finding
+description: domain-integrity reported a finding on code that is correct.
+title: "False finding: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A false finding is the bug this project treats as the worst, because it teaches you to ignore the tool. The analysis is meant to report nothing when it cannot interpret your code, so a finding on correct code is a defect in the analysis. The README section [Quiet by design](https://github.com/mannkostir/domain-integrity#quiet-by-design) lists what it stays silent on and the few shapes known to produce a false finding.
+
+        This is a public issue tracker. Never paste private or proprietary code: reduce the reproduction to the smallest code that still shows the finding, and rename or strip anything proprietary.
+  - type: dropdown
+    id: rule
+    attributes:
+      label: Rule
+      description: The rule id of the finding, as in the README rule reference.
+      options:
+        - terminal-state-leak
+        - unreachable-state
+        - outside-mutation
+        - transition-drift
+        - transition-missing
+        - dead-handler
+        - handler-payload-mismatch
+        - unhandled-event
+        - saga-missing-failure-path
+        - undispatched-events
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: Reported finding
+      description: Paste the finding as `check` printed it, as text or as the finding object from `check --format json`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: why-wrong
+    attributes:
+      label: Why it is wrong
+      description: Explain why the code is correct, for example the guard that stops the method or the code that reads the buffer.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: The smallest aggregate, handler or saga code that reproduces the finding, or a link to a public repository and commit. Reduce it and strip proprietary code first.
+      render: typescript
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: domain.config.ts
+      description: The part of `domain.config.ts` that covers the reproduction.
+      render: typescript
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: domain-integrity version
+      description: The output of `npx domain-integrity --version`; on versions before 0.3, which have no `--version`, use `npm ls domain-integrity`. For the GitHub Action, give the ref you use, such as `@v0`, and the SARIF report's `tool.driver.version` when it has one.
+    validations:
+      required: true
+  - type: dropdown
+    id: run-via
+    attributes:
+      label: How it was run
+      options:
+        - CLI
+        - GitHub Action
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command line or Action inputs
+      description: For example `npx domain-integrity check -p tsconfig.json`.
+    validations:
+      required: false
+  - type: input
+    id: typescript-version
+    attributes:
+      label: TypeScript version
+      description: The output of `npx tsc --version` in your project.
+    validations:
+      required: false
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: The output of `node --version`.
+    validations:
+      required: true

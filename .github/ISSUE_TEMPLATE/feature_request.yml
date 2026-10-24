@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest a new check, option or command.
+title: "Feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A new check has to hold to the project's rule that unknown never produces a finding: describe what the analysis would need to prove before it reports anything.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: The bug or the friction you want to catch or remove, with an example in a few lines of code if it helps.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: What the tool should report or do, and when it should stay silent.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
