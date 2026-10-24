@@ -6,7 +6,7 @@ Report a vulnerability privately as described in [SECURITY.md](SECURITY.md), nev
 
 ## Setup
 
-You need Node.js 22 or later, as `engines` in `package.json` requires; CI runs Node 22 and 24.
+You need Node.js 22.13 or later. The published package runs on Node.js 22 or later, as `engines` in `package.json` says, but the development toolchain, ESLint and Vitest, needs 22.13. CI runs Node 22 and 24.
 
 ```bash
 npm ci
@@ -38,6 +38,7 @@ All of these must pass:
 
 ```bash
 npm test
+npm run test:coverage
 npm run typecheck
 npm run lint
 npm run build
@@ -46,13 +47,17 @@ npm run test:pack
 
 `npm run test:pack` builds and packs the package, checks the tarball with publint and attw, installs it into a temporary project, runs the installed CLI against a copy of `test/fixtures/outside-spec`, and type-checks that project's `domain.config.ts` against the installed types. Installing the tarball needs access to the npm registry.
 
-CI runs the same checks on Node 22 and 24. It also runs the repository's GitHub Action, `action.yml`, against `test/fixtures/outside-spec` and expects exit code `1` and a non-empty SARIF report, so a change to that fixture or to the exit codes breaks CI.
+`npm run test:coverage` runs the suite with V8 coverage over `src/` and fails when coverage drops below the thresholds in `vitest.config.ts`.
+
+CI runs lint, typecheck, the tests and the build on Ubuntu, Windows and macOS, each with Node 22 and 24; the Ubuntu and Node 24 job runs the tests through `npm run test:coverage`, so the thresholds apply there. `npm run test:pack` runs on Ubuntu with Node 22 and 24. CI also runs the repository's GitHub Action, `action.yml`, against `test/fixtures/outside-spec` and expects exit code `1` and a non-empty SARIF report, so a change to that fixture or to the exit codes breaks CI.
 
 ## Tests
 
 - Write the failing test first, then the code that makes it pass.
 - Tests describe behaviour, not implementation: one claim per test, arranged as arrange, act, assert.
 - If something is hard to test, change the design rather than the test.
+- Tests run on Windows and macOS as well as Linux, so keep them portable: build paths with `node:path` instead of joining strings with `/`, compare reported paths in their forward-slash form, and guard tests that depend on POSIX file modes with `HAS_POSIX_FILE_MODES` from `test/helpers/disk.ts`. `.gitattributes` checks every file out with LF line endings.
+- In `src/`, compute a reported path with `toPosixRelative` from `src/engine/path.ts`, never with `relative` from `node:path`, so it uses forward slashes on every system. ESLint enforces this.
 
 ## No comments
 
@@ -72,7 +77,7 @@ A false positive is the worst failure: it teaches users to ignore the tool. When
 Large silent detection losses are defects too, so every analysis change is checked in both directions:
 
 1. Probe projects that reproduce the false-finding shapes the change targets. Keep them outside the repository.
-2. A re-run of the real-world validation recorded in [docs/validation/real-world.md](docs/validation/real-world.md). Compare each repository's findings with the recorded counts, triage every difference, and update the record in the same pull request. The record's Setup section lists the repositories, their commits and the setup each needs. If you cannot run the re-run, say so in the pull request.
+2. A re-run of the real-world validation recorded in [docs/validation/real-world.md](docs/validation/real-world.md). Re-run the public repositories the record's Setup section lists, at the commits and with the setup it gives, compare each repository's findings with the recorded counts, triage every difference, and update the record in the same pull request. The maintainer re-runs the private reference repo. If you cannot run the re-run, say so in the pull request.
 
 The README section [Quiet by design](README.md#quiet-by-design) must describe what the analysis actually does. Update it in the same change that alters what the analysis sees.
 
@@ -87,7 +92,7 @@ These are part of the public contract, and changing any of them is a breaking ch
 - the CLI commands and flags;
 - the exit codes: `0` clean or warnings only, `1` error findings, `2` a config, project or usage error, or an internal error;
 - the JSON report, described by `schema/report.schema.json`, and the SARIF report;
-- the baseline key format.
+- the baseline format.
 
 Rules that keep it that way:
 

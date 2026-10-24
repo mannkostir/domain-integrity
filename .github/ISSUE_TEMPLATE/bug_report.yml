@@ -36,7 +36,7 @@ body:
     id: version
     attributes:
       label: domain-integrity version
-      description: The output of `npx domain-integrity --version`; on 0.2.x, use `npm ls domain-integrity`. For the GitHub Action, give the ref you use, such as `@v0`.
+      description: The output of `npx domain-integrity --version`; on versions before 0.3, which have no `--version`, use `npm ls domain-integrity`. For the GitHub Action, give the ref you use, such as `@v0`.
     validations:
       required: true
   - type: input
