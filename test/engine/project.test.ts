@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Project } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, ProjectError } from '../../src/engine/errors';
-import { toPosixRelative } from '../../src/engine/path';
+import { toNativePath, toPosixRelative } from '../../src/engine/path';
 import { analysedSourceFiles, configSourceFile, loadProject, loadedSourceFiles } from '../../src/engine/project';
 import { writeTree } from '../helpers/disk';
 import { inMemoryProject } from '../helpers/in-memory';
@@ -145,7 +145,7 @@ describe('configSourceFile', () => {
     const dir = projectWithRootConfig();
     const project = loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'));
 
-    expect(configSourceFile(project, join(dir, 'domain.config.ts')).getFilePath()).toBe(join(dir, 'domain.config.ts'));
+    expect(toNativePath(configSourceFile(project, join(dir, 'domain.config.ts')).getFilePath())).toBe(join(dir, 'domain.config.ts'));
   });
 
   it('fails with a ConfigError that suggests init when the config does not exist', () => {
