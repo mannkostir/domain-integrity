@@ -1,6 +1,7 @@
 import { Problem } from '../../finding';
 export type StateFieldKind = 'enum' | 'union' | 'boolean' | 'nullable';
-export type StateValue = { readonly token: string; readonly label: string; readonly source: string };
+export type ValueSource = { readonly kind: 'string'; readonly value: string } | { readonly kind: 'expression'; readonly text: string };
+export type StateValue = { readonly token: string; readonly label: string; readonly source: ValueSource };
 export type EnumReference = { readonly name: string; readonly file: string };
 export type UnsetForm = 'null' | 'undefined';
 export type StateField = { readonly name: string; readonly kind: StateFieldKind; readonly values: readonly StateValue[]; readonly enumReference: EnumReference | undefined; readonly unsetForms: readonly UnsetForm[]; readonly setMayBeFalsy: boolean };

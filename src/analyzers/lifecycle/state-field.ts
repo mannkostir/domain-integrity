@@ -4,7 +4,7 @@ import { Problem } from '../../finding';
 import { aggregateName } from './discover';
 import { mayBeFalsy } from './falsy';
 import { stateFieldAccessor, stateFieldMissing, stateFieldUnsupportedType } from './problems';
-import { EnumReference, StateField, StateFieldKind, StateValue, UnsetForm } from './model';
+import { EnumReference, StateField, StateFieldKind, StateValue, UnsetForm, ValueSource } from './model';
 
 export type FieldResolution =
   | { readonly kind: 'resolved'; readonly field: StateField }
@@ -42,13 +42,17 @@ const unsetFormsOf = (members: readonly Type[]): readonly UnsetForm[] => [
   ...(members.some((member) => member.isUndefined()) ? (['undefined'] as const) : []),
 ];
 
+const expressionSource = (text: string): ValueSource => ({ kind: 'expression', text });
+
+const stringSource = (value: string): ValueSource => ({ kind: 'string', value });
+
 const enumMember = (type: Type) => type.getSymbol()?.getDeclarations().find((node) => Node.isEnumMember(node));
 
 const enumValue = (type: Type): StateValue => {
   const member = enumMember(type);
   const token = literalToken(type) ?? type.getText();
-  if (!Node.isEnumMember(member)) return { token, label: token, source: type.getText() };
-  return { token, label: member.getName(), source: `${member.getParent().getName()}.${member.getName()}` };
+  if (!Node.isEnumMember(member)) return { token, label: token, source: expressionSource(type.getText()) };
+  return { token, label: member.getName(), source: expressionSource(`${member.getParent().getName()}.${member.getName()}`) };
 };
 
 const enumReferenceOf = (type: Type): EnumReference | undefined => {
@@ -58,7 +62,7 @@ const enumReferenceOf = (type: Type): EnumReference | undefined => {
   return { name: declaration.getName(), file: declaration.getSourceFile().getFilePath() };
 };
 
-const literalSource = (token: string, type: Type): string => (type.isNumberLiteral() ? token : `'${token.replace(/'/g, "\\'")}'`);
+const literalSource = (token: string, type: Type): ValueSource => (type.isStringLiteral() ? stringSource(token) : expressionSource(token));
 
 const literalValue = (type: Type): StateValue => {
   const token = literalToken(type) ?? type.getText();
@@ -66,13 +70,13 @@ const literalValue = (type: Type): StateValue => {
 };
 
 const BOOLEAN_VALUES: readonly StateValue[] = [
-  { token: 'true', label: 'true', source: 'true' },
-  { token: 'false', label: 'false', source: 'false' },
+  { token: 'true', label: 'true', source: expressionSource('true') },
+  { token: 'false', label: 'false', source: expressionSource('false') },
 ];
 
 const NULLABLE_VALUES: readonly StateValue[] = [
-  { token: SET, label: SET, source: `'${SET}'` },
-  { token: UNSET, label: UNSET, source: `'${UNSET}'` },
+  { token: SET, label: SET, source: stringSource(SET) },
+  { token: UNSET, label: UNSET, source: stringSource(UNSET) },
 ];
 
 const resolvedNullable = (name: string, members: readonly Type[], setMayBeFalsy: boolean): FieldResolution => ({

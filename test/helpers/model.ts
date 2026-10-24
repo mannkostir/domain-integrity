@@ -16,7 +16,7 @@ import { ToolIdentity } from '../../src/report/tool';
 export const stateField = (name: string, kind: StateFieldKind, tokens: readonly string[]): StateField => ({
   name,
   kind,
-  values: tokens.map((token) => ({ token, label: token.toLowerCase(), source: `'${token}'` })),
+  values: tokens.map((token) => ({ token, label: token.toLowerCase(), source: { kind: 'string', value: token } })),
   enumReference: undefined,
   unsetForms: [],
   setMayBeFalsy: false,
