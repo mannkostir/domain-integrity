@@ -7,6 +7,7 @@ import {
   Project,
   QuoteKind,
   SourceFile,
+  ts,
 } from 'ts-morph';
 import { FieldSuggestion, LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
 import { ConfigError } from '../engine/errors';
@@ -167,13 +168,91 @@ const terminalSources = (
   return terminal.map((value) => renamedEnumSource(value.source, reference.name, local));
 };
 
-const fieldSource = (file: SourceFile, specifierOf: ModuleSpecifiers, suggestion: FieldSuggestion): string =>
-  `${suggestion.field.name}: { terminal: [${terminalSources(file, specifierOf, suggestion).join(', ')}] }`;
+type Lines = readonly string[];
 
-const lifecycleSource = (file: SourceFile, specifierOf: ModuleSpecifiers, suggestion: LifecycleSuggestion): string => {
+const indented = (unit: string, lines: Lines): Lines => lines.map((line) => `${unit}${line}`);
+
+const terminalSource = (sources: readonly string[]): string => {
+  const [only, ...rest] = sources;
+  return only !== undefined && rest.length === 0 ? only : `[${sources.join(', ')}]`;
+};
+
+const fieldSource = (file: SourceFile, specifierOf: ModuleSpecifiers, suggestion: FieldSuggestion): string =>
+  `${suggestion.field.name}: { terminal: ${terminalSource(terminalSources(file, specifierOf, suggestion))} },`;
+
+const lifecycleLines = (
+  file: SourceFile,
+  specifierOf: ModuleSpecifiers,
+  suggestion: LifecycleSuggestion,
+  unit: string,
+): Lines => {
   const target = bindExport(file, specifierOf, suggestion.className, suggestion.file);
-  const fields = suggestion.fields.map((field) => fieldSource(file, specifierOf, field)).join(', ');
-  return `lifecycle(${target}, { states: { ${fields} } })`;
+  const fields = suggestion.fields.map((field) => fieldSource(file, specifierOf, field));
+  return [`lifecycle(${target}, {`, ...indented(unit, ['states: {', ...indented(unit, fields), '},']), '}),'];
+};
+
+const lineIndentationOf = (node: Node): string =>
+  /^[ \t]*/.exec(node.getSourceFile().getFullText().slice(node.getStartLinePos()))?.[0] ?? '';
+
+const asText = (lines: Lines): string => lines.map((line) => `${line}\n`).join('');
+
+const isSingleLine = (array: ArrayLiteralExpression): boolean => array.getStartLineNumber() === array.getEndLineNumber();
+
+const closingBracketPosition = (array: ArrayLiteralExpression): number => array.getEnd() - 1;
+
+const separatorOffsetIn = (trivia: string): number | undefined => {
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, trivia);
+  return scanner.scan() === ts.SyntaxKind.CommaToken ? scanner.getTokenStart() : undefined;
+};
+
+const separatorPositions = (array: ArrayLiteralExpression): readonly number[] => {
+  const text = array.getSourceFile().getFullText();
+  const elements = array.getElements();
+  const gapEnds = [...elements.slice(1).map((element) => element.getStart()), closingBracketPosition(array)];
+  return elements.flatMap((element, index) => {
+    const offset = separatorOffsetIn(text.slice(element.getEnd(), gapEnds[index]));
+    return offset === undefined ? [] : [element.getEnd() + offset];
+  });
+};
+
+const separatedPieces = (array: ArrayLiteralExpression): readonly string[] => {
+  const text = array.getSourceFile().getFullText();
+  const separators = separatorPositions(array);
+  const starts = [array.getStart() + 1, ...separators.map((position) => position + 1)];
+  const ends = [...separators, closingBracketPosition(array)];
+  return starts.map((start, index) => text.slice(start, ends[index]).trim());
+};
+
+const existingLinesOf = (array: ArrayLiteralExpression): Lines => {
+  const elementCount = array.getElements().length;
+  const pieces = separatedPieces(array);
+  const trailing = pieces.slice(elementCount).filter((piece) => piece !== '');
+  return [...pieces.slice(0, elementCount).map((piece) => `${piece},`), ...trailing];
+};
+
+const spreadOverLines = (array: ArrayLiteralExpression, added: Lines, elementIndent: string, closingIndent: string): string =>
+  `[\n${asText(indented(elementIndent, [...existingLinesOf(array), ...added]))}${closingIndent}]`;
+
+const appendBeforeClosingBracket = (array: ArrayLiteralExpression, added: Lines, elementIndent: string, closingIndent: string): string => {
+  const text = array.getSourceFile().getFullText();
+  const last = array.getElements().at(-1);
+  const afterLast = last?.getEnd() ?? array.getStart() + 1;
+  const separator = last !== undefined && !array.compilerNode.elements.hasTrailingComma ? ',' : '';
+  const tail = text.slice(afterLast, closingBracketPosition(array));
+  const closingLineStart = tail.lastIndexOf('\n') + 1;
+  const closingLinePrefix = tail.slice(closingLineStart);
+  const head = `${text.slice(array.getStart(), afterLast)}${separator}`;
+  const addedText = asText(indented(elementIndent, added));
+  return closingLineStart > 0 && closingLinePrefix.trim() === ''
+    ? `${head}${tail.slice(0, closingLineStart)}${addedText}${closingLinePrefix}]`
+    : `${head}${tail}\n${addedText}${closingIndent}]`;
+};
+
+const appendElements = (array: ArrayLiteralExpression, added: Lines, unit: string): void => {
+  const closingIndent = lineIndentationOf(array.getParentOrThrow());
+  const elementIndent = `${closingIndent}${unit}`;
+  const layout = isSingleLine(array) ? spreadOverLines : appendBeforeClosingBracket;
+  array.getSourceFile().replaceText([array.getStart(), array.getEnd()], layout(array, added, elementIndent, closingIndent));
 };
 
 const createConfig = (project: Project, configPath: string): SourceFile => {
@@ -197,5 +276,7 @@ export const addLifecycles = (
   useIndentationOf(file);
   const lifecycles = lifecyclesArray(file);
   ensureNamedImport(file, 'lifecycle', 'domain-integrity');
-  suggestions.forEach((suggestion) => lifecycles.addElement(lifecycleSource(file, specifierOf, suggestion)));
+  const unit = file.getProject().manipulationSettings.getIndentationText();
+  const added = suggestions.flatMap((suggestion) => lifecycleLines(file, specifierOf, suggestion, unit));
+  appendElements(lifecycles, added, unit);
 };

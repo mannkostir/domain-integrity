@@ -109,7 +109,7 @@ describe('init --base-class', () => {
     const dir = writeProject(MODEL_SOURCES);
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
-    expect(readConfig(dir)).toContain("lifecycle(Invoice, { states: { state: { terminal: ['void'] } } })");
+    expect(readConfig(dir)).toContain("    lifecycle(Invoice, {\n      states: {\n        state: { terminal: 'void' },\n      },\n    }),\n");
   });
 
   it('records the named base class in the written config', async () => {
@@ -433,6 +433,227 @@ describe('init without aggregates', () => {
   });
 });
 
+const INVITATION = `
+import { AggregateRoot } from './aggregate-root';
+export class Invitation extends AggregateRoot<{ state: 'pending' | 'accepted' | 'rejected' }> {
+  static send(): Invitation { return new Invitation({ state: 'pending' }); }
+  accept(): void { if (this.props.state !== 'pending') return; this.props.state = 'accepted'; }
+  reject(): void { if (this.props.state !== 'pending') return; this.props.state = 'rejected'; }
+}
+`;
+
+const SWITCH = `
+import { AggregateRoot } from './aggregate-root';
+export class Switch extends AggregateRoot<{ state: 'on' | 'off' }> {
+  static off(): Switch { return new Switch({ state: 'off' }); }
+  turnOn(): void { if (this.props.state === 'on') return; this.props.state = 'on'; }
+  turnOff(): void { if (this.props.state === 'off') return; this.props.state = 'off'; }
+}
+`;
+
+const TAB_CONFIG = `import { defineDomain } from 'domain-integrity';
+
+export default defineDomain({
+\tlifecycles: [],
+});
+`;
+
+const textOf = (...lines: readonly string[]): string => `${lines.join('\n')}\n`;
+
+const TICKET_CONFIG_HEADER = [
+  "import { defineDomain, lifecycle } from 'domain-integrity';",
+  "import { Ticket, TicketStatus } from './src/ticket';",
+];
+
+const SINGLE_LINE_LIFECYCLES_CONFIG = textOf(
+  ...TICKET_CONFIG_HEADER,
+  '',
+  'export default defineDomain({',
+  '  lifecycles: [lifecycle(Ticket, { states: { status: { terminal: [TicketStatus.closed] } } }) /* reviewed */],',
+  '});',
+);
+
+const MULTI_LINE_LIFECYCLES_CONFIG = textOf(
+  ...TICKET_CONFIG_HEADER,
+  '',
+  'export default defineDomain({',
+  '  lifecycles: [',
+  '    // reviewed by the support team',
+  '    lifecycle(Ticket, { states: { status: { terminal: [TicketStatus.closed] } } })',
+  '  ],',
+  '});',
+);
+
+const TRAILING_COMMENT_LIFECYCLES_CONFIG = textOf(
+  ...TICKET_CONFIG_HEADER,
+  '',
+  'export default defineDomain({',
+  '  lifecycles: [lifecycle(Ticket, { states: { status: { terminal: [TicketStatus.closed] } } }), /* more to come */],',
+  '});',
+);
+
+const PAYMENT_LIFECYCLE_LINES = [
+  '    lifecycle(Payment, {',
+  '      states: {',
+  "        state: { terminal: 'paid' },",
+  '      },',
+  '    }),',
+];
+
+const initIn = async (files: Readonly<Record<string, string>>): Promise<string> => {
+  const dir = writeProject(files);
+  await run(['init', '--yes'], captureIo(dir).io);
+  return readConfig(dir);
+};
+
+describe('init config layout', () => {
+  it('writes a single terminal value of a new config as a scalar on its own line', async () => {
+    const config = await initIn(TICKET_SOURCES);
+
+    expect(config).toBe(`import { defineDomain, lifecycle } from 'domain-integrity';
+import { Ticket, TicketStatus } from './src/ticket';
+
+export default defineDomain({
+  lifecycles: [
+    lifecycle(Ticket, {
+      states: {
+        status: { terminal: TicketStatus.closed },
+      },
+    }),
+  ],
+});
+`);
+  });
+
+  it('writes several terminal values as an array', async () => {
+    const config = await initIn({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/invitation.ts': INVITATION });
+
+    expect(config).toBe(`import { defineDomain, lifecycle } from 'domain-integrity';
+import { Invitation } from './src/invitation';
+
+export default defineDomain({
+  lifecycles: [
+    lifecycle(Invitation, {
+      states: {
+        state: { terminal: ['accepted', 'rejected'] },
+      },
+    }),
+  ],
+});
+`);
+  });
+
+  it('writes a field without terminal values as an empty array', async () => {
+    const config = await initIn({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/switch.ts': SWITCH });
+
+    expect(config).toBe(`import { defineDomain, lifecycle } from 'domain-integrity';
+import { Switch } from './src/switch';
+
+export default defineDomain({
+  lifecycles: [
+    lifecycle(Switch, {
+      states: {
+        state: { terminal: [] },
+      },
+    }),
+  ],
+});
+`);
+  });
+
+  it('nests with four spaces in a four-space config', async () => {
+    const config = await initIn({ ...TICKET_SOURCES, 'domain.config.ts': FOUR_SPACE_CONFIG });
+
+    expect(config).toBe(`import { defineDomain, lifecycle } from 'domain-integrity';
+import { Ticket, TicketStatus } from './src/ticket';
+
+export default defineDomain({
+    lifecycles: [
+        lifecycle(Ticket, {
+            states: {
+                status: { terminal: TicketStatus.closed },
+            },
+        }),
+    ],
+});
+`);
+  });
+
+  it('nests with tabs in a tab-indented config', async () => {
+    const config = await initIn({ ...TICKET_SOURCES, 'domain.config.ts': TAB_CONFIG });
+
+    expect(config).toBe(`import { defineDomain, lifecycle } from 'domain-integrity';
+import { Ticket, TicketStatus } from './src/ticket';
+
+export default defineDomain({
+\tlifecycles: [
+\t\tlifecycle(Ticket, {
+\t\t\tstates: {
+\t\t\t\tstatus: { terminal: TicketStatus.closed },
+\t\t\t},
+\t\t}),
+\t],
+});
+`);
+  });
+
+  it('spreads a single-line lifecycles array over lines and keeps the existing element text', async () => {
+    const config = await initIn({ ...TICKET_SOURCES, 'src/payment.ts': PAYMENT, 'domain.config.ts': SINGLE_LINE_LIFECYCLES_CONFIG });
+
+    expect(config).toBe(
+      textOf(
+        ...TICKET_CONFIG_HEADER,
+        "import { Payment } from './src/payment';",
+        '',
+        'export default defineDomain({',
+        '  lifecycles: [',
+        '    lifecycle(Ticket, { states: { status: { terminal: [TicketStatus.closed] } } }) /* reviewed */,',
+        ...PAYMENT_LIFECYCLE_LINES,
+        '  ],',
+        '});',
+      ),
+    );
+  });
+
+  it('keeps a comment after the trailing comma of a single-line lifecycles array', async () => {
+    const config = await initIn({ ...TICKET_SOURCES, 'src/payment.ts': PAYMENT, 'domain.config.ts': TRAILING_COMMENT_LIFECYCLES_CONFIG });
+
+    expect(config).toBe(
+      textOf(
+        ...TICKET_CONFIG_HEADER,
+        "import { Payment } from './src/payment';",
+        '',
+        'export default defineDomain({',
+        '  lifecycles: [',
+        '    lifecycle(Ticket, { states: { status: { terminal: [TicketStatus.closed] } } }),',
+        '    /* more to come */',
+        ...PAYMENT_LIFECYCLE_LINES,
+        '  ],',
+        '});',
+      ),
+    );
+  });
+
+  it('appends to a multi-line lifecycles array and keeps its comment', async () => {
+    const config = await initIn({ ...TICKET_SOURCES, 'src/payment.ts': PAYMENT, 'domain.config.ts': MULTI_LINE_LIFECYCLES_CONFIG });
+
+    expect(config).toBe(
+      textOf(
+        ...TICKET_CONFIG_HEADER,
+        "import { Payment } from './src/payment';",
+        '',
+        'export default defineDomain({',
+        '  lifecycles: [',
+        '    // reviewed by the support team',
+        '    lifecycle(Ticket, { states: { status: { terminal: [TicketStatus.closed] } } }),',
+        ...PAYMENT_LIFECYCLE_LINES,
+        '  ],',
+        '});',
+      ),
+    );
+  });
+});
+
 describe('init', () => {
   it('writes a config that check can read', async () => {
     const dir = writeProject(TICKET_SOURCES);
@@ -455,7 +676,7 @@ describe('init', () => {
 
     return run(['init', '--yes'], captureIo(dir).io).then(() =>
       expect(readConfig(dir)).toMatch(
-        /import \{ Ticket, TicketStatus \} from '\.\/src\/ticket';[\s\S]*lifecycle\(Ticket, \{ states: \{ status: \{ terminal: \[TicketStatus\.closed\] \} \} \}\)/,
+        /import \{ Ticket, TicketStatus \} from '\.\/src\/ticket';[\s\S]*lifecycle\(Ticket, \{\n {6}states: \{\n {8}status: \{ terminal: TicketStatus\.closed \},/,
       ),
     );
   });
@@ -468,7 +689,7 @@ describe('init', () => {
 
     expect({
       keptTicket: config.includes("lifecycle(Ticket, { states: { status: { terminal: [] } } })"),
-      addedPayment: config.includes("lifecycle(Payment, { states: { state: { terminal: ['paid'] } } })"),
+      addedPayment: config.includes("    lifecycle(Payment, {\n        states: {\n            state: { terminal: 'paid' },\n        },\n    }),\n"),
       ticketCount: config.split('lifecycle(Ticket').length - 1,
     }).toEqual({ keptTicket: true, addedPayment: true, ticketCount: 1 });
   });
@@ -559,8 +780,8 @@ describe('init', () => {
     expect({
       sales: config.includes("import { Order } from './src/sales/order';"),
       shipping: config.includes("import { Order as Order2 } from './src/shipping/order';"),
-      salesLifecycle: config.includes("lifecycle(Order, { states: { state: { terminal: ['paid'] } } })"),
-      shippingLifecycle: config.includes("lifecycle(Order2, { states: { state: { terminal: ['shipped'] } } })"),
+      salesLifecycle: config.includes("    lifecycle(Order, {\n      states: {\n        state: { terminal: 'paid' },\n"),
+      shippingLifecycle: config.includes("    lifecycle(Order2, {\n      states: {\n        state: { terminal: 'shipped' },\n"),
       check: await run(['check'], captureIo(dir).io),
     }).toEqual({ sales: true, shipping: true, salesLifecycle: true, shippingLifecycle: true, check: 0 });
   });
@@ -576,7 +797,7 @@ describe('init', () => {
 
     expect({
       shipping: config.includes("import { Order as Order2, OrderStatus as OrderStatus2 } from './src/shipping/order';"),
-      shippingLifecycle: config.includes('lifecycle(Order2, { states: { status: { terminal: [OrderStatus2.shipped] } } })'),
+      shippingLifecycle: config.includes('    lifecycle(Order2, {\n      states: {\n        status: { terminal: OrderStatus2.shipped },\n'),
       check: await run(['check'], captureIo(dir).io),
     }).toEqual({ shipping: true, shippingLifecycle: true, check: 0 });
   });
