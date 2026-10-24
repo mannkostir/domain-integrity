@@ -1,4 +1,4 @@
-export type Prompt = (question: string) => Promise<boolean>;
+export type Prompt = (question: string) => Promise<string>;
 
 export type Io = {
   readonly cwd: string;

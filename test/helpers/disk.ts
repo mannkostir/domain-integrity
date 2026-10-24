@@ -85,18 +85,22 @@ export const writeNestedProject = (
   return { top, project };
 };
 
-export const captureIo = (cwd: string, answers: readonly boolean[] = []) => {
+export const captureIo = (cwd: string, answers: readonly string[] = []) => {
   const out: string[] = [];
   const err: string[] = [];
+  const asked: string[] = [];
   const pending = [...answers];
   const io: Io = {
     cwd,
     out: (text) => out.push(text),
     err: (text) => err.push(text),
-    prompt: async () => pending.shift() ?? true,
+    prompt: async (question) => {
+      asked.push(question);
+      return pending.shift() ?? '';
+    },
     isInteractive: answers.length > 0,
   };
-  return { io, stdout: () => out.join(''), stderr: () => err.join('') };
+  return { io, stdout: () => out.join(''), stderr: () => err.join(''), questions: (): readonly string[] => [...asked] };
 };
 
 export const writeTree = (files: Readonly<Record<string, string>>): string => {
