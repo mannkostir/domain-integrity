@@ -5,7 +5,7 @@ import { AnalyzerRun } from '../../src/analysis';
 import { analyse } from '../../src/analyzer';
 import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
-import { EVENT_FLOW_SOURCES, TICKET_CONFIG, TICKET_PROJECT, TICKET_SOURCES, captureIo, writeNestedProject, writeProject, writeTree } from '../helpers/disk';
+import { EVENT_FLOW_SOURCES, HAS_POSIX_FILE_MODES, TICKET_CONFIG, TICKET_PROJECT, TICKET_SOURCES, captureIo, writeNestedProject, writeProject, writeTree } from '../helpers/disk';
 import { parseSarif } from '../helpers/sarif-log';
 
 describe('check', () => {
@@ -410,7 +410,7 @@ describe('check with a baseline', () => {
     expect(stderr()).toBe('Baseline ../b.json is not valid JSON.\n');
   });
 
-  it('says a baseline that cannot be read is not permitted', async () => {
+  it.runIf(HAS_POSIX_FILE_MODES)('says a baseline that cannot be read is not permitted', async () => {
     const dir = writeProject(TICKET_PROJECT);
     writeBaseline(dir, 'locked.json', [TICKET_ENTRY]);
     chmodSync(join(dir, 'locked.json'), 0o000);
@@ -718,7 +718,7 @@ describe('context', () => {
     expect(stderr()).toBe('Cannot read docs: it is a directory\n');
   });
 
-  it('says a target that cannot be read is not permitted', async () => {
+  it.runIf(HAS_POSIX_FILE_MODES)('says a target that cannot be read is not permitted', async () => {
     const dir = writeProject({ ...TICKET_PROJECT, 'AGENTS.md': '# Agents\n' });
     chmodSync(join(dir, 'AGENTS.md'), 0o000);
     const { io, stderr } = captureIo(dir);
@@ -727,7 +727,7 @@ describe('context', () => {
     expect(stderr()).toBe('Cannot read AGENTS.md: permission denied\n');
   });
 
-  it('says a target in a read-only directory is not permitted', async () => {
+  it.runIf(HAS_POSIX_FILE_MODES)('says a target in a read-only directory is not permitted', async () => {
     const dir = writeProject(TICKET_PROJECT);
     mkdirSync(join(dir, 'locked'), { mode: 0o555 });
     const { io, stderr } = captureIo(dir);
@@ -736,7 +736,7 @@ describe('context', () => {
     expect(stderr()).toBe('Cannot write locked/AGENTS.md: permission denied\n');
   });
 
-  it('says a target below a file has a part that is not a directory', async () => {
+  it.runIf(HAS_POSIX_FILE_MODES)('says a target below a file has a part that is not a directory', async () => {
     const dir = writeProject({ ...TICKET_PROJECT, 'notes.txt': 'notes\n' });
     const { io, stderr } = captureIo(dir);
     await run(['context', '--write', 'notes.txt/AGENTS.md'], io);

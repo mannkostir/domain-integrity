@@ -4,7 +4,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { run } from '../../src/cli/run';
 import { configSourceFile, loadProject } from '../../src/engine/project';
 import { readDeclaration } from '../../src/engine/read-config';
-import { TICKET_CONFIG, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
+import { HAS_POSIX_FILE_MODES, TICKET_CONFIG, TICKET_SOURCES, captureIo, writeProject } from '../helpers/disk';
 import { AGGREGATE_ROOT } from '../helpers/in-memory';
 import { declarationIn, initWithBaseClass, readConfig } from '../helpers/init-project';
 import { FOUR_SPACE_CONFIG, MODEL_SOURCES, PAYMENT, baseClassSource, invoiceExtending, orderWithEnumIn } from '../helpers/init-sources';
@@ -571,7 +571,7 @@ describe('init', () => {
     });
   });
 
-  it('reports an existing config without read permission as unreadable', async () => {
+  it.runIf(HAS_POSIX_FILE_MODES)('reports an existing config without read permission as unreadable', async () => {
     const dir = writeProject({ ...TICKET_SOURCES, 'domain.config.ts': "import { defineDomain } from 'domain-integrity';\nexport default defineDomain({ lifecycles: [] });\n" });
     chmodSync(join(dir, 'domain.config.ts'), 0o000);
     onTestFinished(() => chmodSync(join(dir, 'domain.config.ts'), 0o644));
@@ -583,7 +583,7 @@ describe('init', () => {
     });
   });
 
-  it('names the config that cannot be saved relative to the working directory', async () => {
+  it.runIf(HAS_POSIX_FILE_MODES)('names the config that cannot be saved relative to the working directory', async () => {
     const dir = writeProject(TICKET_SOURCES);
     mkdirSync(join(dir, 'configs'), { mode: 0o555 });
     onTestFinished(() => chmodSync(join(dir, 'configs'), 0o755));

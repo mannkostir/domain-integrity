@@ -114,3 +114,5 @@ export const writeTree = (files: Readonly<Record<string, string>>): string => {
   });
   return dir;
 };
+
+export const HAS_POSIX_FILE_MODES = process.platform !== 'win32';
