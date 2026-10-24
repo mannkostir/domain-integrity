@@ -15,7 +15,7 @@ type CommonOptions = { readonly project: string; readonly config: string };
 
 const collect = (value: string, previous: readonly string[] | undefined): readonly string[] => [...(previous ?? []), value];
 
-const isDirectory = (path: string): boolean => statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false;
+const isDirectory = (path: string): boolean => existsSync(path) && statSync(path).isDirectory();
 
 const tsconfigAt = (given: string): string => (isDirectory(given) ? join(given, DEFAULT_TSCONFIG) : given);
 

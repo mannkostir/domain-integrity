@@ -32,7 +32,7 @@ describe('loadProject', () => {
   it('names a tsconfig it cannot load relative to the cwd', () => {
     const dir = writeTree({ 'tsconfig.json': '{ "files": [' });
 
-    expect(() => loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'), dir)).toThrow(/^Cannot load tsconfig\.json: /);
+    expect(() => loadProject(join(dir, 'tsconfig.json'), join(dir, 'domain.config.ts'), dir)).toThrow(new ProjectError("Cannot load tsconfig.json: ']' expected."));
   });
 
   it('loads the files of every referenced tsconfig', () => {

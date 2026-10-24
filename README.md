@@ -273,7 +273,7 @@ Dispatch the events in the buffer after saving the aggregate and clear it, or st
 | `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the repository root; a file outside the repository appears as `../…`; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents, with paths relative to the repository root. |
 
-Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. `-p` also takes a directory, and then uses the `tsconfig.json` inside it. The config is read statically and never executed.
+Every command takes `-p <tsconfig>` and `-c <config>`, which default to `tsconfig.json` and `domain.config.ts`. `-p` also takes a directory, and then uses the `tsconfig.json` inside it; `-c` stays relative to the current directory. The config is read statically and never executed.
 
 `--version`, or `-V`, prints the version and exits `0`.
 
