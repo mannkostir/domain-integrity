@@ -555,7 +555,34 @@ const BRACKET_AFTER_LAST_LIFECYCLE_RESULT = editedTicketConfig(
 
 const DOUBLE_QUOTED_CONFIG = textOf('import { defineDomain } from "domain-integrity";', '', 'export default defineDomain({', '  lifecycles: [],', '});');
 
-const doubleQuotedResult = (aggregateImport: string, ...lifecycleLines: readonly string[]): string =>
+const SINGLE_QUOTED_CONFIG = textOf("import { defineDomain } from 'domain-integrity';", '', 'export default defineDomain({', '  lifecycles: [],', '});');
+
+const noticeFinishingAs = (literal: string): string => `
+import { AggregateRoot } from './aggregate-root';
+export class Notice extends AggregateRoot<{ state: 'draft' | ${literal} }> {
+  static draft(): Notice { return new Notice({ state: 'draft' }); }
+  finish(): void { if (this.props.state === ${literal}) return; this.props.state = ${literal}; }
+}
+`;
+
+const LEVEL = `
+import { AggregateRoot } from './aggregate-root';
+export class Level extends AggregateRoot<{ level: 1 | 2 }> {
+  static start(): Level { return new Level({ level: 1 }); }
+  finish(): void { if (this.props.level === 2) return; this.props.level = 2; }
+}
+`;
+
+const configWithMixedQuotes = (...imports: readonly string[]): string =>
+  textOf(
+    ...imports,
+    '',
+    'export default defineDomain({',
+    '  lifecycles: [lifecycle(Ticket, { states: { status: { terminal: [TicketStatus.closed] } } })],',
+    '});',
+  );
+
+const doubleQuotedResult =(aggregateImport: string, ...lifecycleLines: readonly string[]): string =>
   textOf('import { defineDomain, lifecycle } from "domain-integrity";', aggregateImport, '', 'export default defineDomain({', '  lifecycles: [', ...lifecycleLines, '  ],', '});');
 
 const ticketOnlyResult = (...configLines: readonly string[]): string =>
@@ -786,6 +813,109 @@ describe('init config layout of an existing config', () => {
     await run(['init', '--yes'], captureIo(dir).io);
 
     expect(declarationIn(dir).lifecycles[0]?.fields[0]?.terminal).toEqual(['say "done"']);
+  });
+
+  it.each([
+    ['a backslash', 'single-quoted', '"it\'s\\\\done"', "it's\\done", SINGLE_QUOTED_CONFIG],
+    ['a backslash', 'double-quoted', '"it\'s\\\\done"', "it's\\done", DOUBLE_QUOTED_CONFIG],
+    ['a line break', 'single-quoted', "'line\\nbreak'", 'line\nbreak', SINGLE_QUOTED_CONFIG],
+    ['a line break', 'double-quoted', "'line\\nbreak'", 'line\nbreak', DOUBLE_QUOTED_CONFIG],
+  ])('writes a terminal value with %s that reads back as the value of the state in a %s config', async (_, __, literal, value, config) => {
+    const dir = writeProject({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/notice.ts': noticeFinishingAs(literal), 'domain.config.ts': config });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(declarationIn(dir).lifecycles[0]?.fields[0]?.terminal).toEqual([value]);
+  });
+
+  it.each([
+    ['a backslash', 'single-quoted', '"it\'s\\\\done"', SINGLE_QUOTED_CONFIG],
+    ['a backslash', 'double-quoted', '"it\'s\\\\done"', DOUBLE_QUOTED_CONFIG],
+    ['a line break', 'single-quoted', "'line\\nbreak'", SINGLE_QUOTED_CONFIG],
+    ['a line break', 'double-quoted', "'line\\nbreak'", DOUBLE_QUOTED_CONFIG],
+  ])('writes a terminal value with %s that check reads in a %s config', async (_, __, literal, config) => {
+    const dir = writeProject({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/notice.ts': noticeFinishingAs(literal), 'domain.config.ts': config });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(0);
+  });
+
+  it('writes a numeric terminal value unquoted', async () => {
+    const config = await initIn({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/level.ts': LEVEL, 'domain.config.ts': DOUBLE_QUOTED_CONFIG });
+
+    expect(config).toContain('        level: { terminal: 2 },\n');
+  });
+
+  it('nests relative to the line of a config object that opens on its own line', async () => {
+    const config = await initIn({
+      ...TICKET_SOURCES,
+      'domain.config.ts': textOf("import { defineDomain } from 'domain-integrity';", '', 'export default defineDomain(', '  {', '    lifecycles: [],', '  },', ');'),
+    });
+
+    expect(config).toBe(
+      textOf(
+        "import { defineDomain, lifecycle } from 'domain-integrity';",
+        "import { Ticket, TicketStatus } from './src/ticket';",
+        '',
+        'export default defineDomain(',
+        '  {',
+        '    lifecycles: [',
+        '      lifecycle(Ticket, {',
+        '        states: {',
+        '          status: { terminal: TicketStatus.closed },',
+        '        },',
+        '      }),',
+        '    ],',
+        '  },',
+        ');',
+      ),
+    );
+  });
+
+  it('writes in the quotes most imports use when the first import uses the other kind', async () => {
+    const config = await initIn({
+      ...TICKET_SOURCES,
+      'src/payment.ts': PAYMENT,
+      'domain.config.ts': configWithMixedQuotes(
+        "import { defineDomain, lifecycle } from 'domain-integrity';",
+        'import { Ticket } from "./src/ticket";',
+        'import { TicketStatus } from "./src/ticket";',
+      ),
+    });
+
+    expect(config).toContain('import { Payment } from "./src/payment";');
+  });
+
+  it('writes in the quotes of the imports when a single-quoted directive comes first', async () => {
+    const config = await initIn({
+      ...TICKET_SOURCES,
+      'src/payment.ts': PAYMENT,
+      'domain.config.ts': configWithMixedQuotes(
+        "'use strict';",
+        'import { defineDomain, lifecycle } from "domain-integrity";',
+        'import { Ticket, TicketStatus } from "./src/ticket";',
+      ),
+    });
+
+    expect(config).toContain('import { Payment } from "./src/payment";');
+  });
+
+  it('keeps LF line endings in a config whose last line alone ends in CRLF', async () => {
+    const config = await initIn({
+      ...TICKET_SOURCES,
+      'src/payment.ts': PAYMENT,
+      'domain.config.ts': MULTI_LINE_LIFECYCLES_CONFIG.replace(/\n$/, '\r\n'),
+    });
+
+    expect(config).toBe(APPENDED_MULTI_LINE_RESULT.replace(/\n$/, '\r\n'));
+  });
+
+  it('appends to a lifecycles array whose key is quoted', async () => {
+    const config = await initIn({
+      ...TICKET_SOURCES,
+      'domain.config.ts': textOf("import { defineDomain } from 'domain-integrity';", '', 'export default defineDomain({', "  'lifecycles': [],", '});'),
+    });
+
+    expect(config).toBe(ticketOnlyResult("  'lifecycles': [", ...TICKET_LIFECYCLE_LINES, '  ],'));
   });
 
   it('puts new lifecycles after a comment that shares the line of the closing bracket', async () => {

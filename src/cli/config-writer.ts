@@ -11,6 +11,7 @@ import {
   SyntaxKind,
   ts,
 } from 'ts-morph';
+import { ValueSource } from '../analyzers/lifecycle/model';
 import { FieldSuggestion, LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
 import { ConfigError } from '../engine/errors';
 import { ModuleSpecifiers } from './module-specifier';
@@ -40,15 +41,31 @@ const startsLine = (node: Node): boolean => node.getStart() === node.getStartLin
 
 const indentationOf = (config: ObjectLiteralExpression): IndentationText => {
   const first = config.getProperties()[0];
+  const opening = lineIndentationOf(config);
   const written = first !== undefined && startsLine(first) ? lineIndentationOf(first) : undefined;
-  return INDENTATIONS.find((indentation) => indentation === written) ?? IndentationText.TwoSpaces;
+  const unit = written?.startsWith(opening) ? written.slice(opening.length) : undefined;
+  return INDENTATIONS.find((indentation) => indentation === unit) ?? IndentationText.TwoSpaces;
 };
 
-const newLineKindOf = (file: SourceFile): NewLineKind =>
-  file.getFullText().includes('\r\n') ? NewLineKind.CarriageReturnLineFeed : NewLineKind.LineFeed;
+const occurrencesIn = (text: string, part: string): number => text.split(part).length - 1;
+
+const newLineKindOf = (file: SourceFile): NewLineKind => {
+  const text = file.getFullText();
+  const crlf = occurrencesIn(text, '\r\n');
+  const bareLf = occurrencesIn(text, '\n') - crlf;
+  return crlf > bareLf ? NewLineKind.CarriageReturnLineFeed : NewLineKind.LineFeed;
+};
+
+const importsQuoteKind = (file: SourceFile): QuoteKind | undefined => {
+  const kinds = file.getImportDeclarations().map((declaration) => declaration.getModuleSpecifier().getQuoteKind());
+  const doubles = kinds.filter((kind) => kind === QuoteKind.Double).length;
+  const singles = kinds.length - doubles;
+  if (doubles === singles) return undefined;
+  return doubles > singles ? QuoteKind.Double : QuoteKind.Single;
+};
 
 const quoteKindOf = (file: SourceFile): QuoteKind =>
-  file.getFirstDescendantByKind(SyntaxKind.StringLiteral)?.getQuoteKind() ?? QuoteKind.Single;
+  importsQuoteKind(file) ?? file.getFirstDescendantByKind(SyntaxKind.StringLiteral)?.getQuoteKind() ?? QuoteKind.Single;
 
 const useLayoutOf = (file: SourceFile): void => {
   file.getProject().manipulationSettings.set({
@@ -59,16 +76,6 @@ const useLayoutOf = (file: SourceFile): void => {
 };
 
 const quoteKindIn = (file: SourceFile): QuoteKind => file.getProject().manipulationSettings.getQuoteKind();
-
-const scannerOf = (text: string): ts.Scanner =>
-  ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, text);
-
-const stringLiteralValue = (source: string): string | undefined => {
-  const scanner = scannerOf(source);
-  if (scanner.scan() !== ts.SyntaxKind.StringLiteral) return undefined;
-  const value = scanner.getTokenValue();
-  return scanner.scan() === ts.SyntaxKind.EndOfFileToken ? value : undefined;
-};
 
 const SINGLE_QUOTED_ESCAPES: ReadonlyMap<string, string> = new Map([
   ['\\"', '"'],
@@ -83,19 +90,8 @@ const inSingleQuotes = (value: string): string =>
 const inQuotes = (value: string, quoteKind: QuoteKind): string =>
   quoteKind === QuoteKind.Double ? JSON.stringify(value) : inSingleQuotes(value);
 
-const requoted = (source: string, quoteKind: QuoteKind): string => {
-  const value = stringLiteralValue(source);
-  return value === undefined ? source : inQuotes(value, quoteKind);
-};
-
-const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
-  const config = configObject(file);
-  const property =
-    config.getProperty('lifecycles') ?? config.addPropertyAssignment({ name: 'lifecycles', initializer: '[]' });
-  const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError('"lifecycles" in domain.config.ts must be an array literal.');
-  return array;
-};
+const writtenSource = (source: ValueSource, quoteKind: QuoteKind): string =>
+  source.kind === 'string' ? inQuotes(source.value, quoteKind) : source.text;
 
 const listedNames = (array: ArrayLiteralExpression): readonly string[] =>
   array.getElements().flatMap((element) => (Node.isStringLiteral(element) ? [element.getLiteralValue()] : []));
@@ -121,6 +117,15 @@ const propertyNamed = (object: ObjectLiteralExpression, name: string): Node | un
     const nameNode = Node.isPropertyAssignment(property) ? property.getNameNode() : undefined;
     return Node.isStringLiteral(nameNode) ? nameNode.getLiteralText() === name : nameNode?.getText() === name;
   });
+
+const lifecyclesArray = (file: SourceFile): ArrayLiteralExpression => {
+  const config = configObject(file);
+  const property =
+    propertyNamed(config, 'lifecycles') ?? config.addPropertyAssignment({ name: 'lifecycles', initializer: '[]' });
+  const array = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+  if (!Node.isArrayLiteralExpression(array)) throw new ConfigError('"lifecycles" in domain.config.ts must be an array literal.');
+  return array;
+};
 
 const aggregatesGroup = (config: ObjectLiteralExpression): ObjectLiteralExpression | undefined => {
   const property = propertyNamed(config, 'aggregates');
@@ -207,9 +212,10 @@ const terminalSources = (
   { field, terminal }: FieldSuggestion,
 ): readonly string[] => {
   const reference = field.enumReference;
-  if (reference === undefined) return terminal.map((value) => requoted(value.source, quoteKindIn(file)));
+  const written = terminal.map((value) => writtenSource(value.source, quoteKindIn(file)));
+  if (reference === undefined) return written;
   const local = bindExport(file, specifierOf, reference.name, reference.file);
-  return terminal.map((value) => renamedEnumSource(value.source, reference.name, local));
+  return written.map((source) => renamedEnumSource(source, reference.name, local));
 };
 
 type Lines = readonly string[];
@@ -240,6 +246,9 @@ const asText = (lines: Lines): string => lines.map((line) => `${line}\n`).join('
 const isSingleLine = (array: ArrayLiteralExpression): boolean => array.getStartLineNumber() === array.getEndLineNumber();
 
 const closingBracketPosition = (array: ArrayLiteralExpression): number => array.getEnd() - 1;
+
+const scannerOf = (text: string): ts.Scanner =>
+  ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, text);
 
 const separatorOffsetIn = (trivia: string): number | undefined => {
   const scanner = scannerOf(trivia);
