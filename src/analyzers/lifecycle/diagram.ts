@@ -102,5 +102,6 @@ export const lifecycleDiagrams = (model: LifecycleModel, only: string | undefine
   return {
     kind: 'diagram',
     text: selection.aggregates.flatMap((aggregate) => aggregateSections(aggregate, headingName(aggregate, declared))).join('\n\n'),
+    names: declared.map((aggregate) => headingName(aggregate, declared)),
   };
 };

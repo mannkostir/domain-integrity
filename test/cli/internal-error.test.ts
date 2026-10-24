@@ -22,7 +22,7 @@ const broken: Analyzer<string, never> = {
   check: () => {
     throw new Error('boom');
   },
-  diagram: () => ({ kind: 'diagram', text: '' }),
+  diagram: () => ({ kind: 'diagram', text: '', names: [] }),
   summarize: () => '',
   scope: () => 'checkable',
 };

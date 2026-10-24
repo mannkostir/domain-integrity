@@ -13,7 +13,7 @@ export type AnalysisInput = {
 
 export type AmbiguousReference = { readonly kind: 'ambiguous'; readonly reference: string; readonly candidates: readonly string[] };
 
-export type AnalyzerDiagram = { readonly kind: 'diagram'; readonly text: string } | AmbiguousReference;
+export type AnalyzerDiagram = { readonly kind: 'diagram'; readonly text: string; readonly names: readonly string[] } | AmbiguousReference;
 
 export type AnalyzerFailure = { readonly kind: 'failed'; readonly analyzer: string; readonly error: unknown };
 

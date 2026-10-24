@@ -5,7 +5,7 @@ import { AnalyzerRun } from '../../src/analysis';
 import { analyse } from '../../src/analyzer';
 import { lifecycleAnalyzer } from '../../src/analyzers/lifecycle/analyzer';
 import { run } from '../../src/cli/run';
-import { TICKET_PROJECT, TICKET_SOURCES, captureIo, writeNestedProject, writeProject, writeTree } from '../helpers/disk';
+import { EVENT_FLOW_SOURCES, TICKET_CONFIG, TICKET_PROJECT, TICKET_SOURCES, captureIo, writeNestedProject, writeProject, writeTree } from '../helpers/disk';
 import { parseSarif } from '../helpers/sarif-log';
 
 describe('check', () => {
@@ -485,7 +485,51 @@ describe('show', () => {
 
     expect(await run(['show', 'src/ticket.ts:Ticket'], io)).toBe(0);
   });
+
+  it('lists the declared aggregates for an unknown name', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['show', 'Nope'], io);
+
+    expect(stderr()).toBe('No declared aggregate or event named "Nope". Use one of: Ticket.\n');
+  });
+
+  it('lists the declared aggregates before the handled events for an unknown name', async () => {
+    const { io, stderr } = captureIo(writeProject({ ...TICKET_SOURCES, ...EVENT_FLOW_SOURCES, 'domain.config.ts': TICKET_CONFIG }));
+    await run(['show', 'Nope'], io);
+
+    expect(stderr()).toBe('No declared aggregate or event named "Nope". Use one of: Ticket, Paid, Refunded.\n');
+  });
+
+  it('lists a name offered by two analyzers once', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['show', 'Nope'], io, [offering(['Ticket', 'Paid']), offering(['Paid', 'Refunded'])]);
+
+    expect(stderr()).toBe('No declared aggregate or event named "Nope". Use one of: Ticket, Paid, Refunded.\n');
+  });
+
+  it('names no alternatives when no analyzer offers a name', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+    await run(['show', 'Nope'], io, [offering([])]);
+
+    expect(stderr()).toBe('No declared aggregate or event named "Nope".\n');
+  });
 });
+
+const offering = (names: readonly string[]): AnalyzerRun => (input) =>
+  analyse(
+    {
+      id: 'offering',
+      rules: [],
+      extract: () => 'model',
+      problems: () => [],
+      suggest: () => [],
+      check: () => [],
+      diagram: () => ({ kind: 'diagram', text: '', names }),
+      summarize: () => '',
+      scope: () => 'checkable',
+    },
+    input,
+  );
 
 const sameNamedTicket = (closed: string): string => `
 import { AggregateRoot } from '../aggregate-root';
