@@ -1,15 +1,16 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import type { Project } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, ProjectError } from '../../src/engine/errors';
+import { toPosixRelative } from '../../src/engine/path';
 import { analysedSourceFiles, configSourceFile, loadProject, loadedSourceFiles } from '../../src/engine/project';
 import { writeTree } from '../helpers/disk';
 import { inMemoryProject } from '../helpers/in-memory';
 
 const fileNames = (project: Project, root: string): string[] =>
-  project.getSourceFiles().map((file) => relative(root, file.getFilePath())).sort();
+  project.getSourceFiles().map((file) => toPosixRelative(root, file.getFilePath())).sort();
 
 const projectWithRootConfig = (): string => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'domain-integrity-')));
