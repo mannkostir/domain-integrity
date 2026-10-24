@@ -2,6 +2,8 @@ import tseslint from 'typescript-eslint';
 
 const tsMorph = { name: 'ts-morph', message: 'Keep ts-morph out of the config helpers and the pure checks.' };
 
+const posixRelative = 'Use toPosixRelative from engine/path so reported paths use forward slashes on every OS.';
+
 export default tseslint.config(
   { ignores: ['dist', 'test/fixtures'] },
   ...tseslint.configs.recommended,
@@ -50,5 +52,16 @@ export default tseslint.config(
   {
     files: ['src/rules/**/*.ts'],
     rules: { 'no-restricted-imports': ['error', { paths: [tsMorph] }] },
+  },
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/engine/path.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: "ImportDeclaration[source.value=/^(node:)?path$/] ImportSpecifier[imported.name='relative']", message: posixRelative },
+        { selector: "CallExpression[callee.object.name='path'][callee.property.name='relative']", message: posixRelative },
+      ],
+    },
   },
 );

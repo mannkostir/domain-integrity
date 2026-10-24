@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -127,7 +127,7 @@ describe('report schema', () => {
   });
 
   it('ships the schema in the package tarball', () => {
-    const [pack] = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: ROOT, encoding: 'utf8' })) as [{ files: { path: string }[] }];
+    const [pack] = JSON.parse(execSync('npm pack --dry-run --json --ignore-scripts', { cwd: ROOT, encoding: 'utf8' })) as [{ files: { path: string }[] }];
 
     expect(pack.files.map((file) => file.path)).toContain('schema/report.schema.json');
   });

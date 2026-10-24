@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { Project, SourceFile, ts } from 'ts-morph';
 import { ConfigError, ProjectError } from './errors';
+import { toNativePath } from './path';
 import { readReferencesFromDisk, referencedTsconfigs } from './references';
 
 const isProjectSource = (file: SourceFile): boolean => !file.isDeclarationFile() && !file.isInNodeModules();
@@ -11,7 +12,7 @@ const includesClause = (tsconfigPath: string, references: readonly string[]): st
   references.length === 0 ? `${tsconfigPath} includes` : `${tsconfigPath} and the tsconfigs it references include`;
 
 const noSourcesSentence = (includes: string, configFile: SourceFile | undefined): string =>
-  configFile === undefined ? `${includes} no source files.` : `${includes} no source files other than ${configFile.getFilePath()}.`;
+  configFile === undefined ? `${includes} no source files.` : `${includes} no source files other than ${toNativePath(configFile.getFilePath())}.`;
 
 const emptyProgramMessage = (tsconfigPath: string, references: readonly string[], configFile: SourceFile | undefined): string =>
   [

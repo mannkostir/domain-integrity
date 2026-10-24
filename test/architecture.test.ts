@@ -45,3 +45,22 @@ describe('import boundaries', () => {
     expect(await restrictedImportsIn('src/rules/apply.ts', "import { Node } from 'ts-morph';\nexport const n = Node;\n")).toBe(1);
   });
 });
+
+const restrictedSyntaxIn = async (filePath: string, code: string): Promise<number> => {
+  const results = await eslint.lintText(code, { filePath });
+  return results.flatMap((result) => result.messages).filter((message) => message.ruleId === 'no-restricted-syntax').length;
+};
+
+describe('reported paths', () => {
+  it('forbids importing relative from node:path outside the path helpers', async () => {
+    expect(await restrictedSyntaxIn('src/cli/check.ts', "import { relative } from 'node:path';\nexport const r = relative;\n")).toBe(1);
+  });
+
+  it('forbids calling relative on the default node:path import outside the path helpers', async () => {
+    expect(await restrictedSyntaxIn('src/cli/check.ts', "import path from 'node:path';\nexport const r = path.relative('a', 'b');\n")).toBe(1);
+  });
+
+  it('allows the path helpers to compute relative paths', async () => {
+    expect(await restrictedSyntaxIn('src/engine/path.ts', "import path from 'node:path';\nexport const r = path.relative('a', 'b');\n")).toBe(0);
+  });
+});
