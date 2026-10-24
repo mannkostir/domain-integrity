@@ -22,6 +22,15 @@ describe('check', () => {
     expect(JSON.parse(stdout()).findings.map((finding: { details: { method: string } }) => finding.details.method)).toEqual(['rename']);
   });
 
+  it('exits 2 and lists the formats for an unknown format', async () => {
+    const { io, stderr } = captureIo(writeProject(TICKET_PROJECT));
+
+    expect({ code: await run(['check', '--format', 'xml'], io), stderr: stderr() }).toEqual({
+      code: 2,
+      stderr: 'Unknown format "xml". Use one of: text, json, sarif.\n',
+    });
+  });
+
   it('exits 0 for findings already in the baseline', async () => {
     const dir = writeProject(TICKET_PROJECT);
     await run(['check', '--update-baseline', '--baseline', 'baseline.json'], captureIo(dir).io);

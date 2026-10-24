@@ -27,17 +27,22 @@ export type CheckOptions = {
 
 type Formatter = (report: Report, tool: ToolIdentity) => string;
 
-const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
+export const FORMATS = ['text', 'json', 'sarif'] as const;
+
+type Format = (typeof FORMATS)[number];
+
+export const DEFAULT_BASELINE = 'domain-integrity.baseline.json';
+
+const isFormat = (value: string): value is Format => FORMATS.some((format) => format === value);
 
 const formatterFor = ({ format, showKnown = false }: CheckOptions): Formatter => {
-  const formatters: Readonly<Record<string, Formatter>> = {
+  if (!isFormat(format)) throw new UsageError(`Unknown format "${format}". Use one of: ${FORMATS.join(', ')}.`);
+  const formatters: Readonly<Record<Format, Formatter>> = {
     text: (report) => formatText(report, { showKnown }),
     json: formatJson,
     sarif: formatSarif,
   };
-  const formatter = formatters[format];
-  if (!formatter) throw new UsageError(`Unknown format "${format}". Use one of: ${Object.keys(formatters).join(', ')}.`);
-  return formatter;
+  return formatters[format];
 };
 
 type Outcome = {
