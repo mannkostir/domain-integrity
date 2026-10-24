@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileErrorReason } from '../../src/engine/file-error';
+import { errorCodeOf, fileErrorReason } from '../../src/engine/file-error';
 
 const systemError = (code: string, message: string): Error => Object.assign(new Error(message), { code });
 
@@ -46,5 +46,15 @@ describe('fileErrorReason', () => {
 
   it('shows the path in a thrown non-error value relative to the cwd', () => {
     expect(fileErrorReason('/repo', '/repo/AGENTS.md', 'cannot handle /repo/AGENTS.md')).toBe('cannot handle AGENTS.md');
+  });
+});
+
+describe('errorCodeOf', () => {
+  it('reads the code of a system error', () => {
+    expect(errorCodeOf(systemError('EISDIR', 'EISDIR'))).toBe('EISDIR');
+  });
+
+  it('reads no code from an error whose code is not a string', () => {
+    expect(errorCodeOf(Object.assign(new Error('busy'), { code: 16 }))).toBeUndefined();
   });
 });

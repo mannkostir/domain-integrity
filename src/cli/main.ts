@@ -11,7 +11,7 @@ const io: Io = {
   err: (text) => process.stderr.write(text),
   prompt: terminal.prompt,
   isInteractive: Boolean(process.stdin.isTTY),
-  helpWidth: process.stdout.isTTY ? process.stdout.columns : DEFAULT_HELP_WIDTH,
+  helpWidth: process.stdout.isTTY ? (process.stdout.columns ?? DEFAULT_HELP_WIDTH) : DEFAULT_HELP_WIDTH,
 };
 
 try {
