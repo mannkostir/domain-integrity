@@ -14,6 +14,9 @@ All notable changes to this project are documented here; the format follows [Kee
 - A JSON Schema for the report ships as `schema/report.schema.json` and is exported as `domain-integrity/schema/report.json`. (#100)
 - SARIF rules carry a full description, the remedy as help text, a `helpUri` to the rule's entry in the README rule reference, and their default level. SARIF results carry `ruleIndex`, the fix in `properties.fix`, and a `domainIntegrity/v2` partial fingerprint holding the finding's identity. (#97, #101)
 - When aggregates are found but `domain.config.ts` declares no lifecycles and there are no event handlers or event flows, `check`, `show` and `context` print a notice on stderr pointing to `init` and exit `0`; `check --format json` or `--format sarif` still prints a valid report on stdout. (#99)
+- `init` lets you edit a suggestion: answer `e` to type each field's terminal values, comma-separated, from the field's known values, or `-` for none. `Y` or Enter still declares the suggestion and `n` skips it. (#108)
+- `-p` takes a directory and then uses the `tsconfig.json` inside it. (#109)
+- `--help`, or `-h`, on the tool or on any command prints what each option takes and its default, followed by a link to the README; the tool's help also lists examples. (#109)
 
 ### Changed
 
@@ -28,10 +31,18 @@ All notable changes to this project are documented here; the format follows [Kee
 - A method whose only writes stamp an `aggregates.auditFields` field, or empty a private event array, is no longer judged as a domain command, so `terminal-state-leak` does not report it. Pushing an event still counts as a domain write. (#102)
 - The messages for a project with nothing to check start with the number of source files loaded, and "No aggregates found" is preceded by a `problem:` line for each problem an analyzer met. A tsconfig whose only source file is `domain.config.ts` exits `2` like one with no source files. (#99)
 - `--update-baseline` reports the number of entries it wrote rather than findings. (#98, #101)
+- `init` writes each lifecycle over several lines, follows the existing config's indentation, line endings and quote style, and writes a single terminal value without brackets. (#108)
+- `init` without an interactive terminal and without `--yes` exits `0` when there is nothing to declare, and exits `2` only when there are suggestions to confirm. If the input ends before every suggestion is answered, it exits `2` and writes nothing. (#108)
+- `show` with a name that matches no declared aggregate or handled event lists the names it accepts. (#109)
+- Error messages show paths relative to the current directory, name the config file that was passed, say why a file could not be read or written, such as a missing directory or denied permission, and report config errors at the line they come from. (#109)
 
 ### Deprecated
 
 - The 0.2 config keys `aggregateBaseClasses`, `auditFields`, `eventMethods`, `inertDecorators`, `inertEventMethods` and `inertMembers`, and the array form `transitions.<method>: [...]`. They still work, print a `warning:` line on stderr naming the replacement, and stop working in 1.0. Setting an old key together with its new one exits `2`. See the README section "Migrating from 0.2". (#103)
+
+### Fixed
+
+- On Windows, the tsconfig and its project references are read correctly, and the paths the CLI prints use forward slashes, as on other systems. (#111)
 
 ## [0.2.1] - 2026-10-14
 
@@ -78,7 +89,7 @@ All notable changes to this project are documented here; the format follows [Kee
 - `inertMembers` lists library getters, methods and properties that never read aggregate state, such as `id` or `clearDomainEvents`, so methods that use them are judged. (#29)
 - `aggregateBaseClasses` may name interfaces: a class that implements one, directly or through its base classes, is an aggregate. (#24)
 - A method that hands `this` to a plain event passed straight to a library event method, such as `this.apply(new OrderPaid(this))`, is judged. (#32)
-- The same holds for a project event method that only pushes its parameters onto a private event array. (#34)
+- A method that hands `this` to a project event method that only pushes its parameters onto a private event array is judged. (#34)
 - Releases are published with npm provenance. (#20)
 
 ### Changed
