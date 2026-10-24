@@ -66,8 +66,8 @@ describe('resolveStateField', () => {
         name: 'status',
         kind: 'enum',
         values: [
-          { token: 'OPEN', label: 'open', source: 'Status.open' },
-          { token: 'CLOSED', label: 'closed', source: 'Status.closed' },
+          { token: 'OPEN', label: 'open', source: { kind: 'expression', text: 'Status.open' } },
+          { token: 'CLOSED', label: 'closed', source: { kind: 'expression', text: 'Status.closed' } },
         ],
         enumReference: { name: 'Status', file: '/src/samples.ts' },
         unsetForms: [],
@@ -135,14 +135,26 @@ describe('resolveStateField', () => {
   it('resolves a private boolean field', () => {
     expect(resolveStateField(cls('OwnFields'), 'deleted')).toMatchObject({
       kind: 'resolved',
-      field: { kind: 'boolean', values: [{ token: 'true', source: 'true' }, { token: 'false', source: 'false' }] },
+      field: {
+        kind: 'boolean',
+        values: [
+          { token: 'true', source: { kind: 'expression', text: 'true' } },
+          { token: 'false', source: { kind: 'expression', text: 'false' } },
+        ],
+      },
     });
   });
 
-  it('resolves a string literal union with quoted sources', () => {
+  it('resolves a string literal union with string sources', () => {
     expect(resolveStateField(cls('OwnFields'), 'phase')).toMatchObject({
       kind: 'resolved',
-      field: { kind: 'union', values: [{ token: 'draft', source: "'draft'" }, { token: 'live', source: "'live'" }] },
+      field: {
+        kind: 'union',
+        values: [
+          { token: 'draft', source: { kind: 'string', value: 'draft' } },
+          { token: 'live', source: { kind: 'string', value: 'live' } },
+        ],
+      },
     });
   });
 
