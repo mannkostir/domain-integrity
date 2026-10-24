@@ -13,11 +13,11 @@ All notable changes to this project are documented here; the format follows [Kee
 - The text output lists stale baseline entries, entries that no longer match a finding, before the summary line. They never change the exit code. (#98, #101)
 - A JSON Schema for the report ships as `schema/report.schema.json` and is exported as `domain-integrity/schema/report.json`. (#100)
 - SARIF rules carry a full description, the remedy as help text, a `helpUri` to the rule's entry in the README rule reference, and their default level. SARIF results carry `ruleIndex`, the fix in `properties.fix`, and a `domainIntegrity/v2` partial fingerprint holding the finding's identity. (#97, #101)
-- When aggregates are found but `domain.config.ts` declares no lifecycles and there are no event handlers or event flows, `check`, `show` and `context` print a notice on stderr pointing to `init` and exit `0`, with valid JSON and SARIF on stdout. (#99)
+- When aggregates are found but `domain.config.ts` declares no lifecycles and there are no event handlers or event flows, `check`, `show` and `context` print a notice on stderr pointing to `init` and exit `0`; `check --format json` or `--format sarif` still prints a valid report on stdout. (#99)
 
 ### Changed
 
-- **Breaking:** a method that can no longer run from a state declared for it is reported under the new rule `transition-missing`, a warning, instead of as `transition-drift` with the subject `missing`. Baseline entries for those findings come back as new until you run `check --update-baseline`. (#96)
+- **Breaking:** a method that can no longer run from a state declared for it is reported under the new rule `transition-missing`, a warning, instead of as `transition-drift` with the subject `missing`. (#96)
 - **Breaking:** the JSON report has a fixed shape with format `version` `2`: top-level `version`, `tool`, `summary`, `findings`, `known`, `suppressed` and `problems`. Each finding has `ruleId` (was `checkId`), `severity`, `analyzer`, `identity`, `location` with `file` and `line`, `message`, `fix` and `details`, every key always present. Rule-specific fields moved under `details`, the `...Id` fields and `subject` were removed, and problems are objects with `code`, `analyzer`, `message` and `details`. (#100, #101, #104)
 - **Breaking:** baseline files use format version `2`: each entry is a finding's identity object plus a `count`, instead of a `|`-separated key. Version 1 baselines are no longer read: `check` exits `2` and tells you to regenerate the file with `check --update-baseline`, which also migrates it. A baseline that is not valid, or repeats an entry, exits `2` with a message naming the file. When a run finds more findings with one identity than the entry's `count`, all of them are reported as new. (#101)
 - **Breaking:** paths are relative to the repository root, the nearest directory at or above the tsconfig that contains a `.git` entry, or the tsconfig directory when there is none, instead of the tsconfig directory. This covers JSON `location.file`, the SARIF `uri` (now with `uriBaseId` `%SRCROOT%`), the paths in finding identities, the `path:Class` argument of `show`, and the `context` summary. Aggregates, events and sagas are always identified as `path:Class` in identities, so moving a file or renaming a class turns its known findings into new ones. (#101)
@@ -90,6 +90,7 @@ All notable changes to this project are documented here; the format follows [Kee
 - A write through a setter that the aggregate or one of its project base classes declares is no longer reported as `outside-mutation`. (#21)
 - An aggregate that wires itself into a new instance inside a non-static factory member, such as `clone()`, or through a variable typed as `any` or an interface, is recognised as leaking `this`, which removes false findings. (#23)
 - For a field typed with both `null` and `undefined`, a strict `=== null` or `=== undefined` check no longer counts as covering both. A guard must cover both, for example with `== null`, a truthiness check or both strict checks, or the method is not judged. (#25)
+- Guards built with `==` and `!=` are recognised like `===` and `!==`. (#25)
 - A falsy check on a nullable field whose set values may be falsy, such as `0` or `''`, no longer counts as excluding `set`. (#28)
 
 ## [0.1.0] - 2026-10-02

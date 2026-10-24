@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -11,12 +12,11 @@ type PackResult = { readonly files: readonly PackedFile[] };
 
 const packedPaths = (): readonly string[] => {
   const output = execFileSync('npm', ['pack', '--dry-run', '--json'], { cwd: ROOT, encoding: 'utf8' });
-  const [result] = JSON.parse(output) as readonly PackResult[];
-  return result?.files.map((file) => file.path) ?? [];
+  const [result] = JSON.parse(output) as readonly [PackResult];
+  return result.files.map((file) => file.path);
 };
 
-const readRootFile = (name: string): string =>
-  readFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), 'utf8');
+const readRootFile = (name: string): string => readFileSync(join(ROOT, name), 'utf8');
 
 const packageVersion = (): string => (JSON.parse(readRootFile('package.json')) as { readonly version: string }).version;
 
