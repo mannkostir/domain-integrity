@@ -25,4 +25,20 @@ describe('published package', () => {
 
     expect(headings).toContain(version);
   });
+
+  it('requires npm provenance on every publish', () => {
+    const publishConfig = MANIFEST.publishConfig;
+
+    const provenance = publishConfig?.provenance;
+
+    expect(provenance).toBe(true);
+  });
+
+  it('exports the library entry as ESM only', () => {
+    const libraryEntry = MANIFEST.exports['.'];
+
+    const conditions = Object.keys(libraryEntry);
+
+    expect(conditions).toEqual(['types', 'import']);
+  });
 });

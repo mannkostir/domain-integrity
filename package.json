@@ -48,6 +48,9 @@
     "schema",
     "CHANGELOG.md"
   ],
+  "publishConfig": {
+    "provenance": true
+  },
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
