@@ -35,7 +35,7 @@ All notable changes to this project are documented here; the format follows [Kee
 - `init` without an interactive terminal and without `--yes` exits `0` when there is nothing to declare, and exits `2` only when there are suggestions to confirm. If the input ends before every suggestion is answered, it exits `2` and writes nothing. (#108)
 - `show` with a name that matches no declared aggregate or handled event lists the names it accepts. (#109)
 - Error messages show paths relative to the current directory, name the config file that was passed, say why a file could not be read or written, such as a missing directory or denied permission, and report config errors at the line they come from. (#109)
-- `saga-missing-failure-path` is marked experimental: it is labelled so in the README and tagged `experimental` in its SARIF rule's `properties.tags`. (#PR)
+- `saga-missing-failure-path` is marked experimental: it is labelled so in the README and tagged `experimental` in its SARIF rule's `properties.tags`. (#121)
 
 ### Deprecated
 
