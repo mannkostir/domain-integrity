@@ -17,7 +17,7 @@ All notable changes to this project are documented here; the format follows [Kee
 - `init` lets you edit a suggestion: answer `e` to type each field's terminal values, comma-separated, from the field's known values, or `-` for none. `Y` or Enter still declares the suggestion and `n` skips it. (#108)
 - `-p` takes a directory and then uses the `tsconfig.json` inside it. (#109)
 - `--help`, or `-h`, on the tool or on any command prints what each option takes and its default, followed by a link to the README; the tool's help also lists examples. (#109)
-- `require('domain-integrity')` loads the config helpers from CommonJS on Node 22.12 or later, through a `module-sync` export condition. The README documents the module format: the package is ESM-only, CommonJS code on earlier Node versions uses `import()`, and `domain-integrity/schema/report.json` resolves only through `exports`. (#PR)
+- `require('domain-integrity')` loads the config helpers from CommonJS on Node 22.12 or later, through a `module-sync` export condition. The README documents the module format: the package is ESM-only, CommonJS code on earlier Node versions uses `import()`, and `domain-integrity/schema/report.json` resolves only through `exports`. (#122)
 
 ### Changed
 
@@ -36,7 +36,7 @@ All notable changes to this project are documented here; the format follows [Kee
 - `init` without an interactive terminal and without `--yes` exits `0` when there is nothing to declare, and exits `2` only when there are suggestions to confirm. If the input ends before every suggestion is answered, it exits `2` and writes nothing. (#108)
 - `show` with a name that matches no declared aggregate or handled event lists the names it accepts. (#109)
 - Error messages show paths relative to the current directory, name the config file that was passed, say why a file could not be read or written, such as a missing directory or denied permission, and report config errors at the line they come from. (#109)
-- `publishConfig.provenance` is set, so every publish carries npm provenance, and a publish from a machine that cannot produce provenance fails instead of publishing without it. (#PR)
+- `publishConfig.provenance` is set, so every publish carries npm provenance, and a publish from a machine that cannot produce provenance fails instead of publishing without it. (#122)
 
 ### Deprecated
 
