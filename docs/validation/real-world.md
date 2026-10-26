@@ -47,6 +47,22 @@ The installed-dependencies re-run measured main (a8068cb) with the same commits 
 | Booking-System | 1 `undispatched-events` | fires | `AggregateRoot._domainEvents` at `addDomainEvent` with 9 raisers, as before: the buffer is only pushed and reset, the trivial getter `domainEvents` is never read, and the project's `EventBus.publish` calls publish events built in place, never ones taken from the buffer |
 | ticket-sale | 6 `terminal-state-leak` | silent | no array buffer: `addEvent` adds to the `Set` `events`, which `DomainEventManager` iterates to publish |
 
+The event-flow declaration re-run used main (c1866fb) with the same commits as the installed-dependencies re-run. A fresh run with the recorded configs matches the recorded 41 findings and exit codes in every repository, and its stderr matches too, except codely's, which now carries the clearer missing-config message from #109. Three configs then gained an `events.inProcess` list; every other config is unchanged. Each list names every event class the repository dispatches, or is built to dispatch, on an in-process bus. ddd-forum lists its 9 `IDomainEvent` classes, which the static `DomainEvents` registry dispatches from Sequelize hooks to callbacks registered with `DomainEvents.register(cb, X.name)`. domain-driven-hexagon lists its 5 `DomainEvent` subclasses, which `AggregateRoot.publishEvents` emits through `EventEmitter2.emitAsync` to `@OnEvent` handlers. Booking-System lists its 45 event classes, which its `@EventsHandler` classes consume from the `@nestjs/cqrs` `EventBus`. The other repositories have nothing true to declare. kyhsa93 relays its outbox to SQS, and bitloops publishes through NATS. undb's analysed program includes the `space` package's events, but its event bus, outbox and handlers live in packages outside it. daruma writes its events to EventStore and receives them back through a subscription. codely has no config. ticket-sale's entities import their event classes from a `domain-events` folder that is not in the repository at the recorded commit, and nothing calls `DomainEventManager.register`. The private reference repo was left out because its config lives inside it.
+
+No config declares a saga. Only daruma has sagas: four `@Saga()` classes whose 9 streams each map one event to one command, such as `ofType(BillWasRemoved)` to `RemoveDebtAndDepositTransactionsCommand`. None waits on an outcome. Booking-System has success and failure events of one step, such as `PaymentCompletedEvent` and `PaymentFailedEvent`, but each has its own single-event `@EventsHandler` class that only logs, and no class handles both sides or coordinates the step, so no `saga()` declaration would be true. `saga-missing-failure-path` has therefore run only on probe projects, and it is marked experimental: labelled in the README and tagged `experimental` in its SARIF rule.
+
+The run reports 54 findings: the 41 before, unchanged in every repository, and 13 `unhandled-event`, 4 in ddd-forum and 9 in Booking-System, all real. Every exit code and every repository's stderr is identical; ddd-forum and Booking-System already exited 1. Every declared event that stays silent was traced in the code. 7 of them are constructed and have no handler, so the rule misses them, but none of the 13 findings is false.
+
+| Repository | Declared | `unhandled-event` | Silent declared events |
+|---|---|---|---|
+| ddd-forum | 9 | 4: `MemberCreated`, `PostCreated`, `UserLoggedIn`, `UserDeleted` | 4 handled through `DomainEvents.register`: `CommentPosted`, `CommentVotesChanged`, `PostVotesChanged`, `UserCreated`; `EmailVerified` is never constructed |
+| domain-driven-hexagon | 5 | 0 | `UserCreatedDomainEvent` is handled by `@OnEvent(UserCreatedDomainEvent.name, …)`. `UserAddressUpdatedDomainEvent`, `UserDeletedDomainEvent`, `UserRoleChangedDomainEvent` and `WalletCreatedDomainEvent` are constructed and have no handler, but each constructor takes `props: DomainEventProps<…>` with the event's own class as the type argument; the rule reads a parameter type that mentions the event as possible typed handling and stays silent. 4 missed |
+| Booking-System | 45 | 9: `NotificationCreatedEvent`, `NotificationSentEvent`, `NotificationDeliveredEvent`, `NotificationFailedEvent`, `NotificationCancelledEvent`, `OtpCreatedEvent`, `OtpVerifiedEvent`, `OtpUsedEvent`, `OtpExpiredEvent` | 33 handled by an `@EventsHandler` class. `UserRegistered`, `UserEmailChanged` and `UserDeactivated` are constructed in `User` and have no handler, but each declares `readonly eventName = '<its own class name>'`, a string equal to its name, which keeps the rule silent. 3 missed |
+
+The 13 findings are real. ddd-forum's 4 events are raised with `addDomainEvent`, and the Sequelize hooks on `BaseUser`, `Member` and `Post` dispatch them, but `DomainEvents.dispatch` finds no callback under their names, and nothing else in the repository names them. Booking-System's 9 notification and OTP events are constructed in `NotificationEntity` and `OtpEntity` and raised into `AggregateRoot._domainEvents`, the buffer `undispatched-events` already reports. The notification module has no event handler, and nothing in `src` or `test` names these classes outside their own files and the entities that construct them. Their `eventName` strings, such as `'NotificationCreated'`, differ from the class names. The 9 findings would hold even if the buffer were dispatched.
+
+Out-of-repo probes, each declaring one constructed event with no handler, report it in the plain shape and stay silent in three: the event's own constructor takes a parameter whose type mentions the event (`props: Props<Packed>`), the event's own body holds a string equal to its name (`readonly eventName = 'Packed'`), and the event is the first name of a multi-name import such as `import { Packed, VERSION } from './events'`. The last shape is not a documented rule. ts-morph returns the import's `SyntaxList`, not the identifier, as the reference to the first name, and a reference that is not an identifier counts as an escape. The same event as the second name, `import { VERSION, Packed }`, is reported. No harness repository's declared event is silenced by that shape, and in the probes `dead-handler` and `saga-missing-failure-path` are not affected by it.
+
 ## Summary
 
 - **Repositories run:** 10: nine public repositories plus the private reference repo, which is counted among the 10. Of those, 9 produced a model and 1 (CodelyTV/typescript-ddd-example) has no state fields, so there was nothing to declare. There were also 2 thin repositories (mguay22/nestjs-ddd, mbrookson/nestjs-ddd). They were cloned, but their aggregates have no state fields and they were dropped.
@@ -59,7 +75,7 @@ The installed-dependencies re-run measured main (a8068cb) with the same commits 
   The 2 kyhsa93 `clearEvents` findings, intended before, are no longer reported since methods that only keep books are not judged as domain commands. The 5 intended findings left go away by configuration: bitloops `commit` with `eventStreamVersion` in `auditFields`, and the 4 ticket-sale `EventSpot` findings with `is_reserved` declared with no terminal value.
 
   The first run produced 66 findings. 27 of them were false positives from one pattern, private event-sourcing appliers. The leak and drift checks now judge only public methods, which removes all 27. The one remaining false positive, kyhsa93 `close` after `lockedAt`, goes away when `close` is listed in `allowAfterTerminal` inside the `lockedAt` field, which left 41 findings before methods that only keep books stopped being judged. All 5 earlier bitloops findings are reported again once its library members are listed in `inertMembers`.
-- **Event-flow findings:** 2, both real: ddd-forum `handler-payload-mismatch` for `AfterPostVotesChanged.onPostVotesChanged`, and Booking-System `undispatched-events` for `AggregateRoot._domainEvents`. With lifecycle findings, 42 in total with ddd-forum listing `inertEventMethods`, and 41 without it.
+- **Event-flow findings:** 15, all real: ddd-forum `handler-payload-mismatch` for `AfterPostVotesChanged.onPostVotesChanged`, Booking-System `undispatched-events` for `AggregateRoot._domainEvents`, and 13 `unhandled-event`, 4 in ddd-forum and 9 in Booking-System, with the `events.inProcess` lists of the event-flow declaration re-run. With lifecycle findings, 55 in total with ddd-forum listing `inertEventMethods`, and 54 without it. `unhandled-event` misses 7 declared events that are constructed and have no handler: 4 in domain-driven-hexagon and 3 in Booking-System. `saga-missing-failure-path` has not run on a real repository, because none has a saga with a success and a failure outcome; it is marked experimental.
 - **Spike findings:**
 
   | Spike finding | Result |
@@ -85,12 +101,12 @@ Per-repository setup:
 | kyhsa93/nestjs-rest-cqrs-example | 03408fe | `AccountImplement implements Account` and extends nothing, so `init` with the default base classes finds nothing. With `aggregateBaseClasses: ['AggregateRoot', 'Entity', 'Account']`, `init --yes` declares it with the same terminal states as the hand-written v0.1 config, and `check` reported the same 13 findings until main 82abee8, which stopped judging methods that only keep books as domain commands; it reports 11 since. |
 | bitloops/ddd-hexagonal-cqrs-es-eda (`backend/`) | daa3f22 | Ran `npm install --ignore-scripts ddd-tactical-core-boilerplate@^2` in a side directory and symlinked it, so `Domain.Aggregate` resolves. `domain.config.ts` lists `inertMembers: ['id', 'clearDomainEvents']`; the library implements `id` as a getter over a private field and `clearDomainEvents()` as a splice of a private array, so neither reads aggregate state. |
 | undb-io/undb (`packages/authz`) | 3d2e93b | Bun workspace. Ran `npm install --ignore-scripts zod@^3 oxide.ts@^1` in a side directory and symlinked them at the repo root. A `tsconfig.di.json` extends the package tsconfig with `paths: { "@undb/*": ["../*/src/index.ts"] }` and `include: ["src"]`. npm cannot install a Bun workspace, so its dependencies are not installed. |
-| Sairyss/domain-driven-hexagon | 5c2d15a | `npm install` needs `--legacy-peer-deps`: there is no lockfile, and `@nestjs/cqrs` has a peer conflict. |
-| stemmlerjs/ddd-forum | 24df03e | `domain.config.ts` lists `inertEventMethods: ['addDomainEvent']`; its `addDomainEvent` pushes the event, registers the aggregate in the static `DomainEvents` registry by `id` and logs its prototype, so it reads no aggregate state. Before the package gained top-level `main` and `types`, `moduleResolution: "node"` could not resolve `domain-integrity`, and a `paths` entry was needed. |
+| Sairyss/domain-driven-hexagon | 5c2d15a | `npm install` needs `--legacy-peer-deps`: there is no lockfile, and `@nestjs/cqrs` has a peer conflict. `domain.config.ts` lists its 5 event classes in `events.inProcess`. |
+| stemmlerjs/ddd-forum | 24df03e | `domain.config.ts` lists `inertEventMethods: ['addDomainEvent']`; its `addDomainEvent` pushes the event, registers the aggregate in the static `DomainEvents` registry by `id` and logs its prototype, so it reads no aggregate state. Before the package gained top-level `main` and `types`, `moduleResolution: "node"` could not resolve `domain-integrity`, and a `paths` entry was needed. `domain.config.ts` lists its 9 event classes in `events.inProcess`. |
 | CodelyTV/typescript-ddd-example | 94717b0 | none |
 | Private reference repo | analysed from a local copy | 6 aggregates discovered / 5 declared |
 | AdrianLopezGue/daruma-backend | bc610c0 | none |
-| emadansari96/Booking-System | 1059141 | `npx prisma generate` after the install. |
+| emadansari96/Booking-System | 1059141 | `npx prisma generate` after the install. `domain.config.ts` lists its 45 event classes in `events.inProcess`. |
 | illyanaAvelar/mba-full-cycle-ddd-ticket-sale | 843effa | none |
 
 ### Edits to `init` suggestions
@@ -151,12 +167,18 @@ In the earlier run the spike finding survived the conservative rules. `complete(
 
 There were no findings. `UserEntity.role` was the only suggested field. It has no terminal value or transitions to check against. `WalletEntity` has no state field.
 
+With its 5 event classes declared in `events.inProcess` there are still no findings. Only `UserCreatedDomainEvent` has a handler. The other 4 are constructed and emitted through `EventEmitter2` with no listener, but each event constructor takes `props: DomainEventProps<…>` with its own class as the type argument, which keeps `unhandled-event` silent.
+
 ## stemmlerjs/ddd-forum
 
 | check | aggregate.method | verdict | reason |
 |---|---|---|---|
 | terminal-state-leak (isDeleted) | User.setAccessToken | real | no guard on `isDeleted`; a deleted user can log in, which emits `UserLoggedIn` and stamps a new access token |
 | handler-payload-mismatch | AfterPostVotesChanged.onPostVotesChanged | real | registered for `PostVotesChanged` but typed as the unrelated `CommentVotesChanged` |
+| unhandled-event | MemberCreated | real | raised in `Member.create` and dispatched by the `Member` hooks; no callback is registered for it |
+| unhandled-event | PostCreated | real | raised in `Post.create` and dispatched by the `Post` hooks; no callback is registered for it |
+| unhandled-event | UserLoggedIn | real | raised in `User.setAccessToken` and dispatched by the `BaseUser` hooks; no callback is registered for it |
+| unhandled-event | UserDeleted | real | raised in `User.delete` and dispatched by the `BaseUser` hooks; no callback is registered for it |
 
 `User.isDeleted` was declared terminal at `true`. Both `setAccessToken` and `delete` call the project-declared `addDomainEvent`, which also passes `this` to the static `DomainEvents` registry and logs through `Reflect.getPrototypeOf(this)`, so it is not push-only. Without configuration that keeps both methods unjudged and reports nothing. With `inertEventMethods: ['addDomainEvent']`, its body is not traced and `new UserLoggedIn(this)` counts as an event handoff, so `setAccessToken` is reported. `delete` is guarded by `if (!this.props.isDeleted)` and stays silent. The `type` fields on Post, PostVote and CommentVote are kinds, not lifecycles. They were declared with no terminal value.
 
@@ -200,6 +222,22 @@ The first run also reported the 27 private `on<Event>` appliers: 10 on Bill, 4 e
 There were no lifecycle findings. Booking, Payment and Invoice keep their status in value objects (`BookingStatus.create(...)`, `status.canTransitionTo(...)`), which are not supported state types. The project also sets `strictNullChecks: false`, so its optional timestamps are not nullable state fields. Only the `isActive` booleans on four aggregates were suggested. They have no terminal value.
 
 The original event-flow run reported nothing here either. The `CommissionStrategyUpdated`, `CommissionStrategyActivated` and `CommissionStrategyDeactivated` handlers never run, but their events are constructed and raised with `addDomainEvent` into a buffer that nothing dispatches, which `undispatched-events` now reports as `AggregateRoot._domainEvents`.
+
+With its 45 event classes declared in `events.inProcess`, `unhandled-event` reports 9:
+
+| check | event | verdict | reason |
+|---|---|---|---|
+| unhandled-event | NotificationCreatedEvent | real | constructed in `NotificationEntity`; the notification module has no event handler and nothing else names the class |
+| unhandled-event | NotificationSentEvent | real | same |
+| unhandled-event | NotificationDeliveredEvent | real | same |
+| unhandled-event | NotificationFailedEvent | real | same |
+| unhandled-event | NotificationCancelledEvent | real | same |
+| unhandled-event | OtpCreatedEvent | real | constructed in `OtpEntity`; no event handler and nothing else names the class |
+| unhandled-event | OtpVerifiedEvent | real | same |
+| unhandled-event | OtpUsedEvent | real | same |
+| unhandled-event | OtpExpiredEvent | real | same |
+
+`UserRegistered`, `UserEmailChanged` and `UserDeactivated` have no handler either, but each sets `eventName` to its own class name, a string equal to its name, which keeps the rule silent.
 
 ## illyanaAvelar/mba-full-cycle-ddd-ticket-sale
 
