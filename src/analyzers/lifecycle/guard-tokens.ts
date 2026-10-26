@@ -10,8 +10,11 @@ const splitsUnset = (field: StateField): boolean =>
 export const unsetGuardTokens = (field: StateField): ReadonlySet<string> =>
   splitsUnset(field) ? new Set(field.unsetForms.map(formToken)) : new Set([UNSET]);
 
-export const comparedUnsetTokens = (field: StateField, form: UnsetForm, strict: boolean): ReadonlySet<string> =>
-  strict && splitsUnset(field) ? new Set([formToken(form)]) : unsetGuardTokens(field);
+export const comparedUnsetTokens = (field: StateField, form: UnsetForm, strict: boolean): ReadonlySet<string> => {
+  if (!strict) return unsetGuardTokens(field);
+  if (!field.unsetForms.includes(form)) return new Set();
+  return splitsUnset(field) ? new Set([formToken(form)]) : unsetGuardTokens(field);
+};
 
 export const guardUniverse = (field: StateField): ReadonlySet<string> =>
   splitsUnset(field) ? union(difference(allTokens(field), new Set([UNSET])), unsetGuardTokens(field)) : allTokens(field);

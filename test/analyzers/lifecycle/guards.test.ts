@@ -109,7 +109,7 @@ export class ClosableTicket extends ClosableBase {
 `,
   '/src/shift.ts': `
 import { AggregateRoot } from './aggregate-root';
-export class Shift extends AggregateRoot<{ endedAt: Date | null | undefined; pausedAt: Date | null; archivedAt?: Date; cancelledAt?: Date | null; note: string }> {
+export class Shift extends AggregateRoot<{ endedAt: Date | null | undefined; pausedAt: Date | null; archivedAt?: Date; voidedAt: Date | undefined; cancelledAt?: Date | null; note: string }> {
   private get hasNoEnd(): boolean { return this.props.endedAt === null; }
   strictNullReturn(): void { if (this.props.endedAt === null) return; this.props.note = 'x'; }
   strictUndefinedThrow(): void { if (this.props.endedAt === undefined) throw new Error('x'); this.props.note = 'x'; }
@@ -135,6 +135,9 @@ export class Shift extends AggregateRoot<{ endedAt: Date | null | undefined; pau
   pausedStrictUndefinedReturn(): void { if (this.props.pausedAt === undefined) return; this.props.note = 'x'; }
   pausedStrictNotNullWrapper(): void { if (this.props.pausedAt !== null) { this.props.note = 'x'; } }
   archivedStrictUndefinedReturn(): void { if (this.props.archivedAt === undefined) return; this.props.note = 'x'; }
+  archivedStrictNullReturn(): void { if (this.props.archivedAt === null) return; this.props.note = 'x'; }
+  voidedStrictNullReturn(): void { if (this.props.voidedAt === null) return; this.props.note = 'x'; }
+  voidedStrictUndefinedReturn(): void { if (this.props.voidedAt === undefined) return; this.props.note = 'x'; }
 }
 `,
   '/src/meter.ts': `
@@ -179,6 +182,12 @@ export class Dispatch extends AggregateRoot<{ step: Step | null; either: Step | 
   stepMemberReturn(): void { if (this.props.step === Step.done) return; this.props.note = 'x'; }
   stepIncludesReturn(): void { if ([Step.done, null].includes(this.props.step)) return; this.props.note = 'x'; }
   stepNullCase(): void { switch (this.props.step) { case null: throw new Error('x'); } this.props.note = 'x'; }
+  stepUndefinedThrow(): void { if (this.props.step === undefined) throw new Error('x'); this.props.note = 'x'; }
+  stepNotUndefinedWrapper(): void { if (this.props.step !== undefined) { this.props.note = 'x'; } }
+  stepUndefinedWrapper(): void { if (this.props.step === undefined) { this.props.note = 'x'; } }
+  stepLooseUndefinedReturn(): void { if (this.props.step == undefined) return; this.props.note = 'x'; }
+  stepUndefinedIncludesReturn(): void { if ([undefined].includes(this.props.step)) return; this.props.note = 'x'; }
+  stepUndefinedCase(): void { switch (this.props.step) { case undefined: throw new Error('x'); } this.props.note = 'x'; }
   eitherStrictNullReturn(): void { if (this.props.either === null) return; this.props.note = 'x'; }
   eitherLooseNullReturn(): void { if (this.props.either == null) return; this.props.note = 'x'; }
   eitherBothStrictReturn(): void { if (this.props.either === null || this.props.either === undefined) return; this.props.note = 'x'; }
@@ -541,7 +550,7 @@ describe('methodSources for a nullable field', () => {
 
   it.each([
     ['pausedStrictNullReturn', ['set']],
-    ['pausedStrictUndefinedReturn', ['set']],
+    ['pausedStrictUndefinedReturn', ['set', 'unset']],
     ['pausedStrictNotNullWrapper', ['set']],
     ['unguarded', ['set', 'unset']],
   ])('%s can run from %j when the type includes only null', (method, expected) => {
@@ -557,6 +566,14 @@ describe('methodSources for a nullable field', () => {
 
   it('treats a strict undefined check as covering an optional field', () => {
     expect(sourcesOf('archivedStrictUndefinedReturn', 'archivedAt')).toEqual(['set']);
+  });
+
+  it.each([
+    ['archivedStrictNullReturn', 'archivedAt', ['set', 'unset']],
+    ['voidedStrictNullReturn', 'voidedAt', ['set', 'unset']],
+    ['voidedStrictUndefinedReturn', 'voidedAt', ['set']],
+  ])('%s on %s can run from %j when the type includes only undefined', (method, field, expected) => {
+    expect(sourcesOf(method, field)).toEqual(expected);
   });
 });
 
@@ -818,6 +835,12 @@ describe('methodSources for an enum field that may be unset', () => {
     ['stepMemberReturn', ['DRAFT', 'SENT', 'unset']],
     ['stepIncludesReturn', ['DRAFT', 'SENT']],
     ['stepNullCase', ['DONE', 'DRAFT', 'SENT']],
+    ['stepUndefinedThrow', ['DONE', 'DRAFT', 'SENT', 'unset']],
+    ['stepNotUndefinedWrapper', ['DONE', 'DRAFT', 'SENT', 'unset']],
+    ['stepUndefinedWrapper', []],
+    ['stepLooseUndefinedReturn', ['DONE', 'DRAFT', 'SENT']],
+    ['stepUndefinedIncludesReturn', ['DONE', 'DRAFT', 'SENT', 'unset']],
+    ['stepUndefinedCase', ['DONE', 'DRAFT', 'SENT', 'unset']],
     ['unguarded', ['DONE', 'DRAFT', 'SENT', 'unset']],
   ])('%s can run from %j when the type includes only null', (method, expected) => {
     expect(sourcesOf(method, 'step')).toEqual(expected);
