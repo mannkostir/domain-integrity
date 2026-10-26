@@ -47,10 +47,27 @@ The installed-dependencies re-run measured main (a8068cb) with the same commits 
 | Booking-System | 1 `undispatched-events` | fires | `AggregateRoot._domainEvents` at `addDomainEvent` with 9 raisers, as before: the buffer is only pushed and reset, the trivial getter `domainEvents` is never read, and the project's `EventBus.publish` calls publish events built in place, never ones taken from the buffer |
 | ticket-sale | 6 `terminal-state-leak` | silent | no array buffer: `addEvent` adds to the `Set` `events`, which `DomainEventManager` iterates to publish |
 
+The broadened-set run added five public repositories for kinds the first ten did not cover, with main (c1866fb) and configs kept outside the repositories as before. A fresh run over the first ten matches the recorded 41 findings: every repository's JSON output apart from the tool version, and every exit code, is identical to the installed-dependencies run, and stderr differs only in codely's missing-config message, reworded since. Each new repository was installed with `npm ci --ignore-scripts`, or `npm install --ignore-scripts` where only a `yarn.lock` exists, and configured with `init --yes`, edited as listed under [Edits to `init` suggestions](#edits-to-init-suggestions). The new repositories add 24 findings, 65 in total: schulcloud-server 18, SiweAuthMicroservice 3, typescript-event-sourcing-sample-app 3, adonisjs/application 0 and openlayers 0. Of the 24, 9 are real, 12 intended and 3 false positives, the public event-sourcing appliers of the sample app; see the sections below. No run printed a problem. A sixth candidate, dyrector-io/dyrectorio (98fe402, `web/crux`), was dropped: its Deployment and Pipeline states are Prisma enums from `.prisma/client`, and `prisma generate` for its Prisma 5.1.0 with `engineType = "binary"` must download the engines from `binaries.prisma.sh`, which the validation sandbox cannot reach. Prisma enums as aggregate states stay uncovered; Booking-System uses Prisma, but its states are value objects. The kinds the set now covers:
+
+| Kind | Repository |
+|---|---|
+| MikroORM entities | hpi-schul-cloud/schulcloud-server |
+| more than 2,000 files | hpi-schul-cloud/schulcloud-server, 3,529 non-test TypeScript files under the tsconfig |
+| TypeORM active record (`extends BaseEntity`) | Giveth/SiweAuthMicroservice |
+| event sourcing without `@nestjs/cqrs` | yerinadler/typescript-event-sourcing-sample-app |
+| TypeScript project references | yerinadler/typescript-event-sourcing-sample-app, `packages/job` references `packages/core` |
+| `"module": "NodeNext"` ESM | adonisjs/application |
+| `allowJs` with constructor-assigned fields, `"module": "node16"` ESM | openlayers/openlayers |
+| Prisma enums | not covered, see above |
+| Nx workspaces | not covered; the monorepo re-run's probes cover the Nx shape |
+| Windows | not covered by the harness, which runs on macOS only; CI runs the test suite and its fixture projects on Windows, macOS and Linux |
+
+Timings are the median of three `check --format json` runs per repository, on a machine shared with other jobs at a load average near 20: schulcloud-server 14.9 s, SiweAuthMicroservice 2.1 s, typescript-event-sourcing-sample-app 0.96 s, adonisjs/application 1.3 s and openlayers 2.6 s. A whole harness run over all 15 repositories took 44 s.
+
 ## Summary
 
-- **Repositories run:** 10: nine public repositories plus the private reference repo, which is counted among the 10. Of those, 9 produced a model and 1 (CodelyTV/typescript-ddd-example) has no state fields, so there was nothing to declare. There were also 2 thin repositories (mguay22/nestjs-ddd, mbrookson/nestjs-ddd). They were cloned, but their aggregates have no state fields and they were dropped.
-- **Aggregates:** 47 discovered with the default base classes and 28 declared. The 28th, kyhsa93 `AccountImplement`, implements an interface instead of extending a base class. It was declared by hand in the v0.1 run; with `'Account'` added to `aggregateBaseClasses` it is discovered, which makes 48.
+- **Repositories run:** 15: fourteen public repositories plus the private reference repo, which is counted among the 15. Five of them were added by the broadened-set run. Of the first ten, 9 produced a model and 1 (CodelyTV/typescript-ddd-example) has no state fields, so there was nothing to declare. Of the five added, `init` declared aggregates in four, and openlayers needed a hand-written config. There were also 2 thin repositories (mguay22/nestjs-ddd, mbrookson/nestjs-ddd). They were cloned, but their aggregates have no state fields and they were dropped. dyrector-io/dyrectorio was cloned and dropped because its Prisma client could not be generated.
+- **Aggregates:** 47 discovered with the default base classes and 28 declared in the first ten. The 28th, kyhsa93 `AccountImplement`, implements an interface instead of extending a base class. It was declared by hand in the v0.1 run; with `'Account'` added to `aggregateBaseClasses` it is discovered, which makes 48. The five added repositories declare 40 more: 34 in schulcloud-server, 3 in SiweAuthMicroservice and 1 each in the others.
 - **Lifecycle findings:** 40 in total, with ddd-forum listing `inertEventMethods: ['addDomainEvent']`; 39 without it:
   - 34 real;
   - 5 intended;
@@ -60,6 +77,10 @@ The installed-dependencies re-run measured main (a8068cb) with the same commits 
 
   The first run produced 66 findings. 27 of them were false positives from one pattern, private event-sourcing appliers. The leak and drift checks now judge only public methods, which removes all 27. The one remaining false positive, kyhsa93 `close` after `lockedAt`, goes away when `close` is listed in `allowAfterTerminal` inside the `lockedAt` field, which left 41 findings before methods that only keep books stopped being judged. All 5 earlier bitloops findings are reported again once its library members are listed in `inertMembers`.
 - **Event-flow findings:** 2, both real: ddd-forum `handler-payload-mismatch` for `AfterPostVotesChanged.onPostVotesChanged`, and Booking-System `undispatched-events` for `AggregateRoot._domainEvents`. With lifecycle findings, 42 in total with ddd-forum listing `inertEventMethods`, and 41 without it.
+- **Broadened set:** 24 more lifecycle findings and no event-flow finding in the five added repositories, 65 findings in total with the recorded configs:
+  - 9 real;
+  - 12 intended;
+  - 3 false positives, typescript-event-sourcing-sample-app's public `applyJobCreated`, `applyJobUpdated` and `applyJobArchived` after `ARCHIVED`, which go away when they are listed in `allowAfterTerminal`.
 - **Spike findings:**
 
   | Spike finding | Result |
@@ -92,6 +113,11 @@ Per-repository setup:
 | AdrianLopezGue/daruma-backend | bc610c0 | none |
 | emadansari96/Booking-System | 1059141 | `npx prisma generate` after the install. |
 | illyanaAvelar/mba-full-cycle-ddd-ticket-sale | 843effa | none |
+| hpi-schul-cloud/schulcloud-server | a8b06c1 | `npm ci --ignore-scripts`, which also fetches its `ldapjs` fork from GitHub. Checked with `-p apps/server/tsconfig.app.json`, which excludes `*spec.ts` and `testing/`. `init --base-class BaseEntityWithTimestamps --base-class BaseEntity` |
+| Giveth/SiweAuthMicroservice | b7d787d | `init --base-class BaseEntity` |
+| yerinadler/typescript-event-sourcing-sample-app (`packages/job/`) | 354ab3c | `npm install --ignore-scripts` at the root, which links the workspace packages, then `git checkout -- yarn.lock` and the generated `package-lock.json` deleted. `@cqrs-es/core` was built with `tsc -p packages/core`, because its `typings` point at `dist`. |
+| adonisjs/application | 46f746c | `init --base-class Macroable`, run on a config that already listed the base class; see its section |
+| openlayers/openlayers | d4851af | `init --base-class Target` finds no state fields, so the config is hand-written |
 
 ### Edits to `init` suggestions
 
@@ -103,6 +129,12 @@ Per-repository setup:
 | daruma | `_isRemoved` on all 7 aggregates | `[]` | `[true]` | the `on*Created` appliers set `false` from any state, so the guess rejects `true` |
 | ticket-sale | Order.status | `[]` | `[OrderStatus.PAID, OrderStatus.CANCELLED]` | paid and cancelled orders are finished |
 | Private reference repo | n/a | n/a | terminal states were adjusted by hand | n/a |
+| schulcloud-server | Task.availableDate | `'set'` | `[]` | a publication date, set again by every `publish()`, not an end state |
+| schulcloud-server | Task.creator | `'unset'` | `[]` | `removeCreatorId()` anonymises a task when its creator is deleted; the task lives on |
+| schulcloud-server | DeletionRequestEntity.status | `[]` | `[StatusModel.SUCCESS]` | a request whose deletion succeeded is finished |
+| adonisjs/application | the five `#private` fields | `#importer: …` and so on, unquoted | `'#importer': …` and so on, quoted | `init` writes the private names as bare keys, which do not type-check |
+| adonisjs/application | Application.#state | `[]` | `['terminated']` | a terminated application is finished |
+| openlayers | Tile.disposed | nothing, no state fields found | `[true]` | `Disposable.dispose()` sets it once and never resets it |
 
 ## kyhsa93/nestjs-rest-cqrs-example
 
@@ -214,11 +246,80 @@ The original event-flow run reported nothing here either. The `CommissionStrateg
 
 `Order.pay()` is `this.status = OrderStatus.PAID; this.addEvent(new OrderPaid(this.id, this.status));`, and `cancel()` has the same shape. The v0.1 CLI reported nothing for them, because the read of `this.status` in the event payload made their sources unknown. That read comes after the method's first assignment of `status`, so it is now ignored.
 
+## hpi-schul-cloud/schulcloud-server
+
+MikroORM entities in a NestJS server with 3,529 non-test TypeScript files under `apps/server/tsconfig.app.json`. `init` took 23 s and declared 34 entities that extend `BaseEntityWithTimestamps` or `BaseEntity`. Most suggested fields are kinds, flags or nullable data with no terminal value. The domain logic of the newer modules lives in domain objects whose MikroORM entity is the storage model and is written by mappers and repositories; those domain objects extend `DomainObject` and were not declared.
+
+| check | aggregate.method or scope | verdict | reason |
+|---|---|---|---|
+| terminal-state-leak (status) | DeletionRequestEntity.executed | real | no guard; `DeletionRequestRepo` loads the request by id and calls it without checking the status |
+| terminal-state-leak (status) | DeletionRequestEntity.failed | real | a succeeded request can be marked failed |
+| terminal-state-leak (status) | DeletionRequestEntity.pending | real | a succeeded request can be put back to pending and run again |
+| terminal-state-leak (deletedAt) | FileEntity.markForDeletion | real | marking a file again re-stamps `deletedAt`, which postpones its purge |
+| terminal-state-leak (deleted) | FileEntity.markForDeletion | real | same |
+| terminal-state-leak (deletedAt) | FileEntity.removePermissionsByRefId | intended | deleting a user's data strips their references from files already marked for deletion too; `allowAfterTerminal` |
+| terminal-state-leak (deleted) | FileEntity.removePermissionsByRefId | intended | same |
+| terminal-state-leak (deletedAt) | FileEntity.removeCreatorId | intended | same |
+| terminal-state-leak (deleted) | FileEntity.removeCreatorId | intended | same |
+| outside-mutation (status) | DeletionBatchEntity, in `DeletionBatchRepo.updateStatus` | real | the repository sets the status itself instead of going through the domain object's `startDeletion()`; no production code calls it |
+| outside-mutation (status) | DeletionBatchEntity, in `DeletionBatchDomainMapper.mapDoToEntity` | intended | `Object.assign` fills a new entity from the domain object's props; the domain object owns the lifecycle |
+| outside-mutation (targetRefDomain) | DeletionBatchEntity, in `DeletionBatchDomainMapper.mapDoToEntity` | intended | same |
+| outside-mutation (color) | RoomEntity, in `RoomDomainMapper.mapDoToEntity` | intended | same |
+| outside-mutation (type) | BoardNodeEntity, in `BoardNodeRepo.persist` | intended | the repository sets the discriminator on an entity it has just created with `em.create` |
+| outside-mutation (user) | ImportUser, in `UserImportService.matchUsers` | real | the service sets `user` and `matchedBy` directly instead of calling `ImportUser.setMatch(user, matchedBy)` |
+| outside-mutation (flagged) | ImportUser, in `UserImportUc.updateFlag` | intended | a free toggle with no lifecycle; `init` suggested the boolean |
+| outside-mutation (ldapDn) | User, in `UserImportUc.updateUserAndAccountWithLdap` | intended | an identifier `init` suggested as a nullable field, not lifecycle state |
+| outside-mutation (externalId) | User, in `UserImportUc.updateUserAndAccountWithLdap` | intended | same |
+
+With `init`'s suggestions unchanged the run reports 21 findings: the 6 `Task` findings for `publish`, `unpublish` and `removeCreatorId` after the guessed `availableDate: 'set'` and `creator: 'unset'` replace the 3 `DeletionRequestEntity` findings, whose terminal value `init` did not guess. A single `check` takes 14.9 s, the slowest in the set; `init` and `check` both finish without a problem.
+
+## Giveth/SiweAuthMicroservice
+
+TypeORM active-record entities that extend `BaseEntity` and are changed by controllers and repository functions, which then call `save()`.
+
+| check | aggregate, scope | verdict | reason |
+|---|---|---|---|
+| outside-mutation (isBlacklisted) | AccessToken, in `LogoutController.logOut` | real | the controller blacklists the token itself; the entity has no method for it |
+| outside-mutation (active) | MultisigSession, in `findNonExpiredMultisigSessions` | real | the repository function deactivates an expired session itself |
+| outside-mutation (role) | Admin, in `addDefaultAdminUser1701273095150.up` | intended | a migration seeds a new admin with a role, which is a kind, not lifecycle state |
+
+The picker's example, `MultisigSession.status`, is typed `string`, although its values come from the `MultisigStatuses` enum, so `init` does not suggest it. Declared by hand with `terminal: [MultisigStatuses.Successful, MultisigStatuses.Failed]`, it type-checks, and `check` prints the problem `MultisigSession.status has unsupported type "string"` and leaves the field out, so `multisigStatus()` is not judged. The recorded config does not declare it.
+
+## yerinadler/typescript-event-sourcing-sample-app (`packages/job/`)
+
+Event sourcing on a project `AggregateRoot` in the workspace package `@cqrs-es/core`, which `packages/job/tsconfig.json` lists in `references`. Commands call `this.applyChange(event)`, and `AggregateRoot.applyEvent` dispatches to `apply<EventName>` by a computed name. `@cqrs-es/core` resolves through the workspace link to its built declaration files, so `applyChange` has no body in the program.
+
+| check | aggregate.method | verdict | reason |
+|---|---|---|---|
+| terminal-state-leak (status) | Job.applyJobCreated | false positive (resolved by configuration) | an event applier, reached only through `applyChange` and `loadFromHistory`; it is public only because it has no modifier, the shape daruma-backend's private appliers had. Listing the three appliers in `allowAfterTerminal` leaves no finding |
+| terminal-state-leak (status) | Job.applyJobUpdated | false positive (resolved by configuration) | same |
+| terminal-state-leak (status) | Job.applyJobArchived | false positive (resolved by configuration) | same |
+
+`init` suggested `status: JobStatus.ARCHIVED` and needed no edit. `updateInfo()` has a real leak, an archived job can still be updated, but it stays silent: `applyChange` exists only in a declaration file, so it counts as reading `status`. That silence is right, because `applyChange` runs the appliers, one of which writes `status`. `archive()` is guarded by `if (this.status === JobStatus.ARCHIVED) throw`.
+
+## adonisjs/application
+
+A NodeNext ESM package whose `Application` keeps its lifecycle in the private field `#state: ApplicationStates`, a string-literal union from `'created'` to `'terminated'`. `init` wrote the import as `./src/application.js`, as NodeNext requires. Two `init` problems needed a workaround:
+
+- `init --base-class Macroable` with no config exits 2 with `'lifecycle' is declared but its value is never read.`, because the project's `noUnusedLocals` rejects the starting config, which imports `lifecycle` before any lifecycle is added. Run against a config that already lists `aggregates: { baseClasses: ['Macroable'] }` and imports only `defineDomain`, it declares `Application`.
+- It writes the `#private` field names as bare keys, `#state: { terminal: [] }`, which fail to type-check with "Private identifiers are not allowed outside class bodies", so `check` exits 2. Quoted, `'#state'`, they type-check and the fields are modelled.
+
+There are no findings. Every method that writes a declared field is "guard not analysed" for every field: `setEnvironment` and `setMode` return `this` for chaining, and `init`, `boot`, `warmUp`, `start` and `terminate` pass `this` to hook runners and callbacks, such as `this.#hooks.runner('booting').run(this)`. Each of them guards `#state` first, for example `if (this.#state !== 'booted') return`, so no leak is lost here.
+
+## openlayers/openlayers
+
+An `allowJs` ESM project with `"module": "node16"`, 374 JavaScript files under `src/ol`. Its classes assign their fields in the constructor under a JSDoc `@type`, so `init --base-class Target` says that it found no state fields and writes no config. The picker's example, `Tile.state`, is typed `number`, which is not a supported state type. The config is hand-written: `Tile` with `disposed: { terminal: [true] }`, which the project base class `Disposable` sets once in `dispose()`.
+
+There are no findings. Every `Tile` method that writes a field is "guard not analysed": each touches a field assigned only in a constructor, such as `state`, `key` or `transitionStarts_`, directly or through a method it calls, and the base class `Target` also hands `this` to listeners (`evt.target = this.eventTarget_ || this`). Out-of-repo probes show how far the analysis sees `allowJs` code. In a `.js` class with `closed` and `label` assigned in the constructor, `init` suggests nothing; declared by hand, an unguarded `close()` that writes `closed` is reported, but an unguarded `rename()` that writes `label` is not, and neither is one that reads or writes `label` before it writes `closed`. Declared as class fields, `closed = false;` and `label = '';`, `init` suggests `closed: true` and both methods are reported, as in TypeScript.
+
 ## Open issues
 
-This was not fixed, because it needs a design change rather than a correction of an existing rule.
+The first was not fixed, because it needs a design change rather than a correction of an existing rule. The others were found by the broadened-set run, which does not change the analyzer.
 
 1. **Aggregates that leak `this` silence methods that read object fields.** An aggregate leaks `this` when its project class family (its project base classes and project subclasses) lets `this` or `this.props` escape anywhere, or contains an arrow function that references `this` other than a direct callback of `filter`, `map`, `some`, `every`, `find`, `findIndex`, `forEach`, `reduce`, `flatMap` or `sort` called on a built-in array or tuple. Factory members are static members and any member that calls `new` on a class in the family, such as `clone()`, including constructors, property initializers and accessors. Inside a factory member, a variable or parameter is treated like `this` when it is typed as the aggregate, initialized with `new` on a class in the family, or assigned one with `=`, `??=`, `||=` or `&&=`, whatever its declared type. It leaks when it escapes or is captured by any function other than a direct array callback, except in a bare `return v;`, which is how a factory hands back the instance it built; `return Result.ok(v)` is an escape. Two forms that only copy values are not leaks: `Object.assign(this, …)` or `Object.assign(this.props, …)` as a statement whose result is discarded, and a spread of `this` or `this.props` inside an object literal. In a leaking aggregate every project data field whose type is not primitive (string, number, boolean, bigint, symbol, literal, enum, or a built-in TypeScript library type such as `Date` whose type arguments are primitive and which has no index signature) counts as reading the state field. In an aggregate that does not leak, project data fields never count, whatever their type. The leak check does not see every way to wire a back-reference. These shapes are not seen, and a guard through a field wired by them is read as no guard, which can produce a false leak: a factory or service outside the class, for example `agg.policy = new Policy(agg)` or `agg.canEdit = () => agg.isOpen()`; the instance held inside another object (`box.o.policy.owner = box.o`); and a module-level factory function. None of the validation repositories is affected by the unseen shapes today.
+2. **Public event-sourcing appliers are judged as commands.** typescript-event-sourcing-sample-app's `applyJobCreated`, `applyJobUpdated` and `applyJobArchived` are public because they have no modifier, and are reached only through `applyChange` and `loadFromHistory`, which dispatch to `apply<EventName>` by a computed name. They are reported as `terminal-state-leak` after `ARCHIVED`, as daruma-backend's appliers were before they became private. Listing them in `allowAfterTerminal` resolves it by configuration.
+3. **`allowJs` fields assigned in a constructor are barely seen.** `init` suggests none of them, so openlayers gets no config, and a method that reads or writes one before it writes the declared state field is skipped as unknown, so an unguarded method that writes only such fields is never reported. The same class with class fields is analysed as in TypeScript.
+4. **`init` and `#private` fields or `noUnusedLocals`.** `init` writes `#private` field names as bare object keys, which do not type-check, so the config it writes makes `check` exit 2. With no existing config, `init --base-class` exits 2 in a project with `noUnusedLocals`, because its starting config imports `lifecycle` before any lifecycle is added.
 
 ## Resolved during validation
 
