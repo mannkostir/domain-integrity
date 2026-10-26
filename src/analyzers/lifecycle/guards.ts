@@ -5,33 +5,21 @@ import {
   MethodDeclaration,
   Node,
   Statement,
+  SwitchStatement,
   Symbol as MorphSymbol,
   SyntaxKind,
 } from 'ts-morph';
+import { branchStatements, exitsEarly, leavesEarly } from './early-exit';
 import { AggregateScope, fieldNameOf, referencesFieldDirectly } from './field-ref';
 import { evaluateCondition } from './guard-condition';
 import { collapseGuardTokens, guardUniverse } from './guard-tokens';
 import { Sources, StateField } from './model';
 import { isLibraryNode } from '../shared/library';
 import { isAccessor } from './state-field';
-import { intersect } from './values';
+import { FieldSwitch, SwitchGroup, isFieldSwitch, readFieldSwitch } from './switch-guard';
+import { difference, intersect, union } from './values';
 
 type GuardScan = { readonly allowed: ReadonlySet<string>; readonly recognised: ReadonlySet<Node> } | 'unknown';
-
-const branchStatements = (statement: Statement): readonly Statement[] =>
-  Node.isBlock(statement) ? statement.getStatements() : [statement];
-
-const exitsEarly = (statement: Statement): boolean => {
-  const statements = branchStatements(statement);
-  const [only] = statements;
-  if (statements.length !== 1) return false;
-  if (Node.isReturnStatement(only) || Node.isThrowStatement(only)) return true;
-  if (!Node.isExpressionStatement(only)) return false;
-  const expression = only.getExpression();
-  if (!Node.isCallExpression(expression)) return false;
-  const calleeName = expression.getExpression().getText().split('.').pop() ?? '';
-  return /^throw/i.test(calleeName);
-};
 
 type ExitGuard = {
   readonly condition: Expression;
@@ -108,9 +96,6 @@ const statementsUntilOverwrite = (statements: readonly Statement[], field: State
   return overwrite === -1 ? statements : statements.slice(0, overwrite + 1);
 };
 
-const leavesEarly = (statement: Statement): boolean =>
-  [statement, ...statement.getDescendants()].some((node) => Node.isReturnStatement(node) || Node.isThrowStatement(node));
-
 const wrappingGuard = (statements: readonly Statement[]): IfStatement | undefined => {
   const [only] = statements;
   return statements.length === 1 &&
@@ -131,27 +116,76 @@ const scanWrapper = (wrapper: IfStatement, field: StateField, scope: AggregateSc
   };
 };
 
+const narrow = (scan: GuardScan, step: GuardScan): GuardScan =>
+  scan === 'unknown' || step === 'unknown'
+    ? 'unknown'
+    : { allowed: intersect(scan.allowed, step.allowed), recognised: new Set([...scan.recognised, ...step.recognised]) };
+
+const scanExitGuard = (guard: ExitGuard, field: StateField, scope: AggregateScope): GuardScan => {
+  const evaluation = evaluateCondition(guard.condition, field, scope);
+  if (evaluation === 'unknown') return 'unknown';
+  const continuation = scanEarlyExits(statementsUntilOverwrite(guard.continuation, field), field, scope);
+  return narrow({ allowed: evaluation[guard.passesWhen], recognised: new Set([guard.condition]) }, continuation);
+};
+
+const exitSwitchScan = (read: FieldSwitch, field: StateField): GuardScan => {
+  const exits = read.groups
+    .filter((group) => group.kind === 'exit')
+    .reduce<ReadonlySet<string>>((all, group) => union(all, group.tokens), new Set());
+  return { allowed: difference(guardUniverse(field), exits), recognised: new Set(read.recognised) };
+};
+
+const scanExitSwitch = (statement: SwitchStatement, field: StateField, scope: AggregateScope): GuardScan => {
+  const read = readFieldSwitch(statement, field, scope);
+  return read === 'unknown' ? read : exitSwitchScan(read, field);
+};
+
+const scanExitStep = (statement: Statement, field: StateField, scope: AggregateScope): GuardScan | undefined => {
+  const guard = exitGuard(statement);
+  if (guard !== undefined) return scanExitGuard(guard, field, scope);
+  return isFieldSwitch(statement, field) ? scanExitSwitch(statement, field, scope) : undefined;
+};
+
 const scanEarlyExits = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan =>
-  statements
-    .map(exitGuard)
-    .filter((guard): guard is ExitGuard => guard !== undefined)
-    .reduce<GuardScan>(
-      (scan, guard) => {
-        if (scan === 'unknown') return scan;
-        const evaluation = evaluateCondition(guard.condition, field, scope);
-        const continuation = scanEarlyExits(statementsUntilOverwrite(guard.continuation, field), field, scope);
-        if (evaluation === 'unknown' || continuation === 'unknown') return 'unknown';
-        return {
-          allowed: intersect(intersect(scan.allowed, evaluation[guard.passesWhen]), continuation.allowed),
-          recognised: new Set([...scan.recognised, guard.condition, ...continuation.recognised]),
-        };
-      },
-      { allowed: guardUniverse(field), recognised: new Set<Node>() },
-    );
+  statements.reduce<GuardScan>(
+    (scan, statement) => {
+      if (scan === 'unknown') return scan;
+      const step = scanExitStep(statement, field, scope);
+      return step === undefined ? scan : narrow(scan, step);
+    },
+    { allowed: guardUniverse(field), recognised: new Set<Node>() },
+  );
+
+const soleFieldSwitch = (statements: readonly Statement[], field: StateField): SwitchStatement | undefined => {
+  const [only] = statements;
+  return statements.length === 1 && only !== undefined && isFieldSwitch(only, field) ? only : undefined;
+};
+
+const scanWorkGroup = (group: SwitchGroup, field: StateField, scope: AggregateScope): GuardScan => {
+  const inner = scanStatements(statementsUntilOverwrite(group.work, field), field, scope);
+  return inner === 'unknown' ? inner : { allowed: intersect(group.tokens, inner.allowed), recognised: inner.recognised };
+};
+
+const joinWorkGroups = (scan: GuardScan, inner: GuardScan): GuardScan =>
+  scan === 'unknown' || inner === 'unknown'
+    ? 'unknown'
+    : { allowed: union(scan.allowed, inner.allowed), recognised: new Set([...scan.recognised, ...inner.recognised]) };
+
+const scanSwitchWrapper = (statement: SwitchStatement, field: StateField, scope: AggregateScope): GuardScan => {
+  const read = readFieldSwitch(statement, field, scope);
+  if (read === 'unknown') return read;
+  const workGroups = read.groups.filter((group) => group.kind === 'work');
+  if (workGroups.length === 0) return exitSwitchScan(read, field);
+  return workGroups
+    .map((group) => scanWorkGroup(group, field, scope))
+    .reduce<GuardScan>(joinWorkGroups, { allowed: new Set<string>(), recognised: new Set(read.recognised) });
+};
 
 const scanStatements = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan => {
   const wrapper = wrappingGuard(statements);
-  return wrapper ? scanWrapper(wrapper, field, scope) : scanEarlyExits(statements, field, scope);
+  if (wrapper) return scanWrapper(wrapper, field, scope);
+  const fieldSwitch = soleFieldSwitch(statements, field);
+  return fieldSwitch ? scanSwitchWrapper(fieldSwitch, field, scope) : scanEarlyExits(statements, field, scope);
 };
 
 export const methodSources = (method: MethodDeclaration, field: StateField, scope: AggregateScope): Sources => {

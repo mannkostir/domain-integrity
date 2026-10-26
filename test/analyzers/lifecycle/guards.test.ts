@@ -238,6 +238,43 @@ export class Permit extends AggregateRoot<{ status: Status; closedAt: Date | nul
   pausedElseThrow(): void { if (!this.paused) { this.props.note = 'x'; } else { throw new Error('x'); } }
 }
 `,
+  '/src/ledger.ts': `
+import { AggregateRoot } from './aggregate-root';
+export enum Status { draft = 'DRAFT', open = 'OPEN', closed = 'CLOSED' }
+function throwClosed(): never { throw new Error('closed'); }
+export class Ledger extends AggregateRoot<{ status: Status; other: Status; phase: 'draft' | 'live' | 'retired'; closedAt: Date | null; endedAt: Date | null | undefined; note: string }> {
+  private currentClosed(): Status.closed { return this.props.status === Status.closed ? Status.closed : Status.closed; }
+  fallthroughExits(): void { switch (this.props.status) { case Status.draft: case Status.closed: return; } this.props.note = 'x'; }
+  breakThenDefaultThrow(): void { switch (this.props.status) { case Status.draft: break; default: throw new Error('x'); } this.props.note = 'x'; }
+  defaultInMiddle(): void { switch (this.props.status) { case Status.open: break; default: throw new Error('x'); case Status.draft: break; } this.props.note = 'x'; }
+  duplicateLabel(): void { switch (this.props.status) { case Status.open: break; case Status.open: throw new Error('x'); case Status.closed: throw new Error('x'); } this.props.note = 'x'; }
+  blockClause(): void { switch (this.props.status) { case Status.closed: { throw new Error('x'); } } this.props.note = 'x'; }
+  afterEarlyExit(): void { if (this.props.status === Status.closed) return; switch (this.props.status) { case Status.draft: throw new Error('x'); } this.props.note = 'x'; }
+  inElseBranch(): void { if (this.props.status === Status.closed) throw new Error('x'); else { switch (this.props.status) { case Status.draft: return; } this.props.note = 'x'; } }
+  wrapperTwoWorkGroups(): void { switch (this.props.status) { case Status.draft: this.props.note = 'a'; break; case Status.open: this.props.note = 'b'; break; default: throw new Error('x'); } }
+  wrapperWithPassGroup(): void { switch (this.props.status) { case Status.draft: this.props.note = 'a'; break; case Status.open: this.props.note = 'b'; break; case Status.closed: break; } }
+  wrapperLastGroupWithoutBreak(): void { switch (this.props.status) { case Status.draft: break; default: this.props.note = 'x'; } }
+  wrapperNestedGuard(): void { switch (this.props.status) { case Status.draft: case Status.open: if (this.props.status === Status.draft) throwClosed(); this.props.note = 'x'; break; default: throw new Error('x'); } }
+  wrapperTransitions(): void { switch (this.props.status) { case Status.draft: this.props.status = Status.open; break; case Status.open: this.props.status = Status.closed; break; default: throw new Error('x'); } }
+  closedNullCase(): void { switch (this.props.closedAt) { case null: throw new Error('x'); } this.props.note = 'x'; }
+  endedNullCase(): void { switch (this.props.endedAt) { case null: throw new Error('x'); } this.props.note = 'x'; }
+  phaseRetiredCase(): void { switch (this.props.phase) { case 'retired': throw new Error('x'); } this.props.note = 'x'; }
+  switchOnTrue(): void { switch (true) { case this.props.status === Status.closed: return; } this.props.note = 'x'; }
+  nonLiteralLabel(other: Status): void { switch (this.props.status) { case other: throw new Error('x'); } this.props.note = 'x'; }
+  labelReadsField(): void { switch (this.props.status) { case this.currentClosed(): throw new Error('x'); } this.props.note = 'x'; }
+  workFallsIntoExit(): void { switch (this.props.status) { case Status.draft: this.props.note = 'x'; case Status.closed: throw new Error('x'); } this.props.note = 'y'; }
+  emptyBlockFallsThrough(): void { switch (this.props.status) { case Status.draft: {} case Status.closed: throw new Error('x'); } this.props.note = 'y'; }
+  workReturns(): void { switch (this.props.status) { case Status.draft: this.props.note = 'x'; return; } this.props.note = 'y'; }
+  workThenThrows(): void { switch (this.props.status) { default: break; case Status.draft: this.props.note = 'x'; throw new Error('x'); } }
+  labelledBreak(flag: boolean): void { switch (this.props.status) { case Status.draft: block: { if (flag) break block; this.props.note = 'x'; } break; case Status.closed: throw new Error('x'); } }
+  workReadsFieldBeforeMoreWork(): void { switch (this.props.status) { case Status.draft: this.props.note = String(this.props.status); break; case Status.closed: throw new Error('x'); } this.props.note = 'y'; }
+  workAssignsThenReads(): void { switch (this.props.status) { case Status.draft: this.props.status = Status.open; this.props.note = String(this.props.status); break; default: throw new Error('x'); } }
+  workAssignsThenGuards(): void { switch (this.props.status) { case Status.draft: this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); break; default: throw new Error('x'); } }
+  readsAfterAssigningSwitch(): void { switch (this.props.status) { case Status.draft: this.props.status = Status.open; break; default: throw new Error('x'); } this.props.note = String(this.props.status); }
+  localCopy(): void { const s = this.props.status; switch (s) { case Status.closed: throw new Error('x'); } this.props.note = 'x'; }
+  otherFieldSwitch(): void { switch (this.props.other) { case Status.closed: this.props.note = String(this.props.status); break; } }
+}
+`,
 });
 
 const ticket = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('Ticket');
@@ -576,5 +613,58 @@ describe('methodSources with an if/else guard whose one branch exits', () => {
 
   it('pausedElseThrow can run only while a boolean field is false', () => {
     expect(sourcesOf('pausedElseThrow', 'paused')).toEqual(['false']);
+  });
+});
+
+describe('methodSources with a switch on the state field', () => {
+  const ledger = project.getSourceFileOrThrow('/src/ledger.ts').getClassOrThrow('Ledger');
+  const sourcesOf = (method: string, field: string) =>
+    describeSources(methodSources(ledger.getMethodOrThrow(method), resolvedField(ledger, field), defaultScope(ledger)));
+
+  it.each([
+    ['fallthroughExits', ['OPEN']],
+    ['breakThenDefaultThrow', ['DRAFT']],
+    ['defaultInMiddle', ['DRAFT', 'OPEN']],
+    ['duplicateLabel', ['DRAFT', 'OPEN']],
+    ['blockClause', ['DRAFT', 'OPEN']],
+    ['afterEarlyExit', ['OPEN']],
+    ['inElseBranch', ['OPEN']],
+    ['wrapperTwoWorkGroups', ['DRAFT', 'OPEN']],
+    ['wrapperWithPassGroup', ['DRAFT', 'OPEN']],
+    ['wrapperLastGroupWithoutBreak', ['CLOSED', 'OPEN']],
+    ['wrapperNestedGuard', ['OPEN']],
+    ['wrapperTransitions', ['DRAFT', 'OPEN']],
+  ])('%s can run from %j for an enum field', (method, expected) => {
+    expect(sourcesOf(method, 'status')).toEqual(expected);
+  });
+
+  it.each([
+    'switchOnTrue',
+    'nonLiteralLabel',
+    'labelReadsField',
+    'workFallsIntoExit',
+    'emptyBlockFallsThrough',
+    'workReturns',
+    'workThenThrows',
+    'labelledBreak',
+    'workReadsFieldBeforeMoreWork',
+    'workAssignsThenReads',
+    'workAssignsThenGuards',
+    'readsAfterAssigningSwitch',
+    'localCopy',
+    'otherFieldSwitch',
+  ])('%s leaves the sources unknown', (method) => {
+    expect(sourcesOf(method, 'status')).toEqual('unknown');
+  });
+
+  it.each([
+    ['closedNullCase', 'closedAt', ['set']],
+    ['endedNullCase', 'endedAt', 'unknown'],
+  ])('%s switching on the nullable field %s can run from %j', (method, field, expected) => {
+    expect(sourcesOf(method, field)).toEqual(expected);
+  });
+
+  it('phaseRetiredCase can run from the other members of a string-literal union field', () => {
+    expect(sourcesOf('phaseRetiredCase', 'phase')).toEqual(['draft', 'live']);
   });
 });
