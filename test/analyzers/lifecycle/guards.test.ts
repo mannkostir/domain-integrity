@@ -170,8 +170,15 @@ export class Meter extends AggregateRoot<{ reading: number | null; code: string 
 import { AggregateRoot } from './aggregate-root';
 export enum Stage { draft = 'DRAFT', open = 'OPEN', closed = 'CLOSED' }
 const CLOSED_STAGES = [Stage.closed];
-export class Rota extends AggregateRoot<{ stage: Stage; phase: 'draft' | 'live' | 'retired'; closedAt: Date | null; endedAt: Date | null | undefined; note: string }> {
+export class Rota extends AggregateRoot<{ stage: Stage; phase: 'draft' | 'live' | 'retired'; closedAt: Date | null; endedAt: Date | null | undefined; cancelledAt?: Date | null; note: string }> {
   private readonly blocked: Stage[] = [Stage.closed];
+  private paused = false;
+  private get isClosed(): boolean { return [Stage.closed].includes(this.props.stage); }
+  private closeIt(): Stage.closed { this.props.stage = Stage.closed; return Stage.closed; }
+  viaIncludesGetter(): void { if (this.isClosed) return; this.props.note = 'x'; }
+  elementWritesField(): void { if ([this.closeIt()].includes(this.props.stage)) return; this.props.note = 'x'; }
+  pausedIncludesReturn(): void { if ([true].includes(this.paused)) return; this.props.note = 'x'; }
+  cancelledBothIncludesReturn(): void { if ([null, undefined].includes(this.props.cancelledAt)) return; this.props.note = 'x'; }
   includesThrow(): void { if ([Stage.closed].includes(this.props.stage)) throw new Error('x'); this.props.note = 'x'; }
   negatedIncludesReturn(): void { if (!([Stage.draft, Stage.open].includes(this.props.stage))) return; this.props.note = 'x'; }
   bareNegatedIncludesReturn(): void { if (![Stage.open].includes(this.props.stage)) return; this.props.note = 'x'; }
@@ -429,6 +436,7 @@ describe('methodSources with an array-literal includes guard', () => {
     ['satisfiesReceiver', ['DRAFT', 'OPEN']],
     ['assertedReceiver', ['DRAFT', 'OPEN']],
     ['nonNullReceiver', ['DRAFT', 'OPEN']],
+    ['viaIncludesGetter', ['DRAFT', 'OPEN']],
   ])('%s can run from %j for an enum field', (method, expected) => {
     expect(sourcesOf(method, 'stage')).toEqual(expected);
   });
@@ -446,6 +454,7 @@ describe('methodSources with an array-literal includes guard', () => {
     'stringIncludes',
     'reversedIncludes',
     'wrappedArgument',
+    'elementWritesField',
   ])('%s leaves the sources unknown', (method) => {
     expect(sourcesOf(method, 'stage')).toEqual('unknown');
   });
@@ -455,6 +464,7 @@ describe('methodSources with an array-literal includes guard', () => {
     ['closedDateIncludesReturn', 'closedAt', 'unknown'],
     ['endedBothIncludesReturn', 'endedAt', ['set']],
     ['endedNullIncludesReturn', 'endedAt', 'unknown'],
+    ['cancelledBothIncludesReturn', 'cancelledAt', ['set']],
   ])('%s reading the nullable field %s can run from %j', (method, field, expected) => {
     expect(sourcesOf(method, field)).toEqual(expected);
   });
@@ -466,25 +476,37 @@ describe('methodSources with an array-literal includes guard', () => {
   ])('%s can run from %j for a string-literal union field', (method, expected) => {
     expect(sourcesOf(method, 'phase')).toEqual(expected);
   });
+
+  it('pausedIncludesReturn can run only while a boolean field is false', () => {
+    expect(sourcesOf('pausedIncludesReturn', 'paused')).toEqual(['false']);
+  });
 });
 
-describe('methodSources with an includes the project redeclares', () => {
-  it('leaves the sources unknown when includes is not only a library declaration', () => {
-    const augmented = inMemoryProject({
-      '/src/aggregate-root.ts': AGGREGATE_ROOT,
-      '/src/array-includes.ts': `
-declare global {
-  interface Array<T> { includes(searchElement: T, fromIndex?: number): boolean; }
-}
-export {};
-`,
-      '/src/rota.ts': `
+const ROTA_WITH_INCLUDES_GUARD = `
 import { AggregateRoot } from './aggregate-root';
 export enum Stage { draft = 'DRAFT', open = 'OPEN', closed = 'CLOSED' }
 export class Rota extends AggregateRoot<{ stage: Stage; note: string }> {
   includesReturn(): void { if ([Stage.closed].includes(this.props.stage)) return; this.props.note = 'x'; }
 }
-`,
+`;
+
+describe('methodSources with an includes the project redeclares', () => {
+  it.each([
+    [
+      'a module augmentation',
+      '/src/array-includes.ts',
+      'declare global { interface Array<T> { includes(searchElement: T, fromIndex?: number): boolean; } }\nexport {};',
+    ],
+    [
+      'a global declaration file',
+      '/src/global.d.ts',
+      'interface Array<T> { includes(searchElement: T, fromIndex?: number): boolean; }',
+    ],
+  ])('leaves the sources unknown when %s redeclares includes', (_, path, declaration) => {
+    const augmented = inMemoryProject({
+      '/src/aggregate-root.ts': AGGREGATE_ROOT,
+      [path]: declaration,
+      '/src/rota.ts': ROTA_WITH_INCLUDES_GUARD,
     });
     const rota = augmented.getSourceFileOrThrow('/src/rota.ts').getClassOrThrow('Rota');
     expect(describeSources(methodSources(rota.getMethodOrThrow('includesReturn'), resolvedField(rota, 'stage'), defaultScope(rota)))).toEqual('unknown');

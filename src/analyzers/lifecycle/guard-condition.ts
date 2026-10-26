@@ -1,6 +1,6 @@
 import { BinaryExpression, CallExpression, Expression, Node, PropertyAccessExpression, SyntaxKind } from 'ts-morph';
 import { SET, literalToken } from '../../engine/value-token';
-import { isLibraryNode } from '../shared/library';
+import { isDefaultLibraryNode } from '../shared/library';
 import { unwrap } from '../shared/wrappers';
 import { AggregateScope, fieldNameOf, referencesField, thisGetterExpression } from './field-ref';
 import { comparedUnsetTokens, guardUniverse, unsetGuardTokens } from './guard-tokens';
@@ -60,16 +60,21 @@ const includesMember = (node: CallExpression): PropertyAccessExpression | undefi
 
 const isLibraryMember = (member: PropertyAccessExpression): boolean => {
   const declarations = member.getNameNode().getSymbol()?.getDeclarations() ?? [];
-  return declarations.length > 0 && declarations.every(isLibraryNode);
+  return declarations.length > 0 && declarations.every(isDefaultLibraryNode);
 };
 
-const elementTokens = (element: Expression, field: StateField): ReadonlySet<string> | undefined =>
-  Node.isSpreadElement(element) || Node.isOmittedExpression(element) ? undefined : comparedTokens(element, field, true);
+export const strictTokens = (node: Expression, field: StateField): ReadonlySet<string> | undefined =>
+  comparedTokens(node, field, true);
 
-const includedTokens = (receiver: Expression, field: StateField): ReadonlySet<string> | undefined => {
+const elementTokens = (element: Expression, field: StateField, scope: AggregateScope): ReadonlySet<string> | undefined =>
+  Node.isSpreadElement(element) || Node.isOmittedExpression(element) || referencesField(element, field.name, scope)
+    ? undefined
+    : strictTokens(element, field);
+
+const includedTokens = (receiver: Expression, field: StateField, scope: AggregateScope): ReadonlySet<string> | undefined => {
   const array = unwrap(receiver);
   if (!Node.isArrayLiteralExpression(array)) return undefined;
-  const elements = array.getElements().map((element) => elementTokens(element, field));
+  const elements = array.getElements().map((element) => elementTokens(element, field, scope));
   return elements.every((tokens) => tokens !== undefined)
     ? elements.reduce<ReadonlySet<string>>((all, tokens) => union(all, tokens), new Set())
     : undefined;
@@ -86,10 +91,10 @@ const isFollowedIncludes = (node: CallExpression, member: PropertyAccessExpressi
   isLibraryMember(member) &&
   searchesField(node, field);
 
-const evaluateIncludes = (node: CallExpression, field: StateField): Evaluation => {
+const evaluateIncludes = (node: CallExpression, field: StateField, scope: AggregateScope): Evaluation => {
   const member = includesMember(node);
   if (member === undefined || !isFollowedIncludes(node, member, field)) return 'unknown';
-  const included = includedTokens(member.getExpression(), field);
+  const included = includedTokens(member.getExpression(), field, scope);
   return included === undefined ? 'unknown' : { whenTrue: included, whenFalse: difference(guardUniverse(field), included) };
 };
 
@@ -116,7 +121,7 @@ export const evaluateCondition = (node: Expression, field: StateField, scope: Ag
     return negate(evaluateCondition(node.getOperand(), field, scope, depth));
   }
   if (Node.isBinaryExpression(node)) return evaluateBinary(node, field, scope, depth);
-  if (Node.isCallExpression(node)) return evaluateIncludes(node, field);
+  if (Node.isCallExpression(node)) return evaluateIncludes(node, field, scope);
   if (fieldNameOf(node) === field.name) return truthiness(field);
   const getter = depth < MAX_GETTER_DEPTH ? thisGetterExpression(node, scope.cls) : undefined;
   return getter === undefined ? 'unknown' : evaluateCondition(getter, field, scope, depth + 1);
