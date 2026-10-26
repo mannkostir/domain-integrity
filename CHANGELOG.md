@@ -44,6 +44,7 @@ All notable changes to this project are documented here; the format follows [Kee
 ### Fixed
 
 - On Windows, the tsconfig and its project references are read correctly, and the paths the CLI prints use forward slashes, as on other systems. (#111)
+- A guard that follows a conditional assignment to the state field, such as `if (flag) this.status = Status.open; if (this.status !== Status.open) throw …`, no longer narrows the states a method can run from, and inside an `if` that wraps the whole method, guards after a plain assignment to the field are ignored as they are at the top level. Both used to narrow the method's sources to the assigned value, or to none, which could report a false `transition-missing` and hide `terminal-state-leak` and `transition-drift` findings; such a method's sources are now unknown, or limited by the guards before the assignment. (#PR)
 
 ## [0.2.1] - 2026-10-14
 

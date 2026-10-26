@@ -235,6 +235,11 @@ export class Permit extends AggregateRoot<{ status: Status; closedAt: Date | nul
   partialElseIf(flag: boolean): void { if (this.props.status !== Status.closed) { this.props.note = 'x'; } else if (flag) throw new Error('x'); }
   unknownCondition(): void { if (this.isClosed()) throw new Error('x'); else { this.props.note = 'x'; } }
   closedElseThrow(): void { if (this.props.closedAt === null) { throw new Error('x'); } else { this.props.note = 'x'; } }
+  wrapperAssignsThenGuards(): void { if (this.props.status === Status.draft) { this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); } }
+  wrapperConditionalWriteThenGuard(flag: boolean): void { if (this.props.status === Status.draft) { if (flag) this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); } }
+  conditionalWriteThenGuard(flag: boolean): void { if (flag) this.props.status = Status.open; if (this.props.status !== Status.open) throw new Error('x'); this.props.note = 'x'; }
+  elseIfWriteThenGuard(flag: boolean): void { if (this.props.status === Status.closed) throw new Error('x'); else if (flag) this.props.status = Status.open; if (this.props.status !== Status.open) throw new Error('x'); this.props.note = 'x'; }
+  elseBranchWriteThenGuard(flag: boolean): void { if (this.props.status === Status.closed) throw new Error('x'); else { if (flag) this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); this.props.note = 'x'; } }
   pausedElseThrow(): void { if (!this.paused) { this.props.note = 'x'; } else { throw new Error('x'); } }
 }
 `,
@@ -275,6 +280,9 @@ export class Ledger extends AggregateRoot<{ status: Status; other: Status; phase
   reopen(admin: boolean): void { if (!admin) throw new Error('x'); switch (this.props.status) { case Status.closed: this.props.status = Status.open; break; } }
   workAfterEarlyExit(): void { if (this.props.status === Status.closed) return; switch (this.props.status) { case Status.draft: this.props.note = 'x'; break; } }
   workAfterInnerBreak(): void { switch (this.props.status) { case Status.closed: break; this.props.note = 'x'; break; case Status.draft: this.props.note = 'y'; break; } }
+  forcedWriteThenGuard(force: boolean): void { switch (this.props.status) { case Status.draft: if (force) { this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); } break; default: throw new Error('x'); } }
+  workWriteThenGuard(flag: boolean): void { switch (this.props.status) { case Status.draft: if (flag) this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); break; default: throw new Error('x'); } }
+  workWriteThenLaterGuard(): void { switch (this.props.status) { case Status.draft: this.props.status = Status.open; break; default: throw new Error('x'); } if (this.props.status !== Status.open) throwClosed(); }
   otherFieldSwitch(): void { switch (this.props.other) { case Status.closed: this.props.note = String(this.props.status); break; } }
 }
 `,
@@ -594,6 +602,7 @@ describe('methodSources with an if/else guard whose one branch exits', () => {
     ['earlyExitAfter', ['OPEN']],
     ['nestedEarlyExit', ['OPEN']],
     ['guardAfterElseAssignment', ['DRAFT', 'OPEN']],
+    ['wrapperAssignsThenGuards', ['DRAFT']],
   ])('%s can run from %j for an enum field', (method, expected) => {
     expect(sourcesOf(method, 'status')).toEqual(expected);
   });
@@ -606,6 +615,10 @@ describe('methodSources with an if/else guard whose one branch exits', () => {
     'partialElseIf',
     'unknownCondition',
     'branchGuardAfterAssignment',
+    'wrapperConditionalWriteThenGuard',
+    'conditionalWriteThenGuard',
+    'elseIfWriteThenGuard',
+    'elseBranchWriteThenGuard',
   ])('%s leaves the sources unknown', (method) => {
     expect(sourcesOf(method, 'status')).toEqual('unknown');
   });
@@ -637,6 +650,7 @@ describe('methodSources with a switch on the state field', () => {
     ['wrapperLastGroupWithoutBreak', ['CLOSED', 'OPEN']],
     ['wrapperNestedGuard', ['OPEN']],
     ['wrapperTransitions', ['DRAFT', 'OPEN']],
+    ['forcedWriteThenGuard', ['DRAFT']],
   ])('%s can run from %j for an enum field', (method, expected) => {
     expect(sourcesOf(method, 'status')).toEqual(expected);
   });
@@ -659,6 +673,8 @@ describe('methodSources with a switch on the state field', () => {
     'reopen',
     'workAfterEarlyExit',
     'workAfterInnerBreak',
+    'workWriteThenGuard',
+    'workWriteThenLaterGuard',
   ])('%s leaves the sources unknown', (method) => {
     expect(sourcesOf(method, 'status')).toEqual('unknown');
   });

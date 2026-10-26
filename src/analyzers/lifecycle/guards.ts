@@ -108,11 +108,13 @@ const wrappingGuard = (statements: readonly Statement[]): IfStatement | undefine
 
 const scanWrapper = (wrapper: IfStatement, field: StateField, scope: AggregateScope): GuardScan => {
   const evaluation = evaluateCondition(wrapper.getExpression(), field, scope);
-  const inner = scanStatements(branchStatements(wrapper.getThenStatement()), field, scope);
+  const body = branchStatements(wrapper.getThenStatement());
+  const considered = statementsUntilOverwrite(body, field);
+  const inner = scanStatements(considered, field, scope);
   if (evaluation === 'unknown' || inner === 'unknown') return 'unknown';
   return {
     allowed: intersect(evaluation.whenTrue, inner.allowed),
-    recognised: new Set([wrapper.getExpression(), ...inner.recognised]),
+    recognised: new Set([wrapper.getExpression(), ...inner.recognised, ...body.slice(considered.length)]),
   };
 };
 
@@ -147,12 +149,17 @@ const scanExitStep = (statement: Statement, field: StateField, scope: AggregateS
   return isFieldSwitch(statement, field) ? scanSwitchStep(statement, field, scope) : undefined;
 };
 
+const mayAssignField = (statement: Statement, field: StateField): boolean =>
+  [statement, ...statement.getDescendants()].some((node) => isFieldAssignment(node, field));
+
 const scanEarlyExits = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan =>
   statements.reduce<GuardScan>(
-    (scan, statement) => {
+    (scan, statement, index) => {
       if (scan === 'unknown') return scan;
       const step = scanExitStep(statement, field, scope);
-      return step === undefined ? scan : narrow(scan, step);
+      if (step === undefined) return scan;
+      const followsWrite = statements.slice(0, index).some((earlier) => mayAssignField(earlier, field));
+      return followsWrite ? 'unknown' : narrow(scan, step);
     },
     { allowed: guardUniverse(field), recognised: new Set<Node>() },
   );
