@@ -286,6 +286,95 @@ export class Ledger extends AggregateRoot<{ status: Status; other: Status; phase
   otherFieldSwitch(): void { switch (this.props.other) { case Status.closed: this.props.note = String(this.props.status); break; } }
 }
 `,
+  '/src/visa-status.ts': `
+export enum Status { draft = 'DRAFT', open = 'OPEN', closed = 'CLOSED' }
+`,
+  '/src/declared-base.d.ts': `
+import { AggregateRoot } from './aggregate-root';
+import { Status } from './visa-status';
+export declare abstract class DeclaredBase extends AggregateRoot<{ status: Status; note: string }> {
+  protected assertNotClosed(): void;
+}
+`,
+  '/src/visa.ts': `
+import { AggregateRoot } from './aggregate-root';
+import { DeclaredBase } from './declared-base';
+import { Status } from './visa-status';
+function throwClosed(): never { throw new Error('closed'); }
+function log(): void {}
+export class VisaBase extends AggregateRoot<{ status: Status; note: string }> {
+  protected assertNotClosed(): void { if (this.props.status === Status.closed) throw new Error('closed'); }
+}
+export class Visa extends VisaBase {
+  static assertOpenStatic(visa: Visa): void { if (visa.props.status === Status.closed) throw new Error('x'); }
+  static assertStatic(): void { if (this.props.status === Status.closed) throw new Error('x'); }
+  private assertNotDraft(): void { if (this.props.status === Status.draft) throw new Error('draft'); }
+  private assertElseThrow(): void { if (this.props.status === Status.closed) throw new Error('x'); else if (this.props.status === Status.draft) throwClosed(); }
+  private assertSwitch(): void { switch (this.props.status) { case Status.closed: throw new Error('x'); default: break; } }
+  private assertEditable(): void { this.assertNotClosed(); this.assertNotDraft(); }
+  private assertNotClosedFor(reason: string): void { if (this.props.status === Status.closed) throw new Error(reason); }
+  private assertIncludes(): void { if ([Status.closed].includes(this.props.status)) throw new Error('x'); }
+  private assertOverloaded(): void;
+  private assertOverloaded(reason?: string): void { if (this.props.status === Status.closed) throw new Error(reason); }
+  private assertReturns(): void { if (this.props.status === Status.closed) return; }
+  private async assertAsync(): Promise<void> { if (this.props.status === Status.closed) throw new Error('x'); }
+  private *assertGenerator(): Generator<void> { if (this.props.status === Status.closed) throw new Error('x'); }
+  private assertArrow = (): void => { if (this.props.status === Status.closed) throw new Error('x'); };
+  private assertLogsFirst(): void { log(); if (this.props.status === Status.closed) throw new Error('x'); }
+  private assertLogsInBranch(): void { if (this.props.status === Status.closed) { log(); throw new Error('x'); } }
+  private assertThenAssigns(): void { if (this.props.status === Status.closed) throw new Error('x'); this.props.status = Status.open; }
+  private assertMessageReads(): void { if (this.props.status === Status.closed) throw new Error(String(this.props.status)); }
+  private assertRecursive(): void { if (this.props.status === Status.closed) throw new Error('x'); this.assertRecursive(); }
+  private assertIs(value: Status): void { if (value === Status.closed) throw new Error('x'); }
+  private assertNot(value: Status): void { if (this.props.status === value) throw new Error('x'); }
+  private assertWrapping(): void { if (this.props.status !== Status.closed) { log(); } }
+  private assertSwitchReturns(): void { switch (this.props.status) { case Status.closed: return; } }
+  private assertCallsLogging(): void { this.assertLogsFirst(); }
+  private assertDefaultReads(value = this.props.status): void { if (this.props.status === Status.closed) throw new Error(value); }
+  viaPrivate(): void { this.assertNotDraft(); this.props.note = 'x'; }
+  viaInherited(): void { this.assertNotClosed(); this.props.note = 'x'; }
+  viaElseThrow(): void { this.assertElseThrow(); this.props.note = 'x'; }
+  viaSwitch(): void { this.assertSwitch(); this.props.note = 'x'; }
+  viaNested(): void { this.assertEditable(); this.props.note = 'x'; }
+  viaUnusedParameter(): void { this.assertNotClosedFor('rename'); this.props.note = 'x'; }
+  viaContinuation(): void { if (this.props.status === Status.draft) throw new Error('x'); else { this.assertNotClosed(); this.props.note = 'x'; } }
+  viaHelperAndExit(): void { if (this.props.status === Status.draft) return; this.assertNotClosed(); this.props.note = 'x'; }
+  viaIncludes(): void { this.assertIncludes(); this.props.note = 'x'; }
+  viaOverloaded(): void { this.assertOverloaded(); this.props.note = 'x'; }
+  viaWrapperBody(): void { if (this.props.status !== Status.draft) { this.assertNotClosed(); this.props.note = 'x'; } }
+  viaReturning(): void { this.assertReturns(); this.props.note = 'x'; }
+  viaAsync(): void { this.assertAsync(); this.props.note = 'x'; }
+  viaGenerator(): void { this.assertGenerator(); this.props.note = 'x'; }
+  viaStaticByName(): void { Visa.assertOpenStatic(this); this.props.note = 'x'; }
+  viaStaticThroughThis(): void { this.assertStatic(); this.props.note = 'x'; }
+  viaArrow(): void { this.assertArrow(); this.props.note = 'x'; }
+  viaLogsFirst(): void { this.assertLogsFirst(); this.props.note = 'x'; }
+  viaLogsInBranch(): void { this.assertLogsInBranch(); this.props.note = 'x'; }
+  viaAssigning(): void { this.assertThenAssigns(); this.props.note = 'x'; }
+  viaMessageRead(): void { this.assertMessageReads(); this.props.note = 'x'; }
+  viaRecursive(): void { this.assertRecursive(); this.props.note = 'x'; }
+  async viaAwait(): Promise<void> { await this.assertNotDraft(); this.props.note = 'x'; }
+  viaOptionalCall(): void { this.assertNotDraft?.(); this.props.note = 'x'; }
+  viaFieldArgument(): void { this.assertIs(this.props.status); this.props.note = 'x'; }
+  viaParameterComparison(): void { this.assertNot(Status.closed); this.props.note = 'x'; }
+  viaTry(): void { try { this.assertNotDraft(); } finally { log(); } this.props.note = 'x'; }
+  viaAfterConditionalWrite(flag: boolean): void { if (flag) this.props.status = Status.open; this.assertNotDraft(); this.props.note = 'x'; }
+  viaSuper(): void { super.assertNotClosed(); this.props.note = 'x'; }
+  viaElementAccess(): void { this['assertNotDraft'](); this.props.note = 'x'; }
+  viaWrappingHelper(): void { this.assertWrapping(); this.props.note = 'x'; }
+  viaSwitchReturning(): void { this.assertSwitchReturns(); this.props.note = 'x'; }
+  viaNestedLogging(): void { this.assertCallsLogging(); this.props.note = 'x'; }
+  viaDefaultParameter(): void { this.assertDefaultReads(); this.props.note = 'x'; }
+  viaAssigningArgument(): void { this.assertNotClosedFor(String(this.props.status = Status.open)); this.props.note = 'x'; }
+}
+export abstract class AbstractVisa extends AggregateRoot<{ status: Status; note: string }> {
+  protected abstract assertReady(): void;
+  viaAbstract(): void { this.assertReady(); this.props.note = 'x'; }
+}
+export class DeclaredVisa extends DeclaredBase {
+  viaDeclared(): void { this.assertNotClosed(); this.props.note = 'x'; }
+}
+`,
 });
 
 const ticket = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('Ticket');
@@ -307,7 +396,7 @@ describe('methodSources for an enum field', () => {
     ['localAlias', 'unknown'],
     ['destructured', 'unknown'],
     ['viaMethod', 'unknown'],
-    ['viaAssertion', 'unknown'],
+    ['viaAssertion', ['DRAFT', 'OPEN']],
     ['viaBlockGetter', 'unknown'],
     ['viaPolicy', 'unknown'],
     ['returnsAfterWork', 'unknown'],
@@ -350,7 +439,7 @@ describe('methodSources for an enum field', () => {
     ['readsBeforeAssignment', 'unknown'],
     ['otherAssignmentDoesNotCut', 'unknown'],
     ['assertsAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
-    ['helperBeforeAssignment', 'unknown'],
+    ['helperBeforeAssignment', ['DRAFT', 'OPEN']],
   ])('%s can run from %j', (method, expected) => {
     expect(describeSources(methodSources(ticket.getMethodOrThrow(method), status, defaultScope(ticket)))).toEqual(expected);
   });
@@ -688,5 +777,64 @@ describe('methodSources with a switch on the state field', () => {
 
   it('phaseRetiredCase can run from the other members of a string-literal union field', () => {
     expect(sourcesOf('phaseRetiredCase', 'phase')).toEqual(['draft', 'live']);
+  });
+});
+
+describe('methodSources with an assertion helper call', () => {
+  const sourcesOf = (className: string, method: string) => {
+    const cls = project.getSourceFileOrThrow('/src/visa.ts').getClassOrThrow(className);
+    return describeSources(methodSources(cls.getMethodOrThrow(method), resolvedField(cls, 'status'), defaultScope(cls)));
+  };
+
+  it.each([
+    ['viaPrivate', ['CLOSED', 'OPEN']],
+    ['viaInherited', ['DRAFT', 'OPEN']],
+    ['viaElseThrow', ['OPEN']],
+    ['viaSwitch', ['DRAFT', 'OPEN']],
+    ['viaNested', ['OPEN']],
+    ['viaUnusedParameter', ['DRAFT', 'OPEN']],
+    ['viaContinuation', ['OPEN']],
+    ['viaHelperAndExit', ['OPEN']],
+    ['viaIncludes', ['DRAFT', 'OPEN']],
+    ['viaOverloaded', ['DRAFT', 'OPEN']],
+    ['viaWrapperBody', ['OPEN']],
+  ])('%s can run from %j', (method, expected) => {
+    expect(sourcesOf('Visa', method)).toEqual(expected);
+  });
+
+  it.each([
+    'viaReturning',
+    'viaAsync',
+    'viaGenerator',
+    'viaStaticByName',
+    'viaStaticThroughThis',
+    'viaArrow',
+    'viaLogsFirst',
+    'viaLogsInBranch',
+    'viaAssigning',
+    'viaMessageRead',
+    'viaRecursive',
+    'viaAwait',
+    'viaOptionalCall',
+    'viaFieldArgument',
+    'viaParameterComparison',
+    'viaTry',
+    'viaAfterConditionalWrite',
+    'viaSuper',
+    'viaElementAccess',
+    'viaWrappingHelper',
+    'viaSwitchReturning',
+    'viaNestedLogging',
+    'viaDefaultParameter',
+    'viaAssigningArgument',
+  ])('%s leaves the sources unknown', (method) => {
+    expect(sourcesOf('Visa', method)).toEqual('unknown');
+  });
+
+  it.each([
+    ['AbstractVisa', 'viaAbstract'],
+    ['DeclaredVisa', 'viaDeclared'],
+  ])('%s.%s leaves the sources unknown', (className, method) => {
+    expect(sourcesOf(className, method)).toEqual('unknown');
   });
 });

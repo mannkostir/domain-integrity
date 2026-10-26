@@ -1,5 +1,5 @@
 import { CaseOrDefaultClause, Expression, Node, Statement, SwitchStatement } from 'ts-morph';
-import { branchStatements, isEarlyExit, containsReturnOrThrow } from './early-exit';
+import { ExitKind, branchStatements, isEarlyExit, containsReturnOrThrow } from './early-exit';
 import { AggregateScope, fieldNameOf, referencesField } from './field-ref';
 import { strictTokens } from './guard-condition';
 import { guardUniverse } from './guard-tokens';
@@ -83,9 +83,9 @@ const isLabelledJump = (node: Node): boolean =>
 const leavesGroup = (statement: Statement): boolean =>
   containsReturnOrThrow(statement) || [statement, ...statement.getDescendants()].some(isLabelledJump);
 
-const classify = (statements: readonly Statement[], last: boolean): Classified => {
+const classify = (statements: readonly Statement[], last: boolean, exits: ExitKind): Classified => {
   const body = clauseBody(statements);
-  if (isEarlyExit(body)) return { kind: 'exit', work: [] };
+  if (isEarlyExit(body, exits)) return { kind: 'exit', work: [] };
   const endsInBreak = isPlainBreak(body.at(-1));
   if (!endsInBreak && !last) return 'unknown';
   const work = endsInBreak ? body.slice(0, -1) : body;
@@ -93,9 +93,9 @@ const classify = (statements: readonly Statement[], last: boolean): Classified =
   return work.some(isPlainBreak) || work.some(leavesGroup) ? 'unknown' : { kind: 'work', work };
 };
 
-const classifyRuns = (runs: readonly ClauseRun[]): readonly SwitchGroup[] | 'unknown' => {
+const classifyRuns = (runs: readonly ClauseRun[], exits: ExitKind): readonly SwitchGroup[] | 'unknown' => {
   const groups = runs.map((run, index) => {
-    const classified = classify(run.statements, index === runs.length - 1);
+    const classified = classify(run.statements, index === runs.length - 1, exits);
     return classified === 'unknown' ? classified : { ...classified, tokens: run.tokens };
   });
   return groups.every((group): group is SwitchGroup => group !== 'unknown') ? groups : 'unknown';
@@ -105,11 +105,12 @@ export const readFieldSwitch = (
   statement: SwitchStatement,
   field: StateField,
   scope: AggregateScope,
+  exits: ExitKind,
 ): FieldSwitch | 'unknown' => {
   const clauses = statement.getCaseBlock().getClauses();
   const labelled = resolveLabels(clauses, field, scope);
   if (labelled === 'unknown') return 'unknown';
-  const groups = classifyRuns(firstMatchWins(mergeFallthrough(labelled)));
+  const groups = classifyRuns(firstMatchWins(mergeFallthrough(labelled)), exits);
   if (groups === 'unknown') return 'unknown';
   const caseLabels = clauses.flatMap((clause) => (Node.isCaseClause(clause) ? [clause.getExpression()] : []));
   return { groups, recognised: [statement.getExpression(), ...caseLabels] };

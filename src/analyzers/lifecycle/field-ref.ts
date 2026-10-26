@@ -2,6 +2,7 @@ import {
   CallExpression,
   ClassDeclaration,
   Expression,
+  MethodDeclaration,
   NewExpression,
   Node,
   PropertyAccessExpression,
@@ -272,6 +273,11 @@ const findGetter = (cls: ClassDeclaration, access: Node, name: string) =>
   lookupChain(cls, access)
     .map((candidate) => candidate.getGetAccessor(name))
     .find((accessor) => accessor !== undefined);
+
+export const thisMethodDeclaration = (access: PropertyAccessExpression, cls: ClassDeclaration): MethodDeclaration | undefined => {
+  const member = declaredMember(lookupChain(cls, access), access.getName());
+  return Node.isMethodDeclaration(member) ? member : undefined;
+};
 
 const thisMemberName = (node: Node): string | undefined =>
   (Node.isPropertyAccessExpression(node) || Node.isElementAccessExpression(node)) && isThis(node.getExpression())
