@@ -1,5 +1,7 @@
-import { BinaryExpression, Expression, Node, SyntaxKind } from 'ts-morph';
+import { BinaryExpression, CallExpression, Expression, Node, PropertyAccessExpression, SyntaxKind } from 'ts-morph';
 import { SET, literalToken } from '../../engine/value-token';
+import { isLibraryNode } from '../shared/library';
+import { unwrap } from '../shared/wrappers';
 import { AggregateScope, fieldNameOf, referencesField, thisGetterExpression } from './field-ref';
 import { comparedUnsetTokens, guardUniverse, unsetGuardTokens } from './guard-tokens';
 import { StateField, UnsetForm } from './model';
@@ -51,6 +53,46 @@ const compare = (left: Expression, right: Expression, field: StateField, strict:
   return { whenTrue: matching, whenFalse: difference(guardUniverse(field), matching) };
 };
 
+const includesMember = (node: CallExpression): PropertyAccessExpression | undefined => {
+  const callee = node.getExpression();
+  return Node.isPropertyAccessExpression(callee) && callee.getName() === 'includes' ? callee : undefined;
+};
+
+const isLibraryMember = (member: PropertyAccessExpression): boolean => {
+  const declarations = member.getNameNode().getSymbol()?.getDeclarations() ?? [];
+  return declarations.length > 0 && declarations.every(isLibraryNode);
+};
+
+const elementTokens = (element: Expression, field: StateField): ReadonlySet<string> | undefined =>
+  Node.isSpreadElement(element) || Node.isOmittedExpression(element) ? undefined : comparedTokens(element, field, true);
+
+const includedTokens = (receiver: Expression, field: StateField): ReadonlySet<string> | undefined => {
+  const array = unwrap(receiver);
+  if (!Node.isArrayLiteralExpression(array)) return undefined;
+  const elements = array.getElements().map((element) => elementTokens(element, field));
+  return elements.every((tokens) => tokens !== undefined)
+    ? elements.reduce<ReadonlySet<string>>((all, tokens) => union(all, tokens), new Set())
+    : undefined;
+};
+
+const searchesField = (node: CallExpression, field: StateField): boolean => {
+  const [searched, ...rest] = node.getArguments();
+  return searched !== undefined && rest.length === 0 && fieldNameOf(searched) === field.name;
+};
+
+const isFollowedIncludes = (node: CallExpression, member: PropertyAccessExpression, field: StateField): boolean =>
+  !node.hasQuestionDotToken() &&
+  !member.hasQuestionDotToken() &&
+  isLibraryMember(member) &&
+  searchesField(node, field);
+
+const evaluateIncludes = (node: CallExpression, field: StateField): Evaluation => {
+  const member = includesMember(node);
+  if (member === undefined || !isFollowedIncludes(node, member, field)) return 'unknown';
+  const included = includedTokens(member.getExpression(), field);
+  return included === undefined ? 'unknown' : { whenTrue: included, whenFalse: difference(guardUniverse(field), included) };
+};
+
 const evaluateBinary = (node: BinaryExpression, field: StateField, scope: AggregateScope, depth: number): Evaluation => {
   const operator = node.getOperatorToken().getKind();
   if (operator === SyntaxKind.AmpersandAmpersandToken || operator === SyntaxKind.BarBarToken) {
@@ -74,6 +116,7 @@ export const evaluateCondition = (node: Expression, field: StateField, scope: Ag
     return negate(evaluateCondition(node.getOperand(), field, scope, depth));
   }
   if (Node.isBinaryExpression(node)) return evaluateBinary(node, field, scope, depth);
+  if (Node.isCallExpression(node)) return evaluateIncludes(node, field);
   if (fieldNameOf(node) === field.name) return truthiness(field);
   const getter = depth < MAX_GETTER_DEPTH ? thisGetterExpression(node, scope.cls) : undefined;
   return getter === undefined ? 'unknown' : evaluateCondition(getter, field, scope, depth + 1);

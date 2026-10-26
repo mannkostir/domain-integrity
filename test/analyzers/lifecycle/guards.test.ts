@@ -166,6 +166,44 @@ export class Meter extends AggregateRoot<{ reading: number | null; code: string 
   endedWrapper(): void { if (this.props.endedAt) { this.props.note = 'x'; } }
 }
 `,
+  '/src/rota.ts': `
+import { AggregateRoot } from './aggregate-root';
+export enum Stage { draft = 'DRAFT', open = 'OPEN', closed = 'CLOSED' }
+const CLOSED_STAGES = [Stage.closed];
+export class Rota extends AggregateRoot<{ stage: Stage; phase: 'draft' | 'live' | 'retired'; closedAt: Date | null; endedAt: Date | null | undefined; note: string }> {
+  private readonly blocked: Stage[] = [Stage.closed];
+  includesThrow(): void { if ([Stage.closed].includes(this.props.stage)) throw new Error('x'); this.props.note = 'x'; }
+  negatedIncludesReturn(): void { if (!([Stage.draft, Stage.open].includes(this.props.stage))) return; this.props.note = 'x'; }
+  bareNegatedIncludesReturn(): void { if (![Stage.open].includes(this.props.stage)) return; this.props.note = 'x'; }
+  includesWrapper(): void { if ([Stage.draft, Stage.open].includes(this.props.stage)) { this.props.note = 'x'; } }
+  includesOrComparison(): void { if ([Stage.closed].includes(this.props.stage) || this.props.stage === Stage.draft) return; this.props.note = 'x'; }
+  includesAndComparison(): void { if (this.props.stage !== Stage.open && [Stage.open, Stage.closed].includes(this.props.stage)) return; this.props.note = 'x'; }
+  constReceiver(): void { if (([Stage.closed] as const).includes(this.props.stage)) return; this.props.note = 'x'; }
+  readonlyReceiver(): void { if (([Stage.closed] as readonly Stage[]).includes(this.props.stage)) return; this.props.note = 'x'; }
+  satisfiesReceiver(): void { if (([Stage.closed] satisfies Stage[]).includes(this.props.stage)) return; this.props.note = 'x'; }
+  assertedReceiver(): void { if ((<Stage[]>[Stage.closed]).includes(this.props.stage)) return; this.props.note = 'x'; }
+  nonNullReceiver(): void { if ([Stage.closed]!.includes(this.props.stage)) return; this.props.note = 'x'; }
+  namedArray(): void { if (CLOSED_STAGES.includes(this.props.stage)) return; this.props.note = 'x'; }
+  memberArray(): void { if (this.blocked.includes(this.props.stage)) return; this.props.note = 'x'; }
+  spreadElement(): void { if ([...CLOSED_STAGES].includes(this.props.stage)) return; this.props.note = 'x'; }
+  holeElement(): void { if ([Stage.closed, , Stage.draft].includes(this.props.stage)) return; this.props.note = 'x'; }
+  variableElement(other: Stage): void { if ([Stage.closed, other].includes(this.props.stage)) return; this.props.note = 'x'; }
+  fromIndexArgument(): void { if ([Stage.closed].includes(this.props.stage, 0)) return; this.props.note = 'x'; }
+  optionalReceiver(): void { if ([Stage.closed]?.includes(this.props.stage)) return; this.props.note = 'x'; }
+  optionalCall(): void { if ([Stage.closed].includes?.(this.props.stage)) return; this.props.note = 'x'; }
+  viaIndexOf(): void { if ([Stage.closed].indexOf(this.props.stage) !== -1) return; this.props.note = 'x'; }
+  stringIncludes(): void { if ('CLOSED'.includes(this.props.stage)) return; this.props.note = 'x'; }
+  reversedIncludes(): void { if ([this.props.stage].includes(Stage.closed)) return; this.props.note = 'x'; }
+  wrappedArgument(): void { if ([Stage.closed].includes(this.props.stage as Stage)) return; this.props.note = 'x'; }
+  closedNullIncludesReturn(): void { if ([null].includes(this.props.closedAt)) return; this.props.note = 'x'; }
+  closedDateIncludesReturn(): void { if ([new Date()].includes(this.props.closedAt)) return; this.props.note = 'x'; }
+  endedBothIncludesReturn(): void { if ([null, undefined].includes(this.props.endedAt)) return; this.props.note = 'x'; }
+  endedNullIncludesReturn(): void { if ([null].includes(this.props.endedAt)) return; this.props.note = 'x'; }
+  phaseIncludesThrow(): void { if (['retired'].includes(this.props.phase)) throw new Error('x'); this.props.note = 'x'; }
+  phaseNegatedIncludesReturn(): void { if (!['draft', 'live'].includes(this.props.phase)) return; this.props.note = 'x'; }
+  phaseForeignLiteral(): void { if (['archived'].includes(this.props.phase)) return; this.props.note = 'x'; }
+}
+`,
 });
 
 const ticket = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('Ticket');
@@ -371,5 +409,84 @@ describe('methodSources for a nullable field whose set values may be falsy', () 
     ['endedWrapper', ['set']],
   ])('%s can run from %j when a date field includes null and undefined', (method, expected) => {
     expect(sourcesOf(method, 'endedAt')).toEqual(expected);
+  });
+});
+
+describe('methodSources with an array-literal includes guard', () => {
+  const rota = project.getSourceFileOrThrow('/src/rota.ts').getClassOrThrow('Rota');
+  const sourcesOf = (method: string, field: string) =>
+    describeSources(methodSources(rota.getMethodOrThrow(method), resolvedField(rota, field), defaultScope(rota)));
+
+  it.each([
+    ['includesThrow', ['DRAFT', 'OPEN']],
+    ['negatedIncludesReturn', ['DRAFT', 'OPEN']],
+    ['bareNegatedIncludesReturn', ['OPEN']],
+    ['includesWrapper', ['DRAFT', 'OPEN']],
+    ['includesOrComparison', ['OPEN']],
+    ['includesAndComparison', ['DRAFT', 'OPEN']],
+    ['constReceiver', ['DRAFT', 'OPEN']],
+    ['readonlyReceiver', ['DRAFT', 'OPEN']],
+    ['satisfiesReceiver', ['DRAFT', 'OPEN']],
+    ['assertedReceiver', ['DRAFT', 'OPEN']],
+    ['nonNullReceiver', ['DRAFT', 'OPEN']],
+  ])('%s can run from %j for an enum field', (method, expected) => {
+    expect(sourcesOf(method, 'stage')).toEqual(expected);
+  });
+
+  it.each([
+    'namedArray',
+    'memberArray',
+    'spreadElement',
+    'holeElement',
+    'variableElement',
+    'fromIndexArgument',
+    'optionalReceiver',
+    'optionalCall',
+    'viaIndexOf',
+    'stringIncludes',
+    'reversedIncludes',
+    'wrappedArgument',
+  ])('%s leaves the sources unknown', (method) => {
+    expect(sourcesOf(method, 'stage')).toEqual('unknown');
+  });
+
+  it.each([
+    ['closedNullIncludesReturn', 'closedAt', ['set']],
+    ['closedDateIncludesReturn', 'closedAt', 'unknown'],
+    ['endedBothIncludesReturn', 'endedAt', ['set']],
+    ['endedNullIncludesReturn', 'endedAt', 'unknown'],
+  ])('%s reading the nullable field %s can run from %j', (method, field, expected) => {
+    expect(sourcesOf(method, field)).toEqual(expected);
+  });
+
+  it.each([
+    ['phaseIncludesThrow', ['draft', 'live']],
+    ['phaseNegatedIncludesReturn', ['draft', 'live']],
+    ['phaseForeignLiteral', 'unknown'],
+  ])('%s can run from %j for a string-literal union field', (method, expected) => {
+    expect(sourcesOf(method, 'phase')).toEqual(expected);
+  });
+});
+
+describe('methodSources with an includes the project redeclares', () => {
+  it('leaves the sources unknown when includes is not only a library declaration', () => {
+    const augmented = inMemoryProject({
+      '/src/aggregate-root.ts': AGGREGATE_ROOT,
+      '/src/array-includes.ts': `
+declare global {
+  interface Array<T> { includes(searchElement: T, fromIndex?: number): boolean; }
+}
+export {};
+`,
+      '/src/rota.ts': `
+import { AggregateRoot } from './aggregate-root';
+export enum Stage { draft = 'DRAFT', open = 'OPEN', closed = 'CLOSED' }
+export class Rota extends AggregateRoot<{ stage: Stage; note: string }> {
+  includesReturn(): void { if ([Stage.closed].includes(this.props.stage)) return; this.props.note = 'x'; }
+}
+`,
+    });
+    const rota = augmented.getSourceFileOrThrow('/src/rota.ts').getClassOrThrow('Rota');
+    expect(describeSources(methodSources(rota.getMethodOrThrow('includesReturn'), resolvedField(rota, 'stage'), defaultScope(rota)))).toEqual('unknown');
   });
 });

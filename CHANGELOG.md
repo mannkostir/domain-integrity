@@ -17,6 +17,7 @@ All notable changes to this project are documented here; the format follows [Kee
 - `init` lets you edit a suggestion: answer `e` to type each field's terminal values, comma-separated, from the field's known values, or `-` for none. `Y` or Enter still declares the suggestion and `n` skips it. (#108)
 - `-p` takes a directory and then uses the `tsconfig.json` inside it. (#109)
 - `--help`, or `-h`, on the tool or on any command prints what each option takes and its default, followed by a link to the README; the tool's help also lists examples. (#109)
+- More guard shapes are followed: `[A, B].includes(this.status)` on an array literal, negated or not, counts like the equivalent strict comparisons. (#PR)
 
 ### Changed
 
