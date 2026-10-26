@@ -18,6 +18,7 @@ All notable changes to this project are documented here; the format follows [Kee
 - `-p` takes a directory and then uses the `tsconfig.json` inside it. (#109)
 - `--help`, or `-h`, on the tool or on any command prints what each option takes and its default, followed by a link to the README; the tool's help also lists examples. (#109)
 - More guard shapes are followed: `[A, B].includes(this.status)` on an array literal, negated or not, counts like the equivalent strict comparisons, and an `if`/`else` whose one branch is an early return or throw counts like that early exit followed by the other branch, including `else if` chains; a `switch (this.status)` whose cases only return, throw or break excludes the states whose cases return or throw, and a `switch` whose cases do work counts, only as the method's only statement, like a wrapping `if` over the states of those cases; and a statement such as `this.assertOpen();` counts like the guards in that helper's body when the helper is a plain project method whose body holds only guards that throw. (#PR)
+- Enum and literal-union state fields that may be unset, `S | null`, `S | undefined` or optional `s?: S`, are supported: `check` resolves them with their members plus `'unset'`, follows `null` and `undefined` comparisons and truthiness on them, and never reports `'unset'` as unreachable, and `init` suggests them. (#PR)
 
 ### Changed
 

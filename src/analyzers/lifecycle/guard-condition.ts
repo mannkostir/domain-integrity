@@ -20,10 +20,15 @@ const negate = (evaluation: Evaluation): Evaluation =>
 const falsyGuardTokens = (field: StateField): ReadonlySet<string> =>
   field.setMayBeFalsy ? guardUniverse(field) : unsetGuardTokens(field);
 
+const unsettableTruthiness = (field: StateField): Evaluation => {
+  const unset = unsetGuardTokens(field);
+  return field.setMayBeFalsy ? 'unknown' : { whenTrue: difference(guardUniverse(field), unset), whenFalse: unset };
+};
+
 const truthiness = (field: StateField): Evaluation => {
   if (field.kind === 'boolean') return { whenTrue: new Set(['true']), whenFalse: new Set(['false']) };
   if (field.kind === 'nullable') return { whenTrue: new Set([SET]), whenFalse: falsyGuardTokens(field) };
-  return 'unknown';
+  return field.unsetForms.length > 0 ? unsettableTruthiness(field) : 'unknown';
 };
 
 const unsetFormOf = (node: Expression): UnsetForm | undefined => {
@@ -32,10 +37,9 @@ const unsetFormOf = (node: Expression): UnsetForm | undefined => {
 };
 
 const comparedTokens = (node: Expression, field: StateField, strict: boolean): ReadonlySet<string> | undefined => {
-  if (field.kind === 'nullable') {
-    const form = unsetFormOf(node);
-    return form === undefined ? undefined : comparedUnsetTokens(field, form, strict);
-  }
+  const form = unsetFormOf(node);
+  if (form !== undefined && field.unsetForms.length > 0) return comparedUnsetTokens(field, form, strict);
+  if (field.kind === 'nullable') return undefined;
   const token = literalToken(node.getType());
   return token !== undefined && allTokens(field).has(token) ? new Set([token]) : undefined;
 };

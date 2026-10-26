@@ -166,6 +166,30 @@ export class Meter extends AggregateRoot<{ reading: number | null; code: string 
   endedWrapper(): void { if (this.props.endedAt) { this.props.note = 'x'; } }
 }
 `,
+  '/src/dispatch.ts': `
+import { AggregateRoot } from './aggregate-root';
+export enum Step { draft = 'DRAFT', sent = 'SENT', done = 'DONE' }
+export enum Level { none = 0, some = 1 }
+export class Dispatch extends AggregateRoot<{ step: Step | null; either: Step | null | undefined; level: Level | null; note: string }> {
+  stepNullReturn(): void { if (this.props.step === null) return; this.props.note = 'x'; }
+  stepLooseNullReturn(): void { if (this.props.step == null) return; this.props.note = 'x'; }
+  stepFalsyReturn(): void { if (!this.props.step) return; this.props.note = 'x'; }
+  stepTruthyWrapper(): void { if (this.props.step) { this.props.note = 'x'; } }
+  stepFalsyWrapper(): void { if (!this.props.step) { this.props.note = 'x'; } }
+  stepMemberReturn(): void { if (this.props.step === Step.done) return; this.props.note = 'x'; }
+  stepIncludesReturn(): void { if ([Step.done, null].includes(this.props.step)) return; this.props.note = 'x'; }
+  stepNullCase(): void { switch (this.props.step) { case null: throw new Error('x'); } this.props.note = 'x'; }
+  eitherStrictNullReturn(): void { if (this.props.either === null) return; this.props.note = 'x'; }
+  eitherLooseNullReturn(): void { if (this.props.either == null) return; this.props.note = 'x'; }
+  eitherBothStrictReturn(): void { if (this.props.either === null || this.props.either === undefined) return; this.props.note = 'x'; }
+  eitherBothIncludesReturn(): void { if ([null, undefined].includes(this.props.either)) return; this.props.note = 'x'; }
+  eitherNullCase(): void { switch (this.props.either) { case null: throw new Error('x'); } this.props.note = 'x'; }
+  eitherFalsyReturn(): void { if (!this.props.either) return; this.props.note = 'x'; }
+  levelFalsyReturn(): void { if (!this.props.level) return; this.props.note = 'x'; }
+  levelNullReturn(): void { if (this.props.level === null) return; this.props.note = 'x'; }
+  unguarded(): void { this.props.note = 'x'; }
+}
+`,
   '/src/rota.ts': `
 import { AggregateRoot } from './aggregate-root';
 export enum Stage { draft = 'DRAFT', open = 'OPEN', closed = 'CLOSED' }
@@ -777,6 +801,45 @@ describe('methodSources with a switch on the state field', () => {
 
   it('phaseRetiredCase can run from the other members of a string-literal union field', () => {
     expect(sourcesOf('phaseRetiredCase', 'phase')).toEqual(['draft', 'live']);
+  });
+});
+
+describe('methodSources for an enum field that may be unset', () => {
+  const dispatch = project.getSourceFileOrThrow('/src/dispatch.ts').getClassOrThrow('Dispatch');
+  const sourcesOf = (method: string, field: string) =>
+    describeSources(methodSources(dispatch.getMethodOrThrow(method), resolvedField(dispatch, field), defaultScope(dispatch)));
+
+  it.each([
+    ['stepNullReturn', ['DONE', 'DRAFT', 'SENT']],
+    ['stepLooseNullReturn', ['DONE', 'DRAFT', 'SENT']],
+    ['stepFalsyReturn', ['DONE', 'DRAFT', 'SENT']],
+    ['stepTruthyWrapper', ['DONE', 'DRAFT', 'SENT']],
+    ['stepFalsyWrapper', ['unset']],
+    ['stepMemberReturn', ['DRAFT', 'SENT', 'unset']],
+    ['stepIncludesReturn', ['DRAFT', 'SENT']],
+    ['stepNullCase', ['DONE', 'DRAFT', 'SENT']],
+    ['unguarded', ['DONE', 'DRAFT', 'SENT', 'unset']],
+  ])('%s can run from %j when the type includes only null', (method, expected) => {
+    expect(sourcesOf(method, 'step')).toEqual(expected);
+  });
+
+  it.each([
+    ['eitherStrictNullReturn', 'unknown'],
+    ['eitherLooseNullReturn', ['DONE', 'DRAFT', 'SENT']],
+    ['eitherBothStrictReturn', ['DONE', 'DRAFT', 'SENT']],
+    ['eitherBothIncludesReturn', ['DONE', 'DRAFT', 'SENT']],
+    ['eitherNullCase', 'unknown'],
+    ['eitherFalsyReturn', ['DONE', 'DRAFT', 'SENT']],
+    ['unguarded', ['DONE', 'DRAFT', 'SENT', 'unset']],
+  ])('%s can run from %j when the type includes null and undefined', (method, expected) => {
+    expect(sourcesOf(method, 'either')).toEqual(expected);
+  });
+
+  it.each([
+    ['levelFalsyReturn', 'unknown'],
+    ['levelNullReturn', ['0', '1']],
+  ])('%s can run from %j when a member is falsy', (method, expected) => {
+    expect(sourcesOf(method, 'level')).toEqual(expected);
   });
 });
 

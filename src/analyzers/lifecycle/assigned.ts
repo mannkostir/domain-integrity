@@ -17,6 +17,8 @@ const tokenOfAssigned = (value: Expression, field: StateField): string | undefin
     const members = type.isUnion() ? type.getUnionTypes() : [type];
     return members.some(isNullish) ? undefined : SET;
   }
+  if (field.unsetForms.length > 0 && isNullish(type)) return UNSET;
+  if (field.unsetForms.length > 0 && type.isUnion() && type.getUnionTypes().some(isNullish)) return undefined;
   const token = literalToken(type);
   return token !== undefined && allTokens(field).has(token) ? token : undefined;
 };
