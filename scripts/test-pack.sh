@@ -99,6 +99,16 @@ begin_stage "import installed library entry"
   }
 ') || fail_stage "the installed library entry does not load with its exports"
 
+begin_stage "require installed library entry from CommonJS"
+(cd "$consumer_dir" && node --input-type=commonjs -e '
+  const library = require("domain-integrity");
+  const missing = ["defineDomain", "lifecycle", "saga", "suppress"].filter((name) => typeof library[name] !== "function");
+  if (missing.length > 0) {
+    console.error("missing exports: " + missing.join(", "));
+    process.exit(1);
+  }
+') || fail_stage "the installed library entry does not load through require"
+
 begin_stage "typecheck domain.config.ts against installed types"
 (cd "$consumer_dir" && "$repo_bin/tsc" --ignoreConfig --noEmit --strict --module ESNext --moduleResolution Bundler --target ES2022 domain.config.ts)
 

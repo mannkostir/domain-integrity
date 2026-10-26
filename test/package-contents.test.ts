@@ -34,11 +34,11 @@ describe('published package', () => {
     expect(provenance).toBe(true);
   });
 
-  it('exports the library entry as ESM only', () => {
+  it('exports the library entry as ESM only, for import and for require of ESM', () => {
     const libraryEntry = MANIFEST.exports['.'];
 
     const conditions = Object.keys(libraryEntry);
 
-    expect(conditions).toEqual(['types', 'import']);
+    expect(conditions).toEqual(['types', 'module-sync', 'import']);
   });
 });
