@@ -9,6 +9,7 @@ export type SarifRule = {
   readonly help: { readonly text: string; readonly markdown: string };
   readonly helpUri?: string;
   readonly defaultConfiguration: { readonly level: string };
+  readonly properties?: { readonly tags: readonly string[] };
 };
 
 export type SarifLocation = {

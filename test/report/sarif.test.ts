@@ -13,6 +13,12 @@ import { ALL_RULES } from '../helpers/rules';
 
 const UNDISPATCHED_RULE = EVENT_FLOW_RULES.filter((rule) => rule.id === 'undispatched-events');
 
+const eventFlowRule = (id: string): RuleDescription => {
+  const rule = EVENT_FLOW_RULES.find((candidate) => candidate.id === id);
+  if (rule === undefined) throw new Error(`The event-flow rules have no ${id}.`);
+  return rule;
+};
+
 const WARNING_RULE: RuleDescription = { id: 'transition-drift', severity: 'warning', description: 'D', explanation: 'E', remedy: 'R' };
 
 const ERROR_RULE: RuleDescription = { id: 'terminal-state-leak', severity: 'error', description: 'D', explanation: 'E', remedy: 'R' };
@@ -104,6 +110,22 @@ describe('formatSarif', () => {
 
   it('gives the help markdown only the remedy when the tool has no information uri', () => {
     expect(sarifRuleOf(ERROR_RULE, UNDOCUMENTED_TOOL).help.markdown).toBe('R');
+  });
+
+  it('tags the saga-missing-failure-path rule as experimental', () => {
+    const rule = eventFlowRule('saga-missing-failure-path');
+
+    const described = sarifRuleOf(rule, DOCUMENTED_TOOL);
+
+    expect(described.properties).toEqual({ tags: ['experimental'] });
+  });
+
+  it('gives a rule that is not experimental no properties', () => {
+    const rule = eventFlowRule('dead-handler');
+
+    const described = sarifRuleOf(rule, DOCUMENTED_TOOL);
+
+    expect('properties' in described).toBe(false);
   });
 
   it('sets the default level of each rule from its severity', () => {

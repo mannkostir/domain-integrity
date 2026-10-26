@@ -158,7 +158,7 @@ Five more checks cover in-process event flows. All of them are errors:
 | [`dead-handler`](#dead-handler) | A handler is registered for an event class that production code never constructs |
 | [`handler-payload-mismatch`](#handler-payload-mismatch) | A handler is registered for one event class but declares its event as an unrelated class |
 | [`unhandled-event`](#unhandled-event) | A declared in-process event is constructed but has no handler |
-| [`saga-missing-failure-path`](#saga-missing-failure-path) | A saga handles the success event of a declared outcome but not its failure event |
+| [`saga-missing-failure-path`](#saga-missing-failure-path) | A saga handles the success event of a declared outcome but not its failure event. Experimental. |
 | [`undispatched-events`](#undispatched-events) | An event method stores events in a buffer that production code never reads or drains |
 
 Every check has one severity. An error is a broken rule: any error finding not in the baseline makes `check` exit `1`. A warning is a declaration that no longer matches the code, such as a transition no method can take any more: it is reported in every format, but a run whose only new findings are warnings still exits `0`. SARIF results carry the severity as their `level`.
@@ -253,6 +253,8 @@ An event class listed in `events.inProcess` is constructed in production code, b
 Add a handler for the event, or, if it is consumed elsewhere, such as by another process, remove it from `events.inProcess` in `domain.config.ts`. Accept the finding into the baseline only while it is a known gap you mean to close.
 
 #### saga-missing-failure-path
+
+Experimental: this rule has run only on probe projects, not yet on a real codebase with a declared saga. Its SARIF rule is tagged `experimental`.
 
 A saga declared with `saga()` handles the success event of a declared outcome but not its failure event, so a failure leaves the process stuck halfway with nothing to compensate. It runs only for sagas and outcomes declared in `events.sagas`.
 
