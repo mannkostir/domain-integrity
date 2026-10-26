@@ -1,18 +1,9 @@
-import {
-  BinaryExpression,
-  Expression,
-  IfStatement,
-  MethodDeclaration,
-  Node,
-  PropertyAccessExpression,
-  Statement,
-  SwitchStatement,
-  Symbol as MorphSymbol,
-  SyntaxKind,
-} from 'ts-morph';
+import { Expression, IfStatement, MethodDeclaration, Node, Statement, SwitchStatement, Symbol as MorphSymbol } from 'ts-morph';
+import { scanHelperStep } from './assertion-helper';
 import { ExitKind, branchStatements, exitsEarly, containsReturnOrThrow } from './early-exit';
-import { AggregateScope, fieldNameOf, referencesFieldDirectly, thisMethodDeclaration } from './field-ref';
+import { AggregateScope } from './field-ref';
 import { evaluateCondition } from './guard-condition';
+import { GuardRules, GuardScan, isFieldAssignment, mayAssignField, readsFieldOutside } from './guard-scan';
 import { collapseGuardTokens, guardUniverse } from './guard-tokens';
 import { Sources, StateField } from './model';
 import { isLibraryNode } from '../shared/library';
@@ -20,23 +11,13 @@ import { isAccessor } from './state-field';
 import { FieldSwitch, SwitchGroup, isFieldSwitch, readFieldSwitch } from './switch-guard';
 import { difference, intersect, union } from './values';
 
-type GuardScan = { readonly allowed: ReadonlySet<string>; readonly recognised: ReadonlySet<Node> } | 'unknown';
-
 type ExitGuard = {
   readonly condition: Expression;
   readonly passesWhen: 'whenTrue' | 'whenFalse';
   readonly continuation: readonly Statement[];
 };
 
-type GuardRules = {
-  readonly exits: ExitKind;
-  readonly strict: boolean;
-  readonly helpers: readonly MethodDeclaration[];
-};
-
 const METHOD_RULES: GuardRules = { exits: 'any', strict: false, helpers: [] };
-
-const MAX_HELPER_DEPTH = 5;
 
 const exitGuard = (statement: Statement, exits: ExitKind): ExitGuard | undefined => {
   if (!Node.isIfStatement(statement)) return undefined;
@@ -49,25 +30,6 @@ const exitGuard = (statement: Statement, exits: ExitKind): ExitGuard | undefined
   return thenExits
     ? { condition, passesWhen: 'whenFalse', continuation: branchStatements(otherwise) }
     : { condition, passesWhen: 'whenTrue', continuation: branchStatements(then) };
-};
-
-const isFieldAssignment = (node: Node, field: StateField): node is BinaryExpression =>
-  Node.isBinaryExpression(node) &&
-  node.getOperatorToken().getKind() === SyntaxKind.EqualsToken &&
-  fieldNameOf(node.getLeft()) === field.name;
-
-const readsFieldOutside = (
-  node: Node,
-  field: StateField,
-  scope: AggregateScope,
-  recognised: ReadonlySet<Node>,
-): boolean => {
-  if (recognised.has(node)) return false;
-  if (isFieldAssignment(node, field)) return readsFieldOutside(node.getRight(), field, scope, recognised);
-  return (
-    referencesFieldDirectly(node, field.name, scope) ||
-    node.forEachChildAsArray().some((child) => readsFieldOutside(child, field, scope, recognised))
-  );
 };
 
 const unwrapParentheses = (node: Expression): Expression =>
@@ -154,76 +116,6 @@ const scanSwitchStep = (statement: SwitchStatement, field: StateField, scope: Ag
   return read === 'unknown' ? read : switchExcludingExits(read, field);
 };
 
-const thisCallee = (statement: Statement): PropertyAccessExpression | undefined => {
-  if (!Node.isExpressionStatement(statement)) return undefined;
-  const call = statement.getExpression();
-  if (!Node.isCallExpression(call) || call.hasQuestionDotToken()) return undefined;
-  const callee = call.getExpression();
-  return Node.isPropertyAccessExpression(callee) &&
-    !callee.hasQuestionDotToken() &&
-    Node.isThisExpression(callee.getExpression())
-    ? callee
-    : undefined;
-};
-
-const isPlainInstanceMethod = (method: MethodDeclaration): boolean =>
-  !isLibraryNode(method) &&
-  !method.isStatic() &&
-  !method.isAbstract() &&
-  !method.isAsync() &&
-  !method.isGenerator() &&
-  !method.isOverload();
-
-const helperStatements = (method: MethodDeclaration, rules: GuardRules): readonly Statement[] | undefined => {
-  const body = method.getBody();
-  const expandable = rules.helpers.length < MAX_HELPER_DEPTH && !rules.helpers.includes(method);
-  return expandable && isPlainInstanceMethod(method) && Node.isBlock(body) ? body.getStatements() : undefined;
-};
-
-const helperRules = (method: MethodDeclaration, rules: GuardRules): GuardRules => ({
-  exits: 'throw',
-  strict: true,
-  helpers: [...rules.helpers, method],
-});
-
-const readsOutsideHelper = (
-  method: MethodDeclaration,
-  statements: readonly Statement[],
-  field: StateField,
-  scope: AggregateScope,
-  recognised: ReadonlySet<Node>,
-): boolean =>
-  [...method.getParameters(), ...statements].some((node) => readsFieldOutside(node, field, scope, recognised));
-
-const scanHelperCall = (
-  callee: PropertyAccessExpression,
-  field: StateField,
-  scope: AggregateScope,
-  rules: GuardRules,
-): GuardScan | undefined => {
-  const method = thisMethodDeclaration(callee, scope.cls);
-  const statements = method === undefined ? undefined : helperStatements(method, rules);
-  if (method === undefined || statements === undefined) return undefined;
-  const scan = scanEarlyExits(statements, field, scope, helperRules(method, rules));
-  return scan === 'unknown' || readsOutsideHelper(method, statements, field, scope, scan.recognised)
-    ? undefined
-    : { allowed: scan.allowed, recognised: new Set([callee]) };
-};
-
-const mayAssignField = (statement: Statement, field: StateField): boolean =>
-  [statement, ...statement.getDescendants()].some((node) => isFieldAssignment(node, field));
-
-const scanHelperStep = (
-  statement: Statement,
-  field: StateField,
-  scope: AggregateScope,
-  rules: GuardRules,
-): GuardScan | undefined => {
-  const callee = thisCallee(statement);
-  const helper = callee === undefined ? undefined : scanHelperCall(callee, field, scope, rules);
-  return helper !== undefined && mayAssignField(statement, field) ? 'unknown' : helper;
-};
-
 const scanExitStep = (
   statement: Statement,
   field: StateField,
@@ -233,7 +125,7 @@ const scanExitStep = (
   const guard = exitGuard(statement, rules.exits);
   if (guard !== undefined) return scanExitGuard(guard, field, scope, rules);
   if (isFieldSwitch(statement, field)) return scanSwitchStep(statement, field, scope, rules.exits);
-  return scanHelperStep(statement, field, scope, rules);
+  return scanHelperStep(statement, field, scope, rules, scanEarlyExits);
 };
 
 const scanEarlyExits = (
