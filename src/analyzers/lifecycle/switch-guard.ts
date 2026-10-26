@@ -1,5 +1,5 @@
 import { CaseOrDefaultClause, Expression, Node, Statement, SwitchStatement } from 'ts-morph';
-import { branchStatements, isEarlyExit, leavesEarly } from './early-exit';
+import { branchStatements, isEarlyExit, containsReturnOrThrow } from './early-exit';
 import { AggregateScope, fieldNameOf, referencesField } from './field-ref';
 import { strictTokens } from './guard-condition';
 import { guardUniverse } from './guard-tokens';
@@ -81,7 +81,7 @@ const isLabelledJump = (node: Node): boolean =>
   (Node.isBreakStatement(node) || Node.isContinueStatement(node)) && node.getLabel() !== undefined;
 
 const leavesGroup = (statement: Statement): boolean =>
-  leavesEarly(statement) || [statement, ...statement.getDescendants()].some(isLabelledJump);
+  containsReturnOrThrow(statement) || [statement, ...statement.getDescendants()].some(isLabelledJump);
 
 const classify = (statements: readonly Statement[], last: boolean): Classified => {
   const body = clauseBody(statements);
@@ -90,7 +90,7 @@ const classify = (statements: readonly Statement[], last: boolean): Classified =
   if (!endsInBreak && !last) return 'unknown';
   const work = endsInBreak ? body.slice(0, -1) : body;
   if (work.length === 0) return { kind: 'pass', work };
-  return work.some(leavesGroup) ? 'unknown' : { kind: 'work', work };
+  return work.some(isPlainBreak) || work.some(leavesGroup) ? 'unknown' : { kind: 'work', work };
 };
 
 const classifyRuns = (runs: readonly ClauseRun[]): readonly SwitchGroup[] | 'unknown' => {

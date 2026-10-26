@@ -16,5 +16,5 @@ export const isEarlyExit = (statements: readonly Statement[]): boolean => {
 
 export const exitsEarly = (statement: Statement): boolean => isEarlyExit(branchStatements(statement));
 
-export const leavesEarly = (statement: Statement): boolean =>
+export const containsReturnOrThrow = (statement: Statement): boolean =>
   [statement, ...statement.getDescendants()].some((node) => Node.isReturnStatement(node) || Node.isThrowStatement(node));

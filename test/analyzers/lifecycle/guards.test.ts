@@ -272,6 +272,9 @@ export class Ledger extends AggregateRoot<{ status: Status; other: Status; phase
   workAssignsThenGuards(): void { switch (this.props.status) { case Status.draft: this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); break; default: throw new Error('x'); } }
   readsAfterAssigningSwitch(): void { switch (this.props.status) { case Status.draft: this.props.status = Status.open; break; default: throw new Error('x'); } this.props.note = String(this.props.status); }
   localCopy(): void { const s = this.props.status; switch (s) { case Status.closed: throw new Error('x'); } this.props.note = 'x'; }
+  reopen(admin: boolean): void { if (!admin) throw new Error('x'); switch (this.props.status) { case Status.closed: this.props.status = Status.open; break; } }
+  workAfterEarlyExit(): void { if (this.props.status === Status.closed) return; switch (this.props.status) { case Status.draft: this.props.note = 'x'; break; } }
+  workAfterInnerBreak(): void { switch (this.props.status) { case Status.closed: break; this.props.note = 'x'; break; case Status.draft: this.props.note = 'y'; break; } }
   otherFieldSwitch(): void { switch (this.props.other) { case Status.closed: this.props.note = String(this.props.status); break; } }
 }
 `,
@@ -653,6 +656,9 @@ describe('methodSources with a switch on the state field', () => {
     'readsAfterAssigningSwitch',
     'localCopy',
     'otherFieldSwitch',
+    'reopen',
+    'workAfterEarlyExit',
+    'workAfterInnerBreak',
   ])('%s leaves the sources unknown', (method) => {
     expect(sourcesOf(method, 'status')).toEqual('unknown');
   });
