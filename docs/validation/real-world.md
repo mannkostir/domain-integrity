@@ -47,7 +47,7 @@ The installed-dependencies re-run measured main (a8068cb) with the same commits 
 | Booking-System | 1 `undispatched-events` | fires | `AggregateRoot._domainEvents` at `addDomainEvent` with 9 raisers, as before: the buffer is only pushed and reset, the trivial getter `domainEvents` is never read, and the project's `EventBus.publish` calls publish events built in place, never ones taken from the buffer |
 | ticket-sale | 6 `terminal-state-leak` | silent | no array buffer: `addEvent` adds to the `Set` `events`, which `DomainEventManager` iterates to publish |
 
-The broadened-set run added five public repositories for kinds the first ten did not cover, with main (c1866fb) and configs kept outside the repositories as before. A fresh run over the first ten matches the recorded 41 findings: every repository's JSON output apart from the tool version, and every exit code, is identical to the installed-dependencies run, and stderr differs only in codely's missing-config message, reworded since. Each new repository was installed with `npm ci --ignore-scripts`, or `npm install --ignore-scripts` where only a `yarn.lock` exists, and configured with `init --yes`, edited as listed under [Edits to `init` suggestions](#edits-to-init-suggestions). The new repositories add 24 findings, 65 in total: schulcloud-server 18, SiweAuthMicroservice 3, typescript-event-sourcing-sample-app 3, adonisjs/application 0 and openlayers 0. Of the 24, 9 are real, 12 intended and 3 false positives, the public event-sourcing appliers of the sample app; see the sections below. No run printed a problem. A sixth candidate, dyrector-io/dyrectorio (98fe402, `web/crux`), was dropped: its Deployment and Pipeline states are Prisma enums from `.prisma/client`, and `prisma generate` for its Prisma 5.1.0 with `engineType = "binary"` must download the engines from `binaries.prisma.sh`, which the validation sandbox cannot reach. Prisma enums as aggregate states stay uncovered; Booking-System uses Prisma, but its states are value objects. The kinds the set now covers:
+The broadened-set run added five public repositories for kinds the first ten did not cover, with main (c1866fb) and configs kept outside the repositories as before. A fresh run over the first ten matches the recorded 41 findings: every repository's JSON output apart from the tool version, and every exit code, is identical to the installed-dependencies run, and stderr differs only in codely's missing-config message, reworded since. Each new repository was installed with `npm ci --ignore-scripts`, or `npm install --ignore-scripts` where only a `yarn.lock` exists, and configured with `init --yes`, edited as listed under [Edits to `init` suggestions](#edits-to-init-suggestions). The new repositories add 24 findings, 65 in total: schulcloud-server 18, SiweAuthMicroservice 3, typescript-event-sourcing-sample-app 3, adonisjs/application 0 and openlayers 0. Of the 24, 13 are real, 8 intended and 3 false positives, the public event-sourcing appliers of the sample app; see the sections below. No run printed a problem. A sixth candidate, dyrector-io/dyrectorio (98fe402, `web/crux`), was dropped: its Deployment and Pipeline states are Prisma enums from `.prisma/client`, and `prisma generate` for its Prisma 5.1.0 with `engineType = "binary"` must download the engines from `binaries.prisma.sh`, which the validation sandbox cannot reach. Prisma enums as aggregate states stay uncovered; Booking-System uses Prisma, but its states are value objects. The kinds the set now covers:
 
 | Kind | Repository |
 |---|---|
@@ -78,8 +78,8 @@ Timings are the median of three `check --format json` runs per repository, on a 
   The first run produced 66 findings. 27 of them were false positives from one pattern, private event-sourcing appliers. The leak and drift checks now judge only public methods, which removes all 27. The one remaining false positive, kyhsa93 `close` after `lockedAt`, goes away when `close` is listed in `allowAfterTerminal` inside the `lockedAt` field, which left 41 findings before methods that only keep books stopped being judged. All 5 earlier bitloops findings are reported again once its library members are listed in `inertMembers`.
 - **Event-flow findings:** 2, both real: ddd-forum `handler-payload-mismatch` for `AfterPostVotesChanged.onPostVotesChanged`, and Booking-System `undispatched-events` for `AggregateRoot._domainEvents`. With lifecycle findings, 42 in total with ddd-forum listing `inertEventMethods`, and 41 without it.
 - **Broadened set:** 24 more lifecycle findings and no event-flow finding in the five added repositories, 65 findings in total with the recorded configs:
-  - 9 real;
-  - 12 intended;
+  - 13 real;
+  - 8 intended;
   - 3 false positives, typescript-event-sourcing-sample-app's public `applyJobCreated`, `applyJobUpdated` and `applyJobArchived` after `ARCHIVED`, which go away when they are listed in `allowAfterTerminal`.
 - **Spike findings:**
 
@@ -255,18 +255,18 @@ MikroORM entities in a NestJS server with 3,529 non-test TypeScript files under 
 | terminal-state-leak (status) | DeletionRequestEntity.executed | real | no guard; `DeletionRequestRepo` loads the request by id and calls it without checking the status |
 | terminal-state-leak (status) | DeletionRequestEntity.failed | real | a succeeded request can be marked failed |
 | terminal-state-leak (status) | DeletionRequestEntity.pending | real | a succeeded request can be put back to pending and run again |
-| terminal-state-leak (deletedAt) | FileEntity.markForDeletion | real | marking a file again re-stamps `deletedAt`, which postpones its purge |
+| terminal-state-leak (deletedAt) | FileEntity.markForDeletion | real | marking a file again re-stamps `deletedAt`, which postpones its purge; its caller `DeleteUserFilesDataStep.markFilesOwnedByUserForDeletion` loads files through `FilesRepo.findByOwnerUserId`, which does not exclude deleted ones |
 | terminal-state-leak (deleted) | FileEntity.markForDeletion | real | same |
-| terminal-state-leak (deletedAt) | FileEntity.removePermissionsByRefId | intended | deleting a user's data strips their references from files already marked for deletion too; `allowAfterTerminal` |
-| terminal-state-leak (deleted) | FileEntity.removePermissionsByRefId | intended | same |
-| terminal-state-leak (deletedAt) | FileEntity.removeCreatorId | intended | same |
-| terminal-state-leak (deleted) | FileEntity.removeCreatorId | intended | same |
+| terminal-state-leak (deletedAt) | FileEntity.removePermissionsByRefId | real | the entity has no guard; its only production caller, `DeleteUserFilesDataStep.removeUserPermissionsOrCreatorReferenceToAnyFiles`, loads files through `FilesRepo.findByPermissionRefIdOrCreatorId`, whose query matches only `deleted: false` and `deletedAt: undefined`, so the invariant lives in the repository query, outside the aggregate |
+| terminal-state-leak (deleted) | FileEntity.removePermissionsByRefId | real | same |
+| terminal-state-leak (deletedAt) | FileEntity.removeCreatorId | real | same |
+| terminal-state-leak (deleted) | FileEntity.removeCreatorId | real | same |
 | outside-mutation (status) | DeletionBatchEntity, in `DeletionBatchRepo.updateStatus` | real | the repository sets the status itself instead of going through the domain object's `startDeletion()`; no production code calls it |
 | outside-mutation (status) | DeletionBatchEntity, in `DeletionBatchDomainMapper.mapDoToEntity` | intended | `Object.assign` fills a new entity from the domain object's props; the domain object owns the lifecycle |
 | outside-mutation (targetRefDomain) | DeletionBatchEntity, in `DeletionBatchDomainMapper.mapDoToEntity` | intended | same |
 | outside-mutation (color) | RoomEntity, in `RoomDomainMapper.mapDoToEntity` | intended | same |
 | outside-mutation (type) | BoardNodeEntity, in `BoardNodeRepo.persist` | intended | the repository sets the discriminator on an entity it has just created with `em.create` |
-| outside-mutation (user) | ImportUser, in `UserImportService.matchUsers` | real | the service sets `user` and `matchedBy` directly instead of calling `ImportUser.setMatch(user, matchedBy)` |
+| outside-mutation (user) | ImportUser, in `UserImportService.matchUsers.matchedImportUsers` | real | the service sets `user` and `matchedBy` directly instead of calling `ImportUser.setMatch(user, matchedBy)` |
 | outside-mutation (flagged) | ImportUser, in `UserImportUc.updateFlag` | intended | a free toggle with no lifecycle; `init` suggested the boolean |
 | outside-mutation (ldapDn) | User, in `UserImportUc.updateUserAndAccountWithLdap` | intended | an identifier `init` suggested as a nullable field, not lifecycle state |
 | outside-mutation (externalId) | User, in `UserImportUc.updateUserAndAccountWithLdap` | intended | same |
