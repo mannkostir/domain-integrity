@@ -211,6 +211,33 @@ export class Rota extends AggregateRoot<{ stage: Stage; phase: 'draft' | 'live' 
   phaseForeignLiteral(): void { if (['archived'].includes(this.props.phase)) return; this.props.note = 'x'; }
 }
 `,
+  '/src/permit.ts': `
+import { AggregateRoot } from './aggregate-root';
+export enum Status { draft = 'DRAFT', open = 'OPEN', closed = 'CLOSED' }
+function throwClosed(): never { throw new Error('closed'); }
+function log(): void {}
+export class Permit extends AggregateRoot<{ status: Status; closedAt: Date | null; note: string }> {
+  private paused = false;
+  private isClosed(): boolean { return this.props.status === Status.closed; }
+  thenThrowElseWork(): void { if (this.props.status === Status.closed) { throw new Error('x'); } else { this.props.note = 'x'; } }
+  thenWorkElseThrow(): void { if (this.props.status === Status.open) { this.props.note = 'x'; } else { throw new Error('x'); } }
+  elseReturn(): void { if (this.props.status !== Status.closed) { this.props.note = 'x'; } else return; }
+  elseIfChain(): void { if (this.props.status === Status.closed) throw new Error('x'); else if (this.props.status === Status.draft) return; else { this.props.note = 'x'; } }
+  insideWrapper(): void { if (this.props.status !== Status.closed) { if (this.props.status === Status.draft) throwClosed(); else { this.props.note = 'x'; } } }
+  earlyExitAfter(): void { if (this.props.status === Status.closed) throw new Error('x'); else { this.props.note = 'x'; } if (this.props.status === Status.draft) return; this.props.note = 'y'; }
+  nestedEarlyExit(): void { if (this.props.status === Status.closed) throw new Error('x'); else { if (this.props.status === Status.draft) return; this.props.note = 'x'; } }
+  guardAfterElseAssignment(): void { if (this.props.status === Status.closed) throw new Error('x'); else this.props.status = Status.open; if (this.props.status !== Status.open) throw new Error('x'); }
+  branchGuardAfterAssignment(): void { if (this.props.status === Status.closed) throw new Error('x'); else { this.props.status = Status.open; if (this.props.status !== Status.open) throw new Error('x'); } }
+  bothThrow(): void { this.props.note = 'x'; if (this.props.status === Status.closed) throw new Error('x'); else throw new Error('y'); }
+  neitherExits(): void { if (this.props.status === Status.closed) { this.props.note = ''; } else { this.props.note = 'x'; } }
+  loggedExit(): void { if (this.props.status === Status.closed) { log(); throw new Error('x'); } else { this.props.note = 'x'; } }
+  workReadsField(): void { if (this.props.status === Status.closed) throw new Error('x'); else { this.props.note = String(this.props.status); } }
+  partialElseIf(flag: boolean): void { if (this.props.status !== Status.closed) { this.props.note = 'x'; } else if (flag) throw new Error('x'); }
+  unknownCondition(): void { if (this.isClosed()) throw new Error('x'); else { this.props.note = 'x'; } }
+  closedElseThrow(): void { if (this.props.closedAt === null) { throw new Error('x'); } else { this.props.note = 'x'; } }
+  pausedElseThrow(): void { if (!this.paused) { this.props.note = 'x'; } else { throw new Error('x'); } }
+}
+`,
 });
 
 const ticket = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('Ticket');
@@ -510,5 +537,44 @@ describe('methodSources with an includes the project redeclares', () => {
     });
     const rota = augmented.getSourceFileOrThrow('/src/rota.ts').getClassOrThrow('Rota');
     expect(describeSources(methodSources(rota.getMethodOrThrow('includesReturn'), resolvedField(rota, 'stage'), defaultScope(rota)))).toEqual('unknown');
+  });
+});
+
+describe('methodSources with an if/else guard whose one branch exits', () => {
+  const permit = project.getSourceFileOrThrow('/src/permit.ts').getClassOrThrow('Permit');
+  const sourcesOf = (method: string, field: string) =>
+    describeSources(methodSources(permit.getMethodOrThrow(method), resolvedField(permit, field), defaultScope(permit)));
+
+  it.each([
+    ['thenThrowElseWork', ['DRAFT', 'OPEN']],
+    ['thenWorkElseThrow', ['OPEN']],
+    ['elseReturn', ['DRAFT', 'OPEN']],
+    ['elseIfChain', ['OPEN']],
+    ['insideWrapper', ['OPEN']],
+    ['earlyExitAfter', ['OPEN']],
+    ['nestedEarlyExit', ['OPEN']],
+    ['guardAfterElseAssignment', ['DRAFT', 'OPEN']],
+  ])('%s can run from %j for an enum field', (method, expected) => {
+    expect(sourcesOf(method, 'status')).toEqual(expected);
+  });
+
+  it.each([
+    'bothThrow',
+    'neitherExits',
+    'loggedExit',
+    'workReadsField',
+    'partialElseIf',
+    'unknownCondition',
+    'branchGuardAfterAssignment',
+  ])('%s leaves the sources unknown', (method) => {
+    expect(sourcesOf(method, 'status')).toEqual('unknown');
+  });
+
+  it('closedElseThrow can run only while a nullable field is set', () => {
+    expect(sourcesOf('closedElseThrow', 'closedAt')).toEqual(['set']);
+  });
+
+  it('pausedElseThrow can run only while a boolean field is false', () => {
+    expect(sourcesOf('pausedElseThrow', 'paused')).toEqual(['false']);
   });
 });

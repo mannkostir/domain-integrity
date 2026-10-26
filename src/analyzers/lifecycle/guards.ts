@@ -18,8 +18,11 @@ import { intersect } from './values';
 
 type GuardScan = { readonly allowed: ReadonlySet<string>; readonly recognised: ReadonlySet<Node> } | 'unknown';
 
+const branchStatements = (statement: Statement): readonly Statement[] =>
+  Node.isBlock(statement) ? statement.getStatements() : [statement];
+
 const exitsEarly = (statement: Statement): boolean => {
-  const statements = Node.isBlock(statement) ? statement.getStatements() : [statement];
+  const statements = branchStatements(statement);
   const [only] = statements;
   if (statements.length !== 1) return false;
   if (Node.isReturnStatement(only) || Node.isThrowStatement(only)) return true;
@@ -30,50 +33,23 @@ const exitsEarly = (statement: Statement): boolean => {
   return /^throw/i.test(calleeName);
 };
 
-const leavesEarly = (statement: Statement): boolean =>
-  [statement, ...statement.getDescendants()].some((node) => Node.isReturnStatement(node) || Node.isThrowStatement(node));
-
-const wrappingGuard = (statements: readonly Statement[]): IfStatement | undefined => {
-  const [only] = statements;
-  return statements.length === 1 &&
-    Node.isIfStatement(only) &&
-    only.getElseStatement() === undefined &&
-    !leavesEarly(only.getThenStatement())
-    ? only
-    : undefined;
+type ExitGuard = {
+  readonly condition: Expression;
+  readonly passesWhen: 'whenTrue' | 'whenFalse';
+  readonly continuation: readonly Statement[];
 };
 
-const scanWrapper = (wrapper: IfStatement, field: StateField, scope: AggregateScope): GuardScan => {
-  const evaluation = evaluateCondition(wrapper.getExpression(), field, scope);
-  const then = wrapper.getThenStatement();
-  const inner = scanStatements(Node.isBlock(then) ? then.getStatements() : [then], field, scope);
-  if (evaluation === 'unknown' || inner === 'unknown') return 'unknown';
-  return {
-    allowed: intersect(evaluation.whenTrue, inner.allowed),
-    recognised: new Set([wrapper.getExpression(), ...inner.recognised]),
-  };
-};
-
-const scanEarlyExits = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan =>
-  statements
-    .filter(Node.isIfStatement)
-    .filter((statement) => statement.getElseStatement() === undefined && exitsEarly(statement.getThenStatement()))
-    .reduce<GuardScan>(
-      (scan, guard) => {
-        if (scan === 'unknown') return scan;
-        const evaluation = evaluateCondition(guard.getExpression(), field, scope);
-        if (evaluation === 'unknown') return 'unknown';
-        return {
-          allowed: intersect(scan.allowed, evaluation.whenFalse),
-          recognised: new Set([...scan.recognised, guard.getExpression()]),
-        };
-      },
-      { allowed: guardUniverse(field), recognised: new Set<Node>() },
-    );
-
-const scanStatements = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan => {
-  const wrapper = wrappingGuard(statements);
-  return wrapper ? scanWrapper(wrapper, field, scope) : scanEarlyExits(statements, field, scope);
+const exitGuard = (statement: Statement): ExitGuard | undefined => {
+  if (!Node.isIfStatement(statement)) return undefined;
+  const condition = statement.getExpression();
+  const then = statement.getThenStatement();
+  const otherwise = statement.getElseStatement();
+  const thenExits = exitsEarly(then);
+  if (otherwise === undefined) return thenExits ? { condition, passesWhen: 'whenFalse', continuation: [] } : undefined;
+  if (thenExits === exitsEarly(otherwise)) return undefined;
+  return thenExits
+    ? { condition, passesWhen: 'whenFalse', continuation: branchStatements(otherwise) }
+    : { condition, passesWhen: 'whenTrue', continuation: branchStatements(then) };
 };
 
 const isFieldAssignment = (node: Node, field: StateField): node is BinaryExpression =>
@@ -117,15 +93,65 @@ const isPlainDataPathFromThis = (target: Expression): boolean => {
   );
 };
 
-const overwritesField = (statement: Statement, field: StateField): boolean => {
+const assignsField = (statement: Statement, field: StateField): boolean => {
   if (!Node.isExpressionStatement(statement)) return false;
   const expression = unwrapParentheses(statement.getExpression());
   return isFieldAssignment(expression, field) && isPlainDataPathFromThis(expression.getLeft());
 };
 
+const overwritesField = (statement: Statement, field: StateField): boolean =>
+  assignsField(statement, field) ||
+  (exitGuard(statement)?.continuation.some((inner) => overwritesField(inner, field)) ?? false);
+
 const statementsUntilOverwrite = (statements: readonly Statement[], field: StateField): readonly Statement[] => {
   const overwrite = statements.findIndex((statement) => overwritesField(statement, field));
   return overwrite === -1 ? statements : statements.slice(0, overwrite + 1);
+};
+
+const leavesEarly = (statement: Statement): boolean =>
+  [statement, ...statement.getDescendants()].some((node) => Node.isReturnStatement(node) || Node.isThrowStatement(node));
+
+const wrappingGuard = (statements: readonly Statement[]): IfStatement | undefined => {
+  const [only] = statements;
+  return statements.length === 1 &&
+    Node.isIfStatement(only) &&
+    only.getElseStatement() === undefined &&
+    !leavesEarly(only.getThenStatement())
+    ? only
+    : undefined;
+};
+
+const scanWrapper = (wrapper: IfStatement, field: StateField, scope: AggregateScope): GuardScan => {
+  const evaluation = evaluateCondition(wrapper.getExpression(), field, scope);
+  const inner = scanStatements(branchStatements(wrapper.getThenStatement()), field, scope);
+  if (evaluation === 'unknown' || inner === 'unknown') return 'unknown';
+  return {
+    allowed: intersect(evaluation.whenTrue, inner.allowed),
+    recognised: new Set([wrapper.getExpression(), ...inner.recognised]),
+  };
+};
+
+const scanEarlyExits = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan =>
+  statements
+    .map(exitGuard)
+    .filter((guard): guard is ExitGuard => guard !== undefined)
+    .reduce<GuardScan>(
+      (scan, guard) => {
+        if (scan === 'unknown') return scan;
+        const evaluation = evaluateCondition(guard.condition, field, scope);
+        const continuation = scanEarlyExits(statementsUntilOverwrite(guard.continuation, field), field, scope);
+        if (evaluation === 'unknown' || continuation === 'unknown') return 'unknown';
+        return {
+          allowed: intersect(intersect(scan.allowed, evaluation[guard.passesWhen]), continuation.allowed),
+          recognised: new Set([...scan.recognised, guard.condition, ...continuation.recognised]),
+        };
+      },
+      { allowed: guardUniverse(field), recognised: new Set<Node>() },
+    );
+
+const scanStatements = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan => {
+  const wrapper = wrappingGuard(statements);
+  return wrapper ? scanWrapper(wrapper, field, scope) : scanEarlyExits(statements, field, scope);
 };
 
 export const methodSources = (method: MethodDeclaration, field: StateField, scope: AggregateScope): Sources => {
