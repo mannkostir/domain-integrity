@@ -364,6 +364,9 @@ export class Visa extends VisaBase {
   private assertSwitchReturns(): void { switch (this.props.status) { case Status.closed: return; } }
   private assertCallsLogging(): void { this.assertLogsFirst(); }
   private assertDefaultReads(value = this.props.status): void { if (this.props.status === Status.closed) throw new Error(value); }
+  private assertDefaultOnly(value: Status = this.props.status): void { if (value !== Status.open) throw new Error('x'); }
+  private assertDestructuredDefault({ value = this.props.status }: { value?: Status } = {}): void { if (value !== Status.open) throw new Error('x'); }
+  private describeStatus(value: Status = this.props.status): string { return value; }
   viaPrivate(): void { this.assertNotDraft(); this.props.note = 'x'; }
   viaInherited(): void { this.assertNotClosed(); this.props.note = 'x'; }
   viaElseThrow(): void { this.assertElseThrow(); this.props.note = 'x'; }
@@ -398,6 +401,9 @@ export class Visa extends VisaBase {
   viaSwitchReturning(): void { this.assertSwitchReturns(); this.props.note = 'x'; }
   viaNestedLogging(): void { this.assertCallsLogging(); this.props.note = 'x'; }
   viaDefaultParameter(): void { this.assertDefaultReads(); this.props.note = 'x'; }
+  viaDefaultOnly(): void { this.assertDefaultOnly(); this.props.note = 'x'; }
+  viaDestructuredDefault(): void { this.assertDestructuredDefault(); this.props.note = 'x'; }
+  viaDefaultDescription(): void { this.props.note = this.describeStatus(); }
   viaAssigningArgument(): void { this.assertNotClosedFor(String(this.props.status = Status.open)); this.props.note = 'x'; }
 }
 export abstract class AbstractVisa extends AggregateRoot<{ status: Status; note: string }> {
@@ -912,6 +918,9 @@ describe('methodSources with an assertion helper call', () => {
     'viaSwitchReturning',
     'viaNestedLogging',
     'viaDefaultParameter',
+    'viaDefaultOnly',
+    'viaDestructuredDefault',
+    'viaDefaultDescription',
     'viaAssigningArgument',
   ])('%s leaves the sources unknown', (method) => {
     expect(sourcesOf('Visa', method)).toEqual('unknown');
