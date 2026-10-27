@@ -17,8 +17,9 @@ import { namedClassChain } from './named-chain';
 import { ancestry } from '../shared/ancestry';
 import { isTransparentConstruction } from './transparent-constructor';
 import { outermostWrapper, unwrap } from '../shared/wrappers';
+import { isWritten } from '../shared/writes';
 
-const MAX_GETTER_DEPTH = 5;
+export const MAX_GETTER_DEPTH = 5;
 
 const isThis = (node: Node): boolean => {
   const target = unwrap(node);
@@ -274,6 +275,11 @@ const findGetter = (cls: ClassDeclaration, access: Node, name: string) =>
     .map((candidate) => candidate.getGetAccessor(name))
     .find((accessor) => accessor !== undefined);
 
+const findSetter = (cls: ClassDeclaration, access: Node, name: string) =>
+  lookupChain(cls, access)
+    .map((candidate) => candidate.getSetAccessor(name))
+    .find((accessor) => accessor !== undefined);
+
 export const thisMethodDeclaration = (access: PropertyAccessExpression, cls: ClassDeclaration): MethodDeclaration | undefined => {
   const member = declaredMember(lookupChain(cls, access), access.getName());
   return Node.isMethodDeclaration(member) ? member : undefined;
@@ -369,11 +375,23 @@ const escapesIntoUnknown = (node: Node, scope: AggregateScope): boolean =>
 export const isComputedStateAccess = (node: Node): boolean =>
   Node.isElementAccessExpression(node) && isStateHolder(node.getExpression()) && memberName(node) === undefined;
 
+const writesThroughSetter = (node: Node, name: string, field: string, scope: AggregateScope, depth: number): boolean => {
+  const setter = isWritten(outermostWrapper(node)) ? findSetter(scope.cls, node, name) : undefined;
+  if (setter === undefined) return false;
+  const body = setter.getBody();
+  return (
+    body === undefined ||
+    depth >= MAX_GETTER_DEPTH ||
+    [...setter.getParameters(), body].some((traced) => referencesField(traced, field, scope, depth + 1))
+  );
+};
+
 const readsThroughMember = (node: Node, field: string, scope: AggregateScope, depth: number): boolean => {
   const name = thisMemberName(node);
   if (name === undefined || name === STATE_HOLDER || name === field) return false;
   const member = lookupMember(scope, node, name);
   if (member.kind === 'inert') return false;
+  if (writesThroughSetter(node, name, field, scope, depth)) return true;
   if (member.kind === 'data') {
     return (
       dataReadsField(node, member.declarations, field, scope) ||

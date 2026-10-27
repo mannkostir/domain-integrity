@@ -15,6 +15,8 @@ class Rules {
   static notClosed(value: Status): boolean { return value !== Status.closed; }
 }
 function throwClosed(): never { throw new Error('closed'); }
+function throwWith(value: Status): never { throw new Error(value); }
+function rejected(value: Status): { readonly rejected: Status } { return { rejected: value }; }
 export class Ticket extends AggregateRoot<{ status: Status; title: string; lines: string[] }> {
   private archived = false;
   private get isOpen(): boolean { return this.props.status === Status.open; }
@@ -88,6 +90,31 @@ export class Ticket extends AggregateRoot<{ status: Status; title: string; lines
   helperBeforeAssignment(): void { this.assertNotClosed(); this.props.status = Status.open; this.props.title = String(this.props.status); }
   archives(): void { this.archived = true; this.props.title = String(this.archived); }
   booleanGuard(): void { if (this.archived) return; this.props.title = 'x'; }
+  exitThrowReadsField(): void { if (this.props.status === Status.closed) throw new Error('closed: ' + this.props.status); this.props.title = 'x'; }
+  exitReturnReadsField(): { readonly rejected: Status } | undefined { if (this.props.status === Status.closed) { return rejected(this.props.status); } this.props.title = 'x'; return undefined; }
+  exitReadsThroughGetter(): void { if (this.props.status !== Status.open) throw new Error(String(this.isOpen)); this.props.title = 'x'; }
+  exitThrowingCallReadsField(): void { if (this.props.status === Status.closed) throwWith(this.props.status); this.props.title = 'x'; }
+  exitAssignsFromField(): void { if (this.props.status === Status.closed) throw new Error(String(this.props.status = this.props.status)); this.props.title = 'x'; }
+  exitDeclaresAlias(): void { if (this.props.status === Status.closed) { const s = this.props.status; throw new Error(s); } this.props.title = 'x'; }
+  exitDelegates(): void { if (this.props.status === Status.closed) return this.reopenNow(); this.props.title = 'x'; }
+  exitEscapesThis(): { readonly rejected: Ticket } | undefined { if (this.props.status === Status.closed) return { rejected: this }; this.props.title = 'x'; return undefined; }
+  exitReadsThroughWritingGetter(): void { if (this.props.status === Status.closed) throw new Error(String(this.reopened)); this.props.title = 'x'; }
+  private reopenNow(): void { this.props.status = Status.open; }
+  private get reopened(): Status { return this.reopenStatus(); }
+  private reopenStatus(): Status { this.props.status = Status.open; return this.props.status; }
+  exitReadsThroughAssigningGetter(): void { if (this.props.status === Status.closed) throw new Error(String(this.reopenedInPlace)); this.props.title = 'x'; }
+  private get reopenedInPlace(): Status { return (this.props.status = Status.open); }
+  private get relabelled(): string { return 'n/a'; }
+  private set relabelled(value: Status) { this.props.status = value; }
+  private get caption(): string { return this.props.title; }
+  private set caption(value: string) { this.props.title = value; }
+  private relabelNow(): void { this.relabelled = Status.open; }
+  writesThroughSetter(): void { this.relabelled = Status.open; }
+  guardedSetterWrite(): void { if (this.props.status === Status.closed) return; this.relabelled = Status.open; }
+  exitWritesThroughSetter(): void { if (this.props.status === Status.closed) return void (this.relabelled = Status.open); this.props.title = 'x'; }
+  exitReadsAndWritesThroughSetter(): unknown { if (this.props.status === Status.closed) return [this.props.status, (this.relabelled = Status.open)]; this.props.title = 'x'; return undefined; }
+  exitDelegatesToSetter(): unknown { if (this.props.status === Status.closed) return [this.props.status, this.relabelNow()]; this.props.title = 'x'; return undefined; }
+  writesThroughUnrelatedSetter(): void { if (this.props.status === Status.closed) return; this.caption = 'x'; }
 }
 export class GuardedTicket extends AggregateRoot<{ status: Status; title: string }> {
   get status(): Status { return this.props.status; }
@@ -155,6 +182,8 @@ export class Meter extends AggregateRoot<{ reading: number | null; code: string 
   readingViaValueGetter(): void { if (!this.currentReading) return; this.props.note = 'x'; }
   readingStrictNullReturn(): void { if (this.props.reading === null) return; this.props.note = 'x'; }
   readingStrictNotNullWrapper(): void { if (this.props.reading !== null) { this.props.note = 'x'; } }
+  readingExitReads(): void { if (this.props.reading === null) throw new Error(String(this.props.reading)); this.props.note = 'x'; }
+  readingExitIncrements(): void { if (this.props.reading !== null) throw new Error(String(this.props.reading++)); this.props.note = 'x'; }
   codeTruthyThrow(): void { if (this.props.code) throw new Error('x'); this.props.note = 'x'; }
   codeFalsyReturn(): void { if (!this.props.code) return; this.props.note = 'x'; }
   codeLooseNullReturn(): void { if (this.props.code == null) return; this.props.note = 'x'; }
@@ -274,6 +303,10 @@ export class Permit extends AggregateRoot<{ status: Status; closedAt: Date | nul
   elseIfWriteThenGuard(flag: boolean): void { if (this.props.status === Status.closed) throw new Error('x'); else if (flag) this.props.status = Status.open; if (this.props.status !== Status.open) throw new Error('x'); this.props.note = 'x'; }
   elseBranchWriteThenGuard(flag: boolean): void { if (this.props.status === Status.closed) throw new Error('x'); else { if (flag) this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); this.props.note = 'x'; } }
   pausedElseThrow(): void { if (!this.paused) { this.props.note = 'x'; } else { throw new Error('x'); } }
+  elseExitReadsField(): void { if (this.props.status === Status.open) { this.props.note = 'x'; } else { throw new Error(String(this.props.status)); } }
+  elseReturnReadsField(): { readonly rejected: Status } | undefined { if (this.props.status === Status.open) { this.props.note = 'x'; } else { return { rejected: this.props.status }; } return undefined; }
+  elseExitDelegates(): void { if (this.props.status === Status.open) { this.props.note = 'x'; } else { return this.reopenNow(); } }
+  private reopenNow(): void { this.props.status = Status.open; }
 }
 `,
   '/src/ledger.ts': `
@@ -317,6 +350,11 @@ export class Ledger extends AggregateRoot<{ status: Status; other: Status; phase
   workWriteThenGuard(flag: boolean): void { switch (this.props.status) { case Status.draft: if (flag) this.props.status = Status.open; if (this.props.status !== Status.open) throwClosed(); break; default: throw new Error('x'); } }
   workWriteThenLaterGuard(): void { switch (this.props.status) { case Status.draft: this.props.status = Status.open; break; default: throw new Error('x'); } if (this.props.status !== Status.open) throwClosed(); }
   otherFieldSwitch(): void { switch (this.props.other) { case Status.closed: this.props.note = String(this.props.status); break; } }
+  exitCaseReadsField(): void { switch (this.props.status) { case Status.closed: throw new Error(String(this.props.status)); } this.props.note = 'x'; }
+  exitCaseAssignsFromField(): void { switch (this.props.status) { case Status.closed: throw new Error(String(this.props.status = this.props.status)); } this.props.note = 'x'; }
+  exitCaseReturnsReadingField(): { readonly rejected: Status } | undefined { switch (this.props.status) { case Status.closed: return { rejected: this.props.status }; } this.props.note = 'x'; return undefined; }
+  exitCaseDelegates(): void { switch (this.props.status) { case Status.closed: return this.reopenNow(); } this.props.note = 'x'; }
+  private reopenNow(): void { this.props.status = Status.open; }
 }
 `,
   '/src/visa-status.ts': `
@@ -357,6 +395,8 @@ export class Visa extends VisaBase {
   private assertLogsInBranch(): void { if (this.props.status === Status.closed) { log(); throw new Error('x'); } }
   private assertThenAssigns(): void { if (this.props.status === Status.closed) throw new Error('x'); this.props.status = Status.open; }
   private assertMessageReads(): void { if (this.props.status === Status.closed) throw new Error(String(this.props.status)); }
+  private assertDelegates(): void { if (this.props.status === Status.closed) throw this.reopenError(); }
+  private reopenError(): Error { this.props.status = Status.open; return new Error('x'); }
   private assertRecursive(): void { if (this.props.status === Status.closed) throw new Error('x'); this.assertRecursive(); }
   private assertIs(value: Status): void { if (value === Status.closed) throw new Error('x'); }
   private assertNot(value: Status): void { if (this.props.status === value) throw new Error('x'); }
@@ -388,6 +428,7 @@ export class Visa extends VisaBase {
   viaLogsInBranch(): void { this.assertLogsInBranch(); this.props.note = 'x'; }
   viaAssigning(): void { this.assertThenAssigns(); this.props.note = 'x'; }
   viaMessageRead(): void { this.assertMessageReads(); this.props.note = 'x'; }
+  viaDelegatingExit(): void { this.assertDelegates(); this.props.note = 'x'; }
   viaRecursive(): void { this.assertRecursive(); this.props.note = 'x'; }
   async viaAwait(): Promise<void> { await this.assertNotDraft(); this.props.note = 'x'; }
   viaOptionalCall(): void { this.assertNotDraft?.(); this.props.note = 'x'; }
@@ -409,6 +450,9 @@ export class Visa extends VisaBase {
 export abstract class AbstractVisa extends AggregateRoot<{ status: Status; note: string }> {
   protected abstract assertReady(): void;
   viaAbstract(): void { this.assertReady(); this.props.note = 'x'; }
+  protected abstract get stage(): string;
+  protected abstract set stage(value: Status);
+  viaAbstractSetter(): void { if (this.props.status === Status.closed) return; this.stage = Status.open; }
 }
 export class DeclaredVisa extends DeclaredBase {
   viaDeclared(): void { this.assertNotClosed(); this.props.note = 'x'; }
@@ -479,6 +523,22 @@ describe('methodSources for an enum field', () => {
     ['otherAssignmentDoesNotCut', 'unknown'],
     ['assertsAfterAssignment', ['CLOSED', 'DRAFT', 'OPEN']],
     ['helperBeforeAssignment', ['DRAFT', 'OPEN']],
+    ['exitThrowReadsField', ['DRAFT', 'OPEN']],
+    ['exitReturnReadsField', ['DRAFT', 'OPEN']],
+    ['exitReadsThroughGetter', ['OPEN']],
+    ['exitThrowingCallReadsField', 'unknown'],
+    ['exitAssignsFromField', 'unknown'],
+    ['exitDeclaresAlias', 'unknown'],
+    ['exitDelegates', 'unknown'],
+    ['exitEscapesThis', 'unknown'],
+    ['exitReadsThroughWritingGetter', 'unknown'],
+    ['exitReadsThroughAssigningGetter', 'unknown'],
+    ['writesThroughSetter', 'unknown'],
+    ['guardedSetterWrite', 'unknown'],
+    ['exitWritesThroughSetter', 'unknown'],
+    ['exitReadsAndWritesThroughSetter', 'unknown'],
+    ['exitDelegatesToSetter', 'unknown'],
+    ['writesThroughUnrelatedSetter', ['DRAFT', 'OPEN']],
   ])('%s can run from %j', (method, expected) => {
     expect(describeSources(methodSources(ticket.getMethodOrThrow(method), status, defaultScope(ticket)))).toEqual(expected);
   });
@@ -598,6 +658,8 @@ describe('methodSources for a nullable field whose set values may be falsy', () 
     ['readingViaValueGetter', ['set']],
     ['readingStrictNullReturn', ['set']],
     ['readingStrictNotNullWrapper', ['set']],
+    ['readingExitReads', ['set']],
+    ['readingExitIncrements', 'unknown'],
   ])('%s can run from %j when a number field may hold zero', (method, expected) => {
     expect(sourcesOf(method, 'reading')).toEqual(expected);
   });
@@ -739,6 +801,8 @@ describe('methodSources with an if/else guard whose one branch exits', () => {
     ['nestedEarlyExit', ['OPEN']],
     ['guardAfterElseAssignment', ['DRAFT', 'OPEN']],
     ['wrapperAssignsThenGuards', ['DRAFT']],
+    ['elseExitReadsField', ['OPEN']],
+    ['elseReturnReadsField', ['OPEN']],
   ])('%s can run from %j for an enum field', (method, expected) => {
     expect(sourcesOf(method, 'status')).toEqual(expected);
   });
@@ -755,6 +819,7 @@ describe('methodSources with an if/else guard whose one branch exits', () => {
     'conditionalWriteThenGuard',
     'elseIfWriteThenGuard',
     'elseBranchWriteThenGuard',
+    'elseExitDelegates',
   ])('%s leaves the sources unknown', (method) => {
     expect(sourcesOf(method, 'status')).toEqual('unknown');
   });
@@ -787,6 +852,8 @@ describe('methodSources with a switch on the state field', () => {
     ['wrapperNestedGuard', ['OPEN']],
     ['wrapperTransitions', ['DRAFT', 'OPEN']],
     ['forcedWriteThenGuard', ['DRAFT']],
+    ['exitCaseReadsField', ['DRAFT', 'OPEN']],
+    ['exitCaseReturnsReadingField', ['DRAFT', 'OPEN']],
   ])('%s can run from %j for an enum field', (method, expected) => {
     expect(sourcesOf(method, 'status')).toEqual(expected);
   });
@@ -811,6 +878,8 @@ describe('methodSources with a switch on the state field', () => {
     'workAfterInnerBreak',
     'workWriteThenGuard',
     'workWriteThenLaterGuard',
+    'exitCaseAssignsFromField',
+    'exitCaseDelegates',
   ])('%s leaves the sources unknown', (method) => {
     expect(sourcesOf(method, 'status')).toEqual('unknown');
   });
@@ -890,6 +959,7 @@ describe('methodSources with an assertion helper call', () => {
     ['viaIncludes', ['DRAFT', 'OPEN']],
     ['viaOverloaded', ['DRAFT', 'OPEN']],
     ['viaWrapperBody', ['OPEN']],
+    ['viaMessageRead', ['DRAFT', 'OPEN']],
   ])('%s can run from %j', (method, expected) => {
     expect(sourcesOf('Visa', method)).toEqual(expected);
   });
@@ -904,7 +974,7 @@ describe('methodSources with an assertion helper call', () => {
     'viaLogsFirst',
     'viaLogsInBranch',
     'viaAssigning',
-    'viaMessageRead',
+    'viaDelegatingExit',
     'viaRecursive',
     'viaAwait',
     'viaOptionalCall',
@@ -928,6 +998,7 @@ describe('methodSources with an assertion helper call', () => {
 
   it.each([
     ['AbstractVisa', 'viaAbstract'],
+    ['AbstractVisa', 'viaAbstractSetter'],
     ['DeclaredVisa', 'viaDeclared'],
   ])('%s.%s leaves the sources unknown', (className, method) => {
     expect(sourcesOf(className, method)).toEqual('unknown');

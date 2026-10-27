@@ -147,6 +147,56 @@ export class Account {
     expect(lifecycleFindings(result.findings).map((finding) => `${finding.ruleId} ${methodOf(finding)}`)).toEqual(['terminal-state-leak rename']);
   });
 
+  it('reports a method whose exit guard rejects with the current state', () => {
+    const orderProject = inMemoryProject({
+      '/src/order.ts': `
+export type OrderStatus = 'pending' | 'paid' | 'cancelled';
+export class StatusRejected { constructor(readonly status: OrderStatus) {} }
+export class Order {
+  private status: OrderStatus = 'pending';
+  private note = '';
+  pay(): void { if (this.status !== 'pending') throw new Error('x'); this.status = 'paid'; }
+  cancel(): void { if (this.status !== 'pending') throw new Error('x'); this.status = 'cancelled'; }
+  annotate(note: string): StatusRejected | undefined {
+    if (this.status === 'pending') {
+      return new StatusRejected(this.status);
+    }
+    this.note = note;
+    return undefined;
+  }
+}
+`,
+    });
+    const order = orderProject.getSourceFileOrThrow('/src/order.ts').getClassOrThrow('Order');
+
+    const result = analyse(lifecycleAnalyzer, {
+      declaration: {
+        ...DEFAULT_DECLARATION,
+        lifecycles: [
+          {
+            target: order,
+            fields: [
+              {
+                name: 'status',
+                terminal: ['cancelled'],
+                transitions: new Map([['pay', ['pending']], ['cancel', ['pending']], ['annotate', ['paid']]]),
+                allowAfterTerminal: [],
+              },
+            ],
+            allowAfterTerminal: [],
+          },
+        ],
+      },
+      files: orderProject.getSourceFiles(),
+      projectRoot: '/', repositoryRoot: '/',
+    });
+
+    expect(lifecycleFindings(result.findings).map((finding) => `${finding.ruleId} ${methodOf(finding)}`)).toEqual([
+      'terminal-state-leak annotate',
+      'transition-drift annotate',
+    ]);
+  });
+
   it('reports outside mutations in production files but not in test files by default', () => {
     expect(outsideMutationFiles(DEFAULT_DECLARATION.reportTestFileMutations)).toEqual(['/src/order-service.ts']);
   });
