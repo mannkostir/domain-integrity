@@ -4,6 +4,8 @@ All notable changes to this project are documented here; the format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-27
+
 ### Added
 
 - `--version`, or `-V`, prints the version and exits `0`. The JSON report carries the tool `name` and `version` in `tool`, and the SARIF report carries them in `tool.driver.version` and `tool.driver.informationUri`. (#94)
@@ -124,7 +126,8 @@ All notable changes to this project are documented here; the format follows [Kee
 - GitHub Action: `uses: mannkostir/domain-integrity@v0`.
 - The analysis is conservative: when it cannot interpret something, it reports nothing. The README lists those cases.
 
-[Unreleased]: https://github.com/mannkostir/domain-integrity/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/mannkostir/domain-integrity/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mannkostir/domain-integrity/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/mannkostir/domain-integrity/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/mannkostir/domain-integrity/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mannkostir/domain-integrity/compare/v0.1.0...v0.1.1
