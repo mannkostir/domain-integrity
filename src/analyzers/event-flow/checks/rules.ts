@@ -39,6 +39,7 @@ export const SAGA_MISSING_FAILURE_PATH: RuleDescription<'saga-missing-failure-pa
     'A saga declared with saga() handles the success event of a declared outcome but not its failure event, so a failure leaves the process stuck halfway with nothing to compensate. It runs only for sagas and outcomes declared in events.sagas.',
   remedy:
     'Handle the failure event in the saga, for example with a compensating command. If the outcome is declared wrongly, correct it in events.sagas in domain.config.ts. Accept the finding into the baseline only if the failure is honestly handled somewhere the analysis cannot see.',
+  experimental: true,
 };
 
 export const UNDISPATCHED_EVENTS: RuleDescription<'undispatched-events'> = {

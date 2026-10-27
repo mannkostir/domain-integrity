@@ -27,6 +27,7 @@ const sarifRule = (rule: RuleDescription, tool: ToolIdentity) => {
     help: { text: rule.remedy, markdown: helpUri === undefined ? rule.remedy : `${rule.remedy}\n\n[Rule reference](${helpUri})` },
     ...(helpUri === undefined ? {} : { helpUri }),
     defaultConfiguration: { level: rule.severity },
+    ...(rule.experimental === true ? { properties: { tags: ['experimental'] } } : {}),
   };
 };
 

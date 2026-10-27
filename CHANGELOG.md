@@ -18,6 +18,8 @@ All notable changes to this project are documented here; the format follows [Kee
 - `-p` takes a directory and then uses the `tsconfig.json` inside it. (#109)
 - `--help`, or `-h`, on the tool or on any command prints what each option takes and its default, followed by a link to the README; the tool's help also lists examples. (#109)
 - `require('domain-integrity')` loads the config helpers from CommonJS on Node 22.12 or later, through a `module-sync` export condition. The README documents the module format: the package is ESM-only, CommonJS code on earlier Node versions uses `import()`, and `domain-integrity/schema/report.json` resolves only through `exports`. (#122)
+- More guard shapes are followed: `[A, B].includes(this.status)` on an array literal, negated or not, counts like the equivalent strict comparisons, and an `if`/`else` whose one branch is an early return or throw counts like that early exit followed by the other branch, including `else if` chains; a `switch (this.status)` whose cases only return, throw or break excludes the states whose cases return or throw, and a `switch` whose cases do work counts, only as the method's only statement, like a wrapping `if` over the states of those cases; and a statement such as `this.assertOpen();` counts like the guards in that helper's body when the helper is a plain project method whose body holds only guards that throw. (#124)
+- Enum and literal-union state fields that may be unset, `S | null`, `S | undefined` or optional `s?: S`, are supported: `check` resolves them with their members plus `'unset'`, follows `null` and `undefined` comparisons and truthiness on them, and never reports `'unset'` as unreachable, and `init` suggests them. (#124)
 
 ### Changed
 
@@ -37,6 +39,7 @@ All notable changes to this project are documented here; the format follows [Kee
 - `show` with a name that matches no declared aggregate or handled event lists the names it accepts. (#109)
 - Error messages show paths relative to the current directory, name the config file that was passed, say why a file could not be read or written, such as a missing directory or denied permission, and report config errors at the line they come from. (#109)
 - `publishConfig.provenance` is set, so every publish carries npm provenance, and a publish from a machine that cannot produce provenance fails instead of publishing without it. (#122)
+- `saga-missing-failure-path` is marked experimental: it is labelled so in the README and tagged `experimental` in its SARIF rule's `properties.tags`. (#121)
 
 ### Deprecated
 
@@ -45,6 +48,9 @@ All notable changes to this project are documented here; the format follows [Kee
 ### Fixed
 
 - On Windows, the tsconfig and its project references are read correctly, and the paths the CLI prints use forward slashes, as on other systems. (#111)
+- A guard that follows a conditional assignment to the state field, such as `if (flag) this.status = Status.open; if (this.status !== Status.open) throw …`, no longer narrows the states a method can run from, and inside an `if` that wraps the whole method, guards after a plain assignment to the field are ignored as they are at the top level. Both used to narrow the method's sources to the assigned value, or to none, which could report a false `transition-missing` and hide `terminal-state-leak` and `transition-drift` findings; such a method's sources are now unknown, or limited by the guards before the assignment. (#124)
+- A strict `=== null` or `=== undefined` with a value the field's type cannot hold, such as `this.pausedAt === undefined` on a `Date | null` field, and likewise such a `case` label or `includes` element, now matches nothing. It used to match the field's unset value, so an early exit on it hid `unset` from the method's sources and could report a false `transition-missing`. (#124)
+- Calling a method whose parameter default reads the state field, such as `this.assertOpen()` with `assertOpen(status = this.status)`, counts as a read of the field, so the calling method's sources are unknown. It used to count as no read, which could report a false `terminal-state-leak` or `transition-drift`. (#124)
 
 ## [0.2.1] - 2026-10-14
 

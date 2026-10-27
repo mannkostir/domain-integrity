@@ -21,6 +21,14 @@ describe('unreachableState', () => {
     ]);
   });
 
+  it('never flags the unset value of an enum field that may be unset', () => {
+    const status = stateField('status', 'enum', ['PENDING', 'CANCELLED', 'unset']);
+    const methods = [method('cancel', true, { status: { sources: known('PENDING'), sets: assigned('CANCELLED') } })];
+    const initial = new Map([['status', assigned('PENDING')]]);
+
+    expect(unreachableState(aggregate({ fields: [status], methods, initial }))).toEqual([]);
+  });
+
   it('counts assignments outside the aggregate as reaching a value', () => {
     const outside = [{ field: 'status', file: '/app/src/x.ts', line: 1, scope: 'x', value: assigned('CONFIRMED'), throughOwnSetter: false, inTestFile: false }];
 

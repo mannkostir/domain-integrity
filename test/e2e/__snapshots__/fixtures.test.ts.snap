@@ -248,6 +248,11 @@ exports[`fixture projects > event-flows: sarif report 1`] = `
               "helpUri": "https://github.com/mannkostir/domain-integrity#saga-missing-failure-path",
               "defaultConfiguration": {
                 "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "experimental"
+                ]
               }
             },
             {

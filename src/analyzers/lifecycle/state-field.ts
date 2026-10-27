@@ -30,13 +30,6 @@ const isAccessorOnly = (cls: ClassDeclaration, name: string): boolean => {
   return own.getDeclarations().some(isAccessor);
 };
 
-const resolved = (
-  name: string,
-  kind: StateFieldKind,
-  values: readonly StateValue[],
-  enumReference: EnumReference | undefined = undefined,
-): FieldResolution => ({ kind: 'resolved', field: { name, kind, values, enumReference, unsetForms: [], setMayBeFalsy: false } });
-
 const unsetFormsOf = (members: readonly Type[]): readonly UnsetForm[] => [
   ...(members.some((member) => member.isNull()) ? (['null'] as const) : []),
   ...(members.some((member) => member.isUndefined()) ? (['undefined'] as const) : []),
@@ -79,6 +72,45 @@ const NULLABLE_VALUES: readonly StateValue[] = [
   { token: UNSET, label: UNSET, source: stringSource(UNSET) },
 ];
 
+const UNSET_VALUE: StateValue = { token: UNSET, label: UNSET, source: stringSource(UNSET) };
+
+type LiteralStates = { readonly kind: StateFieldKind; readonly values: readonly StateValue[]; readonly enumReference: EnumReference | undefined };
+
+const literalStates = (present: readonly Type[]): LiteralStates | undefined => {
+  const [first] = present;
+  if (first === undefined) return undefined;
+  if (present.every((member) => member.isEnumLiteral())) {
+    return { kind: 'enum', values: present.map(enumValue), enumReference: enumReferenceOf(first) };
+  }
+  if (present.every((member) => member.isStringLiteral() || member.isNumberLiteral())) {
+    return { kind: 'union', values: present.map(literalValue), enumReference: undefined };
+  }
+  return undefined;
+};
+
+const isFalsyLiteral = (member: Type): boolean => {
+  const value = member.getLiteralValue();
+  return value === '' || value === 0;
+};
+
+const resolvedLiterals = (name: string, states: LiteralStates): FieldResolution => ({
+  kind: 'resolved',
+  field: { name, ...states, unsetForms: [], setMayBeFalsy: false },
+});
+
+const resolvedUnsettableLiterals = (name: string, states: LiteralStates, members: readonly Type[], present: readonly Type[]): FieldResolution => ({
+  kind: 'resolved',
+  field: {
+    name,
+    ...states,
+    values: [...states.values, UNSET_VALUE],
+    unsetForms: unsetFormsOf(members),
+    setMayBeFalsy: present.some(isFalsyLiteral),
+  },
+});
+
+const namesUnset = (states: LiteralStates): boolean => states.values.some((value) => value.token === UNSET);
+
 const resolvedNullable = (name: string, members: readonly Type[], setMayBeFalsy: boolean): FieldResolution => ({
   kind: 'resolved',
   field: { name, kind: 'nullable', values: NULLABLE_VALUES, enumReference: undefined, unsetForms: unsetFormsOf(members), setMayBeFalsy },
@@ -94,14 +126,11 @@ export const resolveStateField = (cls: ClassDeclaration, name: string): FieldRes
   const present = members.filter((member) => !isNullish(member));
   const nullable = present.length < members.length;
   if (!nullable && present.length > 0 && present.every((member) => member.isBooleanLiteral())) {
-    return resolved(name, 'boolean', BOOLEAN_VALUES);
+    return resolvedLiterals(name, { kind: 'boolean', values: BOOLEAN_VALUES, enumReference: undefined });
   }
-  if (!nullable && present.length > 0 && present.every((member) => member.isEnumLiteral())) {
-    return resolved(name, 'enum', present.map(enumValue), enumReferenceOf(present[0] as Type));
-  }
-  if (!nullable && present.length > 0 && present.every((member) => member.isStringLiteral() || member.isNumberLiteral())) {
-    return resolved(name, 'union', present.map(literalValue));
-  }
+  const states = literalStates(present);
+  if (!nullable && states !== undefined) return resolvedLiterals(name, states);
+  if (nullable && states !== undefined && !namesUnset(states)) return resolvedUnsettableLiterals(name, states, members, present);
   if (nullable && present.length > 0 && present.every((member) => literalToken(member) === undefined)) {
     return resolvedNullable(name, members, mayBeFalsy(cls.getProject().getTypeChecker().compilerObject, present));
   }

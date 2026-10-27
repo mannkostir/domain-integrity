@@ -27,6 +27,7 @@ export type RuleDescription<Id extends string = string> = {
   readonly description: string;
   readonly explanation: string;
   readonly remedy: string;
+  readonly experimental?: boolean;
 };
 
 export type ReportedRule<Id extends string> = { readonly ruleId: Id; readonly severity: Severity };
