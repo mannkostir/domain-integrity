@@ -33,6 +33,13 @@ export class Assigned extends AggregateRoot<object> {
   constructor(input: { phase: 'a' | 'b' }) { super({}); Object.assign(this, input); }
 }
 export class Hydrated extends AggregateRoot<{ phase: 'a' | 'b' }> {}
+export class Parcel extends AggregateRoot<object> {
+  private stage: 'packed' | 'sent' | null = null;
+  clear(): void { this.stage = null; }
+  send(): void { this.stage = 'sent'; }
+  copy(next: 'packed' | null): void { this.stage = next; }
+  copyPacked(next: 'packed'): void { this.stage = next; }
+}
 type TamperProps = { closedAt: Date | null };
 export class Tampering extends AggregateRoot<TamperProps> {
   coalesce(): void { this.props.closedAt ??= new Date(); }
@@ -147,6 +154,24 @@ describe('setsOf', () => {
     ['deposit', closedAt, { tokens: [], unresolved: false, mayWrite: false }],
   ] as const)('%s', (method, field, expected) => {
     expect(describeAssigned(setsOf(account.getMethodOrThrow(method), field))).toEqual(expected);
+  });
+});
+
+describe('setsOf for a literal union that may be null', () => {
+  const parcel = file.getClassOrThrow('Parcel');
+  const stage = resolvedField(parcel, 'stage');
+
+  it.each([
+    ['clear', { tokens: ['unset'], unresolved: false, mayWrite: false }],
+    ['send', { tokens: ['sent'], unresolved: false, mayWrite: false }],
+    ['copy', { tokens: [], unresolved: true, mayWrite: false }],
+    ['copyPacked', { tokens: ['packed'], unresolved: false, mayWrite: false }],
+  ] as const)('%s', (method, expected) => {
+    expect(describeAssigned(setsOf(parcel.getMethodOrThrow(method), stage))).toEqual(expected);
+  });
+
+  it('records the initialiser null as unset', () => {
+    expect(describeAssigned(initialValues(parcel, stage))).toEqual({ tokens: ['unset'], unresolved: false, mayWrite: false });
   });
 });
 
