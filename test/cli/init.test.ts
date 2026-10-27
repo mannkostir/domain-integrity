@@ -438,6 +438,45 @@ describe('init beside an import of the aggregate module', () => {
   });
 });
 
+const SHIPMENT_SOURCES = {
+  'src/aggregate-root.ts': AGGREGATE_ROOT,
+  'src/shipment.ts': `
+import { AggregateRoot } from './aggregate-root';
+export enum ShipmentStage { packed = 'PACKED', sent = 'SENT' }
+export class Shipment extends AggregateRoot<{ stage: ShipmentStage | null }> {
+  static pack(): Shipment { return new Shipment({ stage: ShipmentStage.packed }); }
+  send(): void { if (this.props.stage === null) return; this.props.stage = ShipmentStage.sent; }
+  cancel(): void { this.props.stage = null; }
+}
+`,
+};
+
+describe('init for an enum field that may be null', () => {
+  it('suggests the unset value as the terminal state', async () => {
+    const dir = writeProject(SHIPMENT_SOURCES);
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("stage: { terminal: 'unset' },");
+  });
+
+  it('imports only the aggregate when no enum member is written', async () => {
+    const dir = writeProject(SHIPMENT_SOURCES);
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir).split('\n').filter((line) => line.startsWith('import'))).toEqual([
+      "import { defineDomain, lifecycle } from 'domain-integrity';",
+      "import { Shipment } from './src/shipment';",
+    ]);
+  });
+
+  it('writes a config that check reads', async () => {
+    const dir = writeProject(SHIPMENT_SOURCES);
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+});
+
 describe('init', () => {
   it('writes a config that check can read', async () => {
     const dir = writeProject(TICKET_SOURCES);

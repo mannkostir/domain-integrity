@@ -2,6 +2,7 @@ import {
   CallExpression,
   ClassDeclaration,
   Expression,
+  MethodDeclaration,
   NewExpression,
   Node,
   PropertyAccessExpression,
@@ -65,7 +66,7 @@ export type AggregateScope = {
 type MemberLookup =
   | { readonly kind: 'inert' }
   | { readonly kind: 'data'; readonly declarations: readonly Node[]; readonly initializer?: Node }
-  | { readonly kind: 'body'; readonly body: Node }
+  | { readonly kind: 'body'; readonly body: Node; readonly parameters: readonly Node[] }
   | { readonly kind: 'untraceable' };
 
 const baseClassOf = (cls: ClassDeclaration): ClassDeclaration | undefined => cls.getBaseClass();
@@ -96,7 +97,7 @@ const bodyOf = (member: Node): MemberLookup => {
   }
   if (Node.isMethodDeclaration(member) || Node.isGetAccessorDeclaration(member)) {
     const body = member.getBody();
-    return body === undefined ? { kind: 'untraceable' } : { kind: 'body', body };
+    return body === undefined ? { kind: 'untraceable' } : { kind: 'body', body, parameters: member.getParameters() };
   }
   return { kind: 'untraceable' };
 };
@@ -273,6 +274,11 @@ const findGetter = (cls: ClassDeclaration, access: Node, name: string) =>
     .map((candidate) => candidate.getGetAccessor(name))
     .find((accessor) => accessor !== undefined);
 
+export const thisMethodDeclaration = (access: PropertyAccessExpression, cls: ClassDeclaration): MethodDeclaration | undefined => {
+  const member = declaredMember(lookupChain(cls, access), access.getName());
+  return Node.isMethodDeclaration(member) ? member : undefined;
+};
+
 const thisMemberName = (node: Node): string | undefined =>
   (Node.isPropertyAccessExpression(node) || Node.isElementAccessExpression(node)) && isThis(node.getExpression())
     ? memberName(node)
@@ -377,7 +383,10 @@ const readsThroughMember = (node: Node, field: string, scope: AggregateScope, de
     );
   }
   if (member.kind === 'untraceable') return true;
-  return depth >= MAX_GETTER_DEPTH || referencesField(member.body, field, scope, depth + 1);
+  return (
+    depth >= MAX_GETTER_DEPTH ||
+    [...member.parameters, member.body].some((traced) => referencesField(traced, field, scope, depth + 1))
+  );
 };
 
 export const referencesFieldDirectly = (node: Node, field: string, scope: AggregateScope, depth = 0): boolean =>

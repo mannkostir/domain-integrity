@@ -1,4 +1,5 @@
 import { reportedUnder } from '../../../analyzer';
+import { UNSET } from '../../../engine/value-token';
 import { FindingOf } from '../../../finding';
 import { AggregateModel, AssignedValues, StateField } from '../model';
 import { hasUnknownWrite } from '../values';
@@ -20,7 +21,7 @@ const unreachableValues = (aggregate: AggregateModel, field: StateField): Findin
     ...(aggregate.mentioned.get(field.name) ?? []),
   ]);
   return field.values
-    .filter((value) => !reached.has(value.token))
+    .filter((value) => value.token !== UNSET && !reached.has(value.token))
     .map((value): FindingOf<'unreachable-state'> => ({
       ...reportedUnder(UNREACHABLE_STATE),
       analyzer: 'lifecycle',

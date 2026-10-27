@@ -26,6 +26,9 @@ export class Accessed extends AggregateRoot {
 export class AccessedProps extends AggregateRoot<{ status: Status }> {
   get status(): Status { return this.props.status; }
 }
+export enum Stage { draft = 'DRAFT', done = 'DONE' }
+export enum Level { none = 0, some = 1 }
+export class NullableStates extends AggregateRoot<{ stage: Stage | null; optionalStage?: Stage; eitherStage: Stage | null | undefined; phase: 'draft' | 'live' | null; level: Level | null; blank: '' | 'filled' | null; reserved: 'unset' | 'other' | null }> {}
 export class Owner { name = 'owner'; }
 export interface Shape { readonly corners: number }
 export class Nullables<T, U extends object> extends AggregateRoot {
@@ -175,6 +178,68 @@ describe('resolveStateField', () => {
     });
   });
 
+  it('resolves an enum field that may be null with an unset value', () => {
+    expect(resolveStateField(cls('NullableStates'), 'stage')).toEqual({
+      kind: 'resolved',
+      field: {
+        name: 'stage',
+        kind: 'enum',
+        values: [
+          { token: 'DRAFT', label: 'draft', source: { kind: 'expression', text: 'Stage.draft' } },
+          { token: 'DONE', label: 'done', source: { kind: 'expression', text: 'Stage.done' } },
+          { token: 'unset', label: 'unset', source: { kind: 'string', value: 'unset' } },
+        ],
+        enumReference: { name: 'Stage', file: '/src/samples.ts' },
+        unsetForms: ['null'],
+        setMayBeFalsy: false,
+      },
+    });
+  });
+
+  it.each([
+    ['optionalStage', ['undefined']],
+    ['eitherStage', ['null', 'undefined']],
+  ])('resolves the enum field NullableStates.%s with the unset forms %j', (field, unsetForms) => {
+    expect(resolveStateField(cls('NullableStates'), field)).toMatchObject({
+      kind: 'resolved',
+      field: { kind: 'enum', values: [{ token: 'DRAFT' }, { token: 'DONE' }, { token: 'unset' }], unsetForms },
+    });
+  });
+
+  it('resolves a string literal union that may be null with an unset value', () => {
+    expect(resolveStateField(cls('NullableStates'), 'phase')).toMatchObject({
+      kind: 'resolved',
+      field: {
+        kind: 'union',
+        values: [
+          { token: 'draft', source: { kind: 'string', value: 'draft' } },
+          { token: 'live', source: { kind: 'string', value: 'live' } },
+          { token: 'unset', source: { kind: 'string', value: 'unset' } },
+        ],
+        unsetForms: ['null'],
+        setMayBeFalsy: false,
+      },
+    });
+  });
+
+  it.each([['level'], ['blank']])('records that a member of NullableStates.%s is falsy', (field) => {
+    expect(resolveStateField(cls('NullableStates'), field)).toMatchObject({ kind: 'resolved', field: { setMayBeFalsy: true } });
+  });
+
+  it('reports a nullable union with a member named like the unset value as an unsupported type', () => {
+    expect(resolveStateField(cls('NullableStates'), 'reserved')).toMatchObject({
+      kind: 'problem',
+      problem: { code: 'state-field-unsupported-type', details: { aggregate: 'NullableStates', field: 'reserved' } },
+    });
+  });
+
+  it('lists enums and literal unions that may be unset among the supported types', () => {
+    expect(resolveStateField(cls('OwnFields'), 'maybe')).toMatchObject({
+      kind: 'problem',
+      problem: { message: expect.stringContaining('an enum or literal union that may be null or undefined') },
+    });
+  });
+
   it('reports a field that does not exist', () => {
     expect(resolveStateField(cls('InProps'), 'missing')).toEqual({
       kind: 'problem',
@@ -202,5 +267,16 @@ describe('resolveStateField', () => {
 describe('candidateFields', () => {
   it('proposes the backing field and never the accessor', () => {
     expect(candidateFields(defaultScope(cls('Accessed')), []).map((field) => field.name)).toEqual(['_status']);
+  });
+
+  it('proposes enum and literal-union fields that may be unset', () => {
+    expect(candidateFields(defaultScope(cls('NullableStates')), []).map((field) => field.name)).toEqual([
+      'stage',
+      'optionalStage',
+      'eitherStage',
+      'phase',
+      'level',
+      'blank',
+    ]);
   });
 });
