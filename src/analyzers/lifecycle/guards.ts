@@ -3,7 +3,7 @@ import { scanHelperStep } from './assertion-helper';
 import { ExitKind, branchStatements, exitsEarly, containsReturnOrThrow } from './early-exit';
 import { AggregateScope } from './field-ref';
 import { evaluateCondition } from './guard-condition';
-import { GuardRules, GuardScan, isFieldAssignment, mayAssignField, readsFieldOutside } from './guard-scan';
+import { GuardRules, GuardScan, exitFieldReads, isFieldAssignment, mayAssignField, readsFieldOutside } from './guard-scan';
 import { collapseGuardTokens, guardUniverse } from './guard-tokens';
 import { Sources, StateField } from './model';
 import { isLibraryNode } from '../shared/library';
@@ -15,6 +15,7 @@ type ExitGuard = {
   readonly condition: Expression;
   readonly passesWhen: 'whenTrue' | 'whenFalse';
   readonly continuation: readonly Statement[];
+  readonly exit: readonly Statement[];
 };
 
 const METHOD_RULES: GuardRules = { exits: 'any', strict: false, helpers: [] };
@@ -25,11 +26,13 @@ const exitGuard = (statement: Statement, exits: ExitKind): ExitGuard | undefined
   const then = statement.getThenStatement();
   const otherwise = statement.getElseStatement();
   const thenExits = exitsEarly(then, exits);
-  if (otherwise === undefined) return thenExits ? { condition, passesWhen: 'whenFalse', continuation: [] } : undefined;
+  if (otherwise === undefined) {
+    return thenExits ? { condition, passesWhen: 'whenFalse', continuation: [], exit: branchStatements(then) } : undefined;
+  }
   if (thenExits === exitsEarly(otherwise, exits)) return undefined;
   return thenExits
-    ? { condition, passesWhen: 'whenFalse', continuation: branchStatements(otherwise) }
-    : { condition, passesWhen: 'whenTrue', continuation: branchStatements(then) };
+    ? { condition, passesWhen: 'whenFalse', continuation: branchStatements(otherwise), exit: branchStatements(then) }
+    : { condition, passesWhen: 'whenTrue', continuation: branchStatements(then), exit: branchStatements(otherwise) };
 };
 
 const unwrapParentheses = (node: Expression): Expression =>
@@ -100,7 +103,8 @@ const scanExitGuard = (guard: ExitGuard, field: StateField, scope: AggregateScop
   const evaluation = evaluateCondition(guard.condition, field, scope);
   if (evaluation === 'unknown') return 'unknown';
   const continuation = scanEarlyExits(statementsUntilOverwrite(guard.continuation, field), field, scope, rules);
-  return narrow({ allowed: evaluation[guard.passesWhen], recognised: new Set([guard.condition]) }, continuation);
+  const recognised = new Set<Node>([guard.condition, ...exitFieldReads(guard.exit, field, scope)]);
+  return narrow({ allowed: evaluation[guard.passesWhen], recognised }, continuation);
 };
 
 const switchExcludingExits = (read: FieldSwitch, field: StateField): GuardScan => {

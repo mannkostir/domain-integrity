@@ -2,14 +2,13 @@ import { BinaryExpression, CallExpression, Expression, Node, PropertyAccessExpre
 import { SET, literalToken } from '../../engine/value-token';
 import { isDefaultLibraryNode } from '../shared/library';
 import { unwrap } from '../shared/wrappers';
-import { AggregateScope, fieldNameOf, referencesField, thisGetterExpression } from './field-ref';
+import { AggregateScope, MAX_GETTER_DEPTH, fieldNameOf, referencesField, thisGetterExpression } from './field-ref';
 import { comparedUnsetTokens, guardUniverse, unsetGuardTokens } from './guard-tokens';
 import { StateField, UnsetForm } from './model';
 import { allTokens, difference, intersect, union } from './values';
 
 export type Evaluation = { readonly whenTrue: ReadonlySet<string>; readonly whenFalse: ReadonlySet<string> } | 'unknown';
 
-const MAX_GETTER_DEPTH = 5;
 const EQUALITY = new Set<SyntaxKind>([SyntaxKind.EqualsEqualsEqualsToken, SyntaxKind.EqualsEqualsToken]);
 const INEQUALITY = new Set<SyntaxKind>([SyntaxKind.ExclamationEqualsEqualsToken, SyntaxKind.ExclamationEqualsToken]);
 const STRICT = new Set<SyntaxKind>([SyntaxKind.EqualsEqualsEqualsToken, SyntaxKind.ExclamationEqualsEqualsToken]);

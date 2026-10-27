@@ -2,6 +2,7 @@ import { CaseOrDefaultClause, Expression, Node, Statement, SwitchStatement } fro
 import { ExitKind, branchStatements, isEarlyExit, containsReturnOrThrow } from './early-exit';
 import { AggregateScope, fieldNameOf, referencesField } from './field-ref';
 import { strictTokens } from './guard-condition';
+import { exitFieldReads } from './guard-scan';
 import { guardUniverse } from './guard-tokens';
 import { StateField } from './model';
 import { difference, union } from './values';
@@ -113,5 +114,9 @@ export const readFieldSwitch = (
   const groups = classifyRuns(firstMatchWins(mergeFallthrough(labelled)), exits);
   if (groups === 'unknown') return 'unknown';
   const caseLabels = clauses.flatMap((clause) => (Node.isCaseClause(clause) ? [clause.getExpression()] : []));
-  return { groups, recognised: [statement.getExpression(), ...caseLabels] };
+  const exitReads = clauses
+    .map((clause) => clauseBody(clause.getStatements()))
+    .filter((body) => isEarlyExit(body, exits))
+    .flatMap((body) => exitFieldReads(body, field, scope));
+  return { groups, recognised: [statement.getExpression(), ...caseLabels, ...exitReads] };
 };
