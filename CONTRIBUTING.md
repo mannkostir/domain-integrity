@@ -45,7 +45,7 @@ npm run build
 npm run test:pack
 ```
 
-`npm run test:pack` builds and packs the package, checks the tarball with publint and attw, installs it into a temporary project, runs the installed CLI against a copy of `test/fixtures/outside-spec`, and type-checks that project's `domain.config.ts` against the installed types. Installing the tarball needs access to the npm registry.
+`npm run test:pack` builds and packs the package, checks the tarball with publint and attw, installs it into a temporary project, runs the installed CLI against a copy of `test/fixtures/outside-spec`, loads the installed library entry with `import()` and, from CommonJS, with `require()`, which needs Node 22.12 or later, and type-checks that project's `domain.config.ts` against the installed types. Installing the tarball needs access to the npm registry.
 
 `npm run test:coverage` runs the suite with V8 coverage over `src/` and fails when coverage drops below the thresholds in `vitest.config.ts`.
 

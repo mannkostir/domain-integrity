@@ -139,6 +139,12 @@ In an existing config the names are added: to `AggregateRoot` and `Entity` when 
 
 **Requirements:** Node 22 or 24 (`engines: >=22`), a TypeScript 5+ project, and `strictNullChecks` for nullable state fields.
 
+**Module format:** the package is ESM-only. The library entry that `domain.config.ts` imports is an ES module under the `import` and `module-sync` conditions, with no `require` or `default` condition.
+
+- **Runtime:** CommonJS code loads it with `await import('domain-integrity')`, or with `require('domain-integrity')` on Node 22.12 or later, which can `require()` an ES module and matches `module-sync`; 22.12 prints an `ExperimentalWarning` when it does. Earlier versions reject that `require()` with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+- **TypeScript:** a CommonJS file type-checks that `require()` under `module` `nodenext`, not `node16`. The config types are typechecked with TypeScript 6.0 under `moduleResolution` `bundler`, and arethetypeswrong checks both entries under `node16` and `bundler` in CI and before every release.
+- **Schema subpath:** `domain-integrity/schema/report.json` resolves only through `exports`, so only a resolver that reads `exports` finds it; in TypeScript that means `moduleResolution` set to `node16`, `nodenext` or `bundler`.
+
 ## What it checks
 
 | Check | Catches |
