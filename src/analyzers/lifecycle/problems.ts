@@ -1,6 +1,6 @@
 import { ProblemOf } from '../../finding';
 
-const SUPPORTED = 'supported state types are an enum, a string or number literal union, boolean, and a nullable non-literal type such as Date | null (requires strictNullChecks)';
+const SUPPORTED = 'supported state types are an enum, a string or number literal union, boolean, and, with strictNullChecks, an enum or literal union that may be null or undefined, or a nullable non-literal type such as Date | null';
 
 export const stateFieldAccessor = (aggregate: string, field: string): ProblemOf<'state-field-accessor'> => ({
   code: 'state-field-accessor',
