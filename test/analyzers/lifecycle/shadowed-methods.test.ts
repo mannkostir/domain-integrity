@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClassDeclaration, CompilerOptions } from 'ts-morph';
+import { ClassDeclaration, CompilerOptions, ScriptTarget } from 'ts-morph';
 import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
 import { methodSources } from '../../../src/analyzers/lifecycle/guards';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
@@ -91,5 +91,90 @@ export const stub = (order: Order): void => { order['cancel'] = (): void => unde
     const order = aggregateClass(orderWith(`constructor() { this.assertOpen = (): void => {}; }\n${helper}\nclose(): void { this.assertOpen(); this.status = 'closed'; }`), 'Order');
 
     expect(describeSources(methodSources(order.getMethodOrThrow('close'), resolvedField(order, 'status'), defaultScope(order)))).toBe('unknown');
+  });
+});
+
+const baseAndOrder = (members: string): Files => ({
+  [ORDER_FILE]: `
+export type Status = 'open' | 'closed';
+const noop = (): void => undefined;
+export class BangBase {
+  protected status: Status = 'open';
+  cancelBg(): void { this.status = 'closed'; }
+}
+export class BangOrder extends BangBase {
+  ${members}
+}
+`,
+});
+
+describe('properties that set nothing on the instance', () => {
+  it('judges an inherited method that a declare property names', () => {
+    const files = {
+      [ORDER_FILE]: `
+export type Status = 'open' | 'closed';
+export class DcBase {
+  protected status: Status = 'open';
+  cancelDc(): void { this.status = 'closed'; }
+}
+export class DcOrder extends DcBase {
+  declare cancelDc: () => void;
+}
+`,
+    };
+
+    expect(reported(files, 'DcOrder')).toEqual(['terminal-state-leak cancelDc']);
+  });
+
+  it('judges an inherited method that an abstract property in a middle class names', () => {
+    const files = {
+      [ORDER_FILE]: `
+export type Status = 'open' | 'closed';
+export class AbBase {
+  protected status: Status = 'open';
+  cancelAb(): void { this.status = 'closed'; }
+}
+export abstract class AbMiddle extends AbBase {
+  abstract cancelAb: () => void;
+}
+export class AbOrder extends AbMiddle {}
+`,
+    };
+
+    expect(reported(files, 'AbOrder')).toEqual(['terminal-state-leak cancelAb']);
+  });
+
+  it('judges an inherited method that an uninitialised property names when class fields are assigned', () => {
+    expect(reported(baseAndOrder('cancelBg!: () => void;'), 'BangOrder', { useDefineForClassFields: false })).toEqual([
+      'terminal-state-leak cancelBg',
+    ]);
+  });
+
+  it('judges an inherited method that an optional property names when class fields are assigned', () => {
+    expect(reported(baseAndOrder('cancelBg?: () => void;'), 'BangOrder', { useDefineForClassFields: false })).toEqual([
+      'terminal-state-leak cancelBg',
+    ]);
+  });
+
+  it('judges an inherited method that an uninitialised property names when the target predates ES2022', () => {
+    expect(reported(baseAndOrder('cancelBg!: () => void;'), 'BangOrder', { target: ScriptTarget.ES2021 })).toEqual([
+      'terminal-state-leak cancelBg',
+    ]);
+  });
+
+  it('skips an inherited method that an uninitialised property shadows when class fields are defined', () => {
+    expect(reported(baseAndOrder('cancelBg!: () => void;'), 'BangOrder', { useDefineForClassFields: true })).toEqual([]);
+  });
+
+  it('skips an inherited method that an uninitialised property shadows under an ES2022 target', () => {
+    expect(reported(baseAndOrder('cancelBg!: () => void;'), 'BangOrder', { target: ScriptTarget.ES2022 })).toEqual([]);
+  });
+
+  it('skips an inherited method that an uninitialised property shadows under the default target', () => {
+    expect(reported(baseAndOrder('cancelBg!: () => void;'), 'BangOrder', { target: undefined })).toEqual([]);
+  });
+
+  it('skips an inherited method that an initialised property shadows when class fields are assigned', () => {
+    expect(reported(baseAndOrder('cancelBg = noop;'), 'BangOrder', { useDefineForClassFields: false })).toEqual([]);
   });
 });

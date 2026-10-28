@@ -1,4 +1,13 @@
-import { ArrowFunction, ClassDeclaration, ClassInstanceMemberTypes, MethodDeclaration, Node, PropertyDeclaration } from 'ts-morph';
+import {
+  ArrowFunction,
+  ClassDeclaration,
+  ClassInstanceMemberTypes,
+  CompilerOptions,
+  MethodDeclaration,
+  Node,
+  PropertyDeclaration,
+  ScriptTarget,
+} from 'ts-morph';
 import { NameUses } from '../shared/name-uses';
 import { ArrowMethods } from './arrow-methods';
 
@@ -29,12 +38,22 @@ const arrowMethod = (property: PropertyDeclaration, arrows: ArrowMethods): Insta
 const isAccessor = (member: ClassInstanceMemberTypes): boolean =>
   Node.isGetAccessorDeclaration(member) || Node.isSetAccessorDeclaration(member);
 
-const isInstanceProperty = (member: ClassInstanceMemberTypes): boolean =>
-  Node.isPropertyDeclaration(member) || Node.isParameterDeclaration(member);
+const emittedTarget = (options: CompilerOptions): ScriptTarget => options.target ?? ScriptTarget.LatestStandard;
+
+const definesUninitialisedFields = (options: CompilerOptions): boolean =>
+  options.useDefineForClassFields ?? emittedTarget(options) >= ScriptTarget.ES2022;
+
+const setsOwnProperty = (property: PropertyDeclaration): boolean =>
+  !property.hasDeclareKeyword() &&
+  !property.isAbstract() &&
+  (property.hasInitializer() || definesUninitialisedFields(property.getProject().getCompilerOptions()));
+
+const isOwnProperty = (member: ClassInstanceMemberTypes): boolean =>
+  Node.isParameterDeclaration(member) || (Node.isPropertyDeclaration(member) && setsOwnProperty(member));
 
 const methodAmong = (members: readonly ClassInstanceMemberTypes[], arrows: ArrowMethods): InstanceMethod | undefined => {
   if (members.some(isAccessor)) return undefined;
-  const property = members.find(isInstanceProperty);
+  const property = members.find(isOwnProperty);
   if (property !== undefined) return Node.isPropertyDeclaration(property) ? arrowMethod(property, arrows) : undefined;
   const method = members.find(Node.isMethodDeclaration);
   return method === undefined ? undefined : declaredMethod(method);
