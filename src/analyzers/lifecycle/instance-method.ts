@@ -8,8 +8,8 @@ import {
   PropertyDeclaration,
   ScriptTarget,
 } from 'ts-morph';
-import { NameUses } from '../shared/name-uses';
 import { ArrowMethods } from './arrow-methods';
+import { WrittenMethods } from './written-methods';
 
 export type MethodImplementation = MethodDeclaration | ArrowFunction;
 
@@ -21,7 +21,7 @@ export type InstanceMethod = {
 
 export type MethodResolution = {
   readonly arrowMethods: ArrowMethods;
-  readonly nameUses: Pick<NameUses, 'isWritten'>;
+  readonly writtenMethods: WrittenMethods;
 };
 
 export const declaredMethod = (method: MethodDeclaration): InstanceMethod => ({
@@ -74,4 +74,4 @@ export const resolveInstanceMethod = (
   name: string,
   resolution: MethodResolution,
 ): InstanceMethod | undefined =>
-  resolution.nameUses.isWritten(name) ? undefined : resolveDeclaredMethod(chain, name, resolution.arrowMethods);
+  resolution.writtenMethods.isWritten(name) ? undefined : resolveDeclaredMethod(chain, name, resolution.arrowMethods);

@@ -1,4 +1,4 @@
-import { BindingElement, ElementAccessExpression, Node, SyntaxKind } from 'ts-morph';
+import { BindingElement, ElementAccessExpression, Node, PropertyAccessExpression, SyntaxKind } from 'ts-morph';
 import { groupedBy } from './grouping';
 import { SourceIndex } from './source-index';
 import { isWritten, keyNames } from './writes';
@@ -28,10 +28,12 @@ const destructuringAssignmentKeys = (property: Node): readonly string[] =>
     ? propertyNameKeys(property.getNameNode())
     : [];
 
+export type MemberAccess = PropertyAccessExpression | ElementAccessExpression;
+
 export class NameUses {
   private elementAccesses: ReadonlyMap<string, readonly ElementAccessExpression[]> | undefined;
   private destructured: ReadonlySet<string> | undefined;
-  private written: ReadonlySet<string> | undefined;
+  private written: ReadonlyMap<string, readonly MemberAccess[]> | undefined;
 
   constructor(private readonly sources: SourceIndex) {}
 
@@ -43,18 +45,15 @@ export class NameUses {
     );
   }
 
-  isWritten(name: string): boolean {
-    this.written ??= new Set([
-      ...this.sources
-        .ofKind(SyntaxKind.PropertyAccessExpression)
-        .filter(isWrittenAccess)
-        .map((access) => access.getName()),
-      ...this.sources
-        .ofKind(SyntaxKind.ElementAccessExpression)
-        .filter(isWrittenAccess)
-        .flatMap((access) => keyNames(access.getArgumentExpression())),
-    ]);
-    return this.written.has(name);
+  writtenAccessesNamed(name: string): readonly MemberAccess[] {
+    this.written ??= groupedBy<string, MemberAccess>(
+      [
+        ...this.sources.ofKind(SyntaxKind.PropertyAccessExpression).filter(isWrittenAccess),
+        ...this.sources.ofKind(SyntaxKind.ElementAccessExpression).filter(isWrittenAccess),
+      ],
+      (access) => (Node.isPropertyAccessExpression(access) ? [access.getName()] : keyNames(access.getArgumentExpression())),
+    );
+    return this.written.get(name) ?? [];
   }
 
   private elementAccessesKeyedFor(name: string): readonly ElementAccessExpression[] {

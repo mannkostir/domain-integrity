@@ -101,6 +101,117 @@ export const stub = (order: Order): void => { order['cancel'] = (): void => unde
   });
 });
 
+const withSource = (source: string): Files => ({
+  ...orderWith(CANCEL),
+  '/src/other.ts': `
+import { Order } from './order';
+${source}
+`,
+});
+
+const SPECIAL_ORDER = 'export class SpecialOrder extends Order {}';
+
+const CANCEL_DTO = 'export class CancelDto { cancel: boolean; constructor(cancel: boolean) { this.cancel = cancel; } }';
+
+const SOCKET = 'export class Socket { cancel(): void {} send(data: string): void { void data; } }';
+
+describe('writes of a method name on a receiver that may be the aggregate', () => {
+  it('does not judge a method assigned through a variable typed as the aggregate', () => {
+    expect(reported(withSource('export const stub = (order: Order): void => { order.cancel = (): void => undefined; };'))).toEqual([]);
+  });
+
+  it('does not judge a method assigned through an interface the aggregate implements', () => {
+    const source = `export interface Cancellable { cancel(): void }
+export const stub = (order: Order): void => { const target: Cancellable = order; target.cancel = (): void => undefined; };`;
+
+    expect(reported(withSource(source))).toEqual([]);
+  });
+
+  it('does not judge a method assigned through any', () => {
+    expect(reported(withSource('export const stub = (target: any): void => { target.cancel = (): void => undefined; };'))).toEqual([]);
+  });
+
+  it('does not judge a method assigned through a type parameter whose constraint the aggregate satisfies', () => {
+    const source = 'export const stub = <T extends { cancel(): void }>(target: T): void => { target.cancel = (): void => undefined; };';
+
+    expect(reported(withSource(source))).toEqual([]);
+  });
+
+  it('does not judge a method assigned through an unconstrained type parameter', () => {
+    expect(reported(withSource('export const stub = <T,>(target: T): void => { target.cancel = (): void => undefined; };'))).toEqual([]);
+  });
+
+  it('does not judge a method assigned through a record type', () => {
+    const source = 'export const stub = (bag: Record<string, unknown>): void => { bag.cancel = (): void => undefined; };';
+
+    expect(reported(withSource(source))).toEqual([]);
+  });
+
+  it('does not judge a method assigned through a variable typed as a subclass', () => {
+    const source = `${SPECIAL_ORDER}\nexport const stub = (order: SpecialOrder): void => { order.cancel = (): void => undefined; };`;
+
+    expect(reported(withSource(source))).toEqual([]);
+  });
+
+  it('does not judge a method assigned through super in a subclass', () => {
+    const source = 'export class SpecialOrder extends Order { constructor() { super(); super.cancel = (): void => undefined; } }';
+
+    expect(reported(withSource(source))).toEqual([]);
+  });
+
+  it('does not judge a method written through a keyof key on the aggregate', () => {
+    const source = 'export const set = (order: Order, key: keyof Order, value: never): void => { order[key] = value; };';
+
+    expect(reported(withSource(source))).toEqual([]);
+  });
+
+  it('judges a method whose name an unrelated class assigns on this', () => {
+    expect(reported(withSource(CANCEL_DTO))).toEqual(['terminal-state-leak cancel']);
+  });
+
+  it('judges a method whose name is assigned on an unrelated class type', () => {
+    const source = `${SOCKET}\nexport const stub = (socket: Socket): void => { socket.cancel = (): void => undefined; };`;
+
+    expect(reported(withSource(source))).toEqual(['terminal-state-leak cancel']);
+  });
+
+  it('judges a method whose name is assigned on an object type the aggregate does not satisfy', () => {
+    const source = 'export const stub = (options: { cancel?: () => void; timeoutMs: number }): void => { options.cancel = (): void => undefined; };';
+
+    expect(reported(withSource(source))).toEqual(['terminal-state-leak cancel']);
+  });
+
+  it('judges a method whose name is assigned through a type parameter constrained to an unrelated class', () => {
+    const source = `${SOCKET}\nexport const stub = <T extends Socket>(socket: T): void => { socket.cancel = (): void => undefined; };`;
+
+    expect(reported(withSource(source))).toEqual(['terminal-state-leak cancel']);
+  });
+
+  it('judges a method whose name is written through a keyof key on an unrelated class', () => {
+    const source = `${CANCEL_DTO}\nexport const set = (dto: CancelDto, key: keyof CancelDto, value: never): void => { dto[key] = value; };`;
+
+    expect(reported(withSource(source))).toEqual(['terminal-state-leak cancel']);
+  });
+
+  it('traces a caller into a method whose name only an unrelated class assigns', () => {
+    const members = `private note = '';\ntouch(): void { this.note = 'touched'; }\nclose(): void { this.touch(); this.status = 'closed'; }`;
+    const files = { ...orderWith(members), '/src/other.ts': 'export class TouchDto { touch: boolean; constructor(touch: boolean) { this.touch = touch; } }' };
+
+    expect(reported(files)).toEqual(['terminal-state-leak touch', 'terminal-state-leak close']);
+  });
+
+  it('follows an assertion helper whose name only an unrelated class assigns', () => {
+    const helper = `assertOpen(): void { if (this.status !== 'open') throw new Error('not open'); }`;
+    const files = {
+      ...orderWith(`${helper}\nclose(): void { this.assertOpen(); this.status = 'closed'; }`),
+      '/src/other.ts': 'export class AssertDto { assertOpen: boolean; constructor(assertOpen: boolean) { this.assertOpen = assertOpen; } }',
+    };
+    const order = aggregateClass(files, 'Order');
+
+    expect(describeSources(methodSources(order.getMethodOrThrow('close'), resolvedField(order, 'status'), defaultScope(order)))).toEqual(['open']);
+  });
+});
+
 const baseAndOrder = (members: string): Files => ({
   [ORDER_FILE]: `
 export type Status = 'open' | 'closed';
