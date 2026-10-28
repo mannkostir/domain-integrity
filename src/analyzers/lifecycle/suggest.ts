@@ -1,7 +1,18 @@
 import { AggregateModel, FieldBehaviour, LifecycleModel, MethodModel, StateField, StateValue } from './model';
 import { hasUnknownWrite, writesField } from './values';
 
-export type FieldSuggestion = { readonly field: StateField; readonly terminal: readonly StateValue[] };
+export type TransitionSeed = { readonly method: string; readonly from: readonly StateValue[] };
+
+export type SeededTransitions =
+  | { readonly kind: 'seeded'; readonly entries: readonly TransitionSeed[] }
+  | { readonly kind: 'withheld'; readonly unknownMethods: readonly string[] }
+  | { readonly kind: 'none' };
+
+export type FieldSuggestion = {
+  readonly field: StateField;
+  readonly terminal: readonly StateValue[];
+  readonly transitions: SeededTransitions;
+};
 
 export type LifecycleSuggestion = {
   readonly className: string;
@@ -66,6 +77,31 @@ const coveredByLifecycle = (
     .filter((method) => setsAnyOf(method, field, guess))
     .every((method) => settlesLifecycle(method, field, lifecycleGuesses));
 
+type Writer = { readonly name: string; readonly behaviour: FieldBehaviour };
+
+const publicWriters = (aggregate: AggregateModel, field: StateField): Writer[] =>
+  aggregate.methods
+    .filter((method) => method.visibility === 'public')
+    .map((method) => ({ name: method.name, behaviour: method.fields.get(field.name) }))
+    .filter((writer): writer is Writer => writer.behaviour !== undefined && writesField(writer.behaviour.sets));
+
+const sourcesUnknownFor = (field: StateField, { behaviour }: Writer): boolean =>
+  behaviour.sources.kind === 'unknown' ||
+  [...behaviour.sources.values].some((token) => !field.values.some((value) => value.token === token));
+
+const seedOf = (field: StateField, { name, behaviour }: Writer): TransitionSeed => ({
+  method: name,
+  from: field.values.filter((value) => behaviour.sources.kind === 'known' && behaviour.sources.values.has(value.token)),
+});
+
+const seededTransitions = (aggregate: AggregateModel, field: StateField): SeededTransitions => {
+  const writers = publicWriters(aggregate, field);
+  if (writers.length === 0) return { kind: 'none' };
+  const unknownMethods = writers.filter((writer) => sourcesUnknownFor(field, writer)).map((writer) => writer.name);
+  if (unknownMethods.length > 0) return { kind: 'withheld', unknownMethods };
+  return { kind: 'seeded', entries: writers.map((writer) => seedOf(field, writer)) };
+};
+
 const suggestFields = (aggregate: AggregateModel): FieldSuggestion[] => {
   const guesses = aggregate.fields.map((field) => ({ field, terminal: terminalGuess(aggregate, field) }));
   const lifecycleGuesses: TerminalGuesses = new Map(
@@ -74,6 +110,7 @@ const suggestFields = (aggregate: AggregateModel): FieldSuggestion[] => {
   return guesses.map(({ field, terminal }) => ({
     field,
     terminal: coveredByLifecycle(aggregate, field, terminal, lifecycleGuesses) ? [] : terminal,
+    transitions: seededTransitions(aggregate, field),
   }));
 };
 

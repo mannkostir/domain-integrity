@@ -83,7 +83,7 @@ const askUntilValid = async <T>(io: Io, question: string, interpret: (answer: st
 };
 
 const editField = async (suggestion: FieldSuggestion, io: Io): Promise<FieldSuggestion> => ({
-  field: suggestion.field,
+  ...suggestion,
   terminal: await askUntilValid(io, terminalQuestion(suggestion), (entry) => interpretTerminalEntry(suggestion, entry)),
 });
 
