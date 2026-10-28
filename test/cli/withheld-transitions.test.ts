@@ -54,6 +54,49 @@ describe('withheldTransitionsNotes', () => {
     ]);
   });
 
+  it('names two methods withheld for the same reason in one clause', () => {
+    const notes = withheldTransitionsNotes([
+      order([
+        withheldStatus([
+          { method: 'close', reason: 'unknown-sources' },
+          { method: 'reopen', reason: 'unknown-sources' },
+        ]),
+      ]),
+    ]);
+
+    expect(notes).toEqual(['No transitions seeded for Order.status: init cannot tell which states close() and reopen() run from.']);
+  });
+
+  it('lists three or more methods withheld for the same reason with commas', () => {
+    const notes = withheldTransitionsNotes([
+      order([
+        withheldStatus([
+          { method: 'open', reason: 'unwritable-name' },
+          { method: 'close', reason: 'unwritable-name' },
+          { method: 'reopen', reason: 'unwritable-name' },
+        ]),
+      ]),
+    ]);
+
+    expect(notes).toEqual(['No transitions seeded for Order.status: open(), close() and reopen() cannot be named in transitions.']);
+  });
+
+  it('orders the clauses by the first method of each reason', () => {
+    const notes = withheldTransitionsNotes([
+      order([
+        withheldStatus([
+          { method: 'open', reason: 'unlisted-source' },
+          { method: 'close', reason: 'unknown-sources' },
+          { method: 'reopen', reason: 'unlisted-source' },
+        ]),
+      ]),
+    ]);
+
+    expect(notes).toEqual([
+      'No transitions seeded for Order.status: open() and reopen() run from a value that is not a state of status; init cannot tell which states close() runs from.',
+    ]);
+  });
+
   it('says nothing about fields whose transitions were seeded or have no writers', () => {
     const notes = withheldTransitionsNotes([
       order([
