@@ -434,6 +434,7 @@ describe('uncertain writes with arrow methods', () => {
 });
 
 describe('this-leak with arrow methods', () => {
+  const HELPER_C = 'helperC(): Status { return this.status; }';
   const OPEN_NOW = `private openNow = (): void => { this.status = 'open'; };`;
 
   it('does not count an arrow method as capturing the aggregate', () => {
@@ -498,6 +499,24 @@ describe('this-leak with arrow methods', () => {
 
   it('does not count an object spread of this when the family has no arrow method', () => {
     expect(leaksThis(orderWith(`${GUARDED_REOPEN}\nsnapshot(): object { return { ...this }; }`))).toBe(false);
+  });
+
+  it('counts an object spread of this when an arrow method uses super', () => {
+    const files = derivedOrderWith(HELPER_C, `peekC = (): string => super.helperC();\nsnapshot(): object { return { ...this }; }`);
+
+    expect(leaksThis(files)).toBe(true);
+  });
+
+  it('does not count an object spread of this when an arrow method of a derived aggregate uses neither this nor super', () => {
+    const files = derivedOrderWith(HELPER_C, `peekC = (): string => 'open';\nsnapshot(): object { return { ...this }; }`);
+
+    expect(leaksThis(files)).toBe(false);
+  });
+
+  it('counts an arrow nested inside an arrow method that uses super', () => {
+    const later = `private openLater = (schedule: (run: () => void) => void): void => { schedule(() => { super.helperC(); }); };`;
+
+    expect(leaksThis(derivedOrderWith(HELPER_C, later))).toBe(true);
   });
 
   it('does not count an object spread of this.props when the family has an arrow method', () => {

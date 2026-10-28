@@ -102,7 +102,9 @@ const isNonRetainingCallback = (closure: Node): boolean => {
 };
 
 const capturesThis = (node: Node): boolean =>
-  node.getDescendantsOfKind(SyntaxKind.ThisKeyword).some((self) => !hasForeignThis(self));
+  [...node.getDescendantsOfKind(SyntaxKind.ThisKeyword), ...node.getDescendantsOfKind(SyntaxKind.SuperKeyword)].some(
+    (self) => !hasForeignThis(self),
+  );
 
 const capturesAggregate = (node: Node, family: Family): boolean =>
   Node.isArrowFunction(node) && !family.arrowMethods.has(node) && !isNonRetainingCallback(node) && capturesThis(node);
