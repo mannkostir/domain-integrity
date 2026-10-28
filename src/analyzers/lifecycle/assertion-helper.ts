@@ -1,7 +1,8 @@
 import { MethodDeclaration, Node, PropertyAccessExpression, Statement } from 'ts-morph';
 import { isLibraryNode } from '../shared/library';
-import { AggregateScope, thisMethodDeclaration } from './field-ref';
+import { AggregateScope, thisMethodImplementation } from './field-ref';
 import { GuardRules, GuardScan, ScanGuards, mayAssignField, readsFieldOutside } from './guard-scan';
+import { MethodImplementation } from './instance-method';
 import { StateField } from './model';
 
 const MAX_HELPER_DEPTH = 5;
@@ -18,28 +19,26 @@ const thisCallee = (statement: Statement): PropertyAccessExpression | undefined 
     : undefined;
 };
 
-const isPlainInstanceMethod = (method: MethodDeclaration): boolean =>
-  !isLibraryNode(method) &&
-  !method.isStatic() &&
-  !method.isAbstract() &&
-  !method.isAsync() &&
-  !method.isGenerator() &&
-  !method.isOverload();
+const isPlainMethodDeclaration = (method: MethodDeclaration): boolean =>
+  !method.isStatic() && !method.isAbstract() && !method.isGenerator() && !method.isOverload();
 
-const helperStatements = (method: MethodDeclaration, rules: GuardRules): readonly Statement[] | undefined => {
+const isPlainInstanceMethod = (method: MethodImplementation): boolean =>
+  !isLibraryNode(method) && !method.isAsync() && (Node.isArrowFunction(method) || isPlainMethodDeclaration(method));
+
+const helperStatements = (method: MethodImplementation, rules: GuardRules): readonly Statement[] | undefined => {
   const body = method.getBody();
   const expandable = rules.helpers.length < MAX_HELPER_DEPTH && !rules.helpers.includes(method);
   return expandable && isPlainInstanceMethod(method) && Node.isBlock(body) ? body.getStatements() : undefined;
 };
 
-const helperRules = (method: MethodDeclaration, rules: GuardRules): GuardRules => ({
+const helperRules = (method: MethodImplementation, rules: GuardRules): GuardRules => ({
   exits: 'throw',
   strict: true,
   helpers: [...rules.helpers, method],
 });
 
 const readsOutsideHelper = (
-  method: MethodDeclaration,
+  method: MethodImplementation,
   statements: readonly Statement[],
   field: StateField,
   scope: AggregateScope,
@@ -54,7 +53,7 @@ const scanHelperCall = (
   rules: GuardRules,
   scanGuards: ScanGuards,
 ): GuardScan | undefined => {
-  const method = thisMethodDeclaration(callee, scope.cls);
+  const method = thisMethodImplementation(callee, scope);
   const statements = method === undefined ? undefined : helperStatements(method, rules);
   if (method === undefined || statements === undefined) return undefined;
   const scan = scanGuards(statements, field, scope, helperRules(method, rules));

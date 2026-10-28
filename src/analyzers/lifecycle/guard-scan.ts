@@ -1,6 +1,7 @@
-import { BinaryExpression, MethodDeclaration, Node, Statement, SyntaxKind } from 'ts-morph';
+import { BinaryExpression, Node, Statement, SyntaxKind } from 'ts-morph';
 import { ExitKind } from './early-exit';
 import { AggregateScope, MAX_GETTER_DEPTH, fieldNameOf, referencesFieldDirectly, thisGetterExpression } from './field-ref';
+import { MethodImplementation } from './instance-method';
 import { StateField } from './model';
 import { isWritten } from '../shared/writes';
 import { outermostWrapper } from '../shared/wrappers';
@@ -10,7 +11,7 @@ export type GuardScan = { readonly allowed: ReadonlySet<string>; readonly recogn
 export type GuardRules = {
   readonly exits: ExitKind;
   readonly strict: boolean;
-  readonly helpers: readonly MethodDeclaration[];
+  readonly helpers: readonly MethodImplementation[];
 };
 
 export type ScanGuards = (

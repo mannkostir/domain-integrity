@@ -506,3 +506,57 @@ describe('this-leak with arrow methods', () => {
     expect(leaksThis(orderWith(`clone(): object { const copy = new Order(); return { ...copy }; }`))).toBe(false);
   });
 });
+
+describe('assertion helpers held in arrow methods', () => {
+  const ASSERT_OPEN = `private assertOpen = (): void => { if (this.status !== 'open') throw new Error('not open'); };`;
+  const callerSources = (files: Files) => {
+    const order = orderClass(files);
+    return describeSources(methodSources(order.getMethodOrThrow('close'), resolvedField(order, 'status'), defaultScope(order)));
+  };
+  const closeAfter = (helper: string): Files => orderWith(`${helper}\nclose(): void { this.assertOpen(); this.status = 'closed'; }`);
+
+  it('narrows the caller of an arrow helper to the states the helper lets through', () => {
+    expect(callerSources(closeAfter(ASSERT_OPEN))).toEqual(['open']);
+  });
+
+  it('computes transition drift from the guard of an arrow helper', () => {
+    expect(reported(closeAfter(ASSERT_OPEN), new Map([['close', ['closed']]]))).toEqual(['transition-drift close', 'transition-missing close']);
+  });
+
+  it('does not follow an async arrow helper', () => {
+    const helper = `private assertOpen = async (): Promise<void> => { if (this.status !== 'open') throw new Error('not open'); };`;
+
+    expect(callerSources(closeAfter(helper))).toBe('unknown');
+  });
+
+  it('does not follow an arrow helper with an expression body', () => {
+    const helper = `private assertOpen = (): void => Order.failUnless(this.status === 'open');\nstatic failUnless(open: boolean): void { if (!open) throw new Error('not open'); }`;
+
+    expect(callerSources(closeAfter(helper))).toBe('unknown');
+  });
+
+  it('does not follow an arrow helper read as a value elsewhere', () => {
+    const files = {
+      ...closeAfter(ASSERT_OPEN),
+      '/src/use.ts': `
+export const take = (order: { assertOpen: () => void }): (() => void) => order.assertOpen;
+`,
+    };
+
+    expect(callerSources(files)).toBe('unknown');
+  });
+
+  it('follows a base arrow helper over the subclass method of the same name', () => {
+    const base = `cancel = (): void => { if (this.status === 'closed') throw new Error('closed'); };`;
+    const members = `private note = '';\ncancel(): void { this.note = 'cancelled'; }\nclose(): void { this.cancel(); this.status = 'closed'; }`;
+
+    expect(reported(derivedOrderWith(base, members))).toEqual([]);
+  });
+
+  it('reads through a base arrow method over the subclass method of the same name', () => {
+    const base = `label = (): string => this.status;`;
+    const members = `label(): string { return 'order'; }\nclose(): void { const shown = this.label(); this.status = 'closed'; }`;
+
+    expect(callerSources(derivedOrderWith(base, members))).toBe('unknown');
+  });
+});
