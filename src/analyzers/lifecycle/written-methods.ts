@@ -1,5 +1,6 @@
 import { ClassDeclaration, Node, Type } from 'ts-morph';
 import { MemberAccess, NameUses } from '../shared/name-uses';
+import { unwrap } from '../shared/wrappers';
 import { inheritanceChain } from './field-ref';
 
 export type WrittenMethods = { readonly isWritten: (name: string) => boolean };
@@ -33,10 +34,15 @@ const mayHoldAggregate = (type: Type, aggregate: Aggregate, depth = 0): boolean 
   return hasIndexSignature(type) || isFamilyOrSubclass(type, aggregate) || aggregate.instance.isAssignableTo(type);
 };
 
+const receiverTypes = (access: MemberAccess): readonly Type[] => {
+  const receiver = access.getExpression();
+  return [receiver.getType(), unwrap(receiver).getType()];
+};
+
 const writesOnAggregate =
   (aggregate: Aggregate) =>
   (access: MemberAccess): boolean =>
-    mayHoldAggregate(access.getExpression().getType(), aggregate);
+    receiverTypes(access).some((type) => mayHoldAggregate(type, aggregate));
 
 export const writtenMethods = (cls: ClassDeclaration, family: readonly ClassDeclaration[], uses: NameUses): WrittenMethods => {
   const aggregate: Aggregate = { instance: cls.getType(), family: new Set<Node>(family) };

@@ -165,6 +165,25 @@ export const stub = (order: Order): void => { const target: Cancellable = order;
     expect(reported(withSource(source))).toEqual([]);
   });
 
+  it('does not judge a method replaced through a type assertion on this', () => {
+    const members = `private install(): void { (this as Writable<this>).cancel = (): void => undefined; }\n${CANCEL}`;
+    const files = { [ORDER_FILE]: `type Writable<T> = { -readonly [K in keyof T]: T[K] };\n${orderWith(members)[ORDER_FILE]}` };
+
+    expect(reported(files)).toEqual([]);
+  });
+
+  it('does not judge a method replaced through a type assertion on a variable typed as the aggregate', () => {
+    const source = 'export const stub = (order: Order): void => { (order as unknown as { cancel: () => number }).cancel = (): number => 0; };';
+
+    expect(reported(withSource(source))).toEqual([]);
+  });
+
+  it('judges a method whose name is assigned through a type assertion on an unrelated class type', () => {
+    const source = `${SOCKET}\nexport const stub = (socket: Socket): void => { (socket as unknown as { cancel: () => number }).cancel = (): number => 0; };`;
+
+    expect(reported(withSource(source))).toEqual(['terminal-state-leak cancel']);
+  });
+
   it('judges a method whose name an unrelated class assigns on this', () => {
     expect(reported(withSource(CANCEL_DTO))).toEqual(['terminal-state-leak cancel']);
   });
