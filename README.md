@@ -546,7 +546,7 @@ export default defineDomain({
 
 | Option | Meaning |
 |---|---|
-| `events.handlerDecorators` | Decorator names that mark a handler. Default: `['EventsHandler', 'OnEvent']`. |
+| `events.handlerDecorators` | Decorator names that mark a handler. Default: `['EventsHandler', 'OnEvent', 'HandleEvent']`. |
 | `events.raiseMethods` | Calls that emit domain events. Default: `['addEvent', 'addDomainEvent', 'apply']`. |
 | `events.registerMethods` | Method names whose calls register a handler. Default: `['register']`. |
 | `events.inProcess` | Event classes that are dispatched inside the process. `unhandled-event` runs only for these. |

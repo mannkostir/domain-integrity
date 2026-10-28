@@ -4,6 +4,10 @@ All notable changes to this project are documented here; the format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- `HandleEvent` joins the default `events.handlerDecorators`, so `@HandleEvent(X.name)` handlers are recognised without configuration. (#PR)
+
 ## [0.3.0] - 2026-10-27
 
 ### Added
