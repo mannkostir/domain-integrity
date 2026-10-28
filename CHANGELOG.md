@@ -7,7 +7,7 @@ All notable changes to this project are documented here; the format follows [Kee
 ### Added
 
 - Arrow-function properties such as `close = () => { … }` are judged as methods when the arrow is the property's own initializer and its name is only ever called anywhere in the project. A static, decorated, wrapped, reassigned or value-read property is still not judged, and along a class chain an instance property shadows methods of the same name, so a name shared with an accessor or with a property that is not such an arrow is not judged as a method. (#134)
-- An arrow-function method no longer makes its aggregate leak `this`, so methods of an aggregate whose only capture of `this` is such a method are judged; an arrow nested inside it that captures `this` still leaks, and in a family that declares an arrow-function method an object spread of `this` now counts as `this` escaping. (#134)
+- An arrow-function method no longer makes its aggregate leak `this`, so methods of an aggregate whose only capture of `this` is such a method are judged; an arrow nested inside it that captures `this` still leaks, and in a family that declares an arrow-function method that captures `this` an object spread of `this` now counts as `this` escaping. (#134)
 - Assertion helpers written as arrow-function methods, such as `private assertOpen = (): void => { … }`, are followed like method helpers when their body is a block and they are not `async`, and a `this.` call or read through a name that a base arrow-function method and a subclass method share follows the arrow, as the runtime does. (#134)
 
 ### Changed

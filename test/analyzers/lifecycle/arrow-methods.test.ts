@@ -482,6 +482,20 @@ describe('this-leak with arrow methods', () => {
     expect(leaksThis(derivedOrderWith(OPEN_NOW, `snapshot(): object { return { ...this }; }`))).toBe(true);
   });
 
+  it('does not count an object spread of this when no arrow method captures this', () => {
+    expect(leaksThis(orderWith(`noop = (): void => undefined;\nsnapshot(): object { return { ...this }; }`))).toBe(false);
+  });
+
+  it('counts an object spread of this when only a parameter default of an arrow method captures this', () => {
+    expect(leaksThis(orderWith(`peek = (status: Status = this.status): Status => status;\nsnapshot(): object { return { ...this }; }`))).toBe(true);
+  });
+
+  it('does not count an object spread of this when the only this in an arrow method is a nested function', () => {
+    const inner = `noop = (): (() => unknown) => function (this: unknown) { return this; };`;
+
+    expect(leaksThis(orderWith(`${inner}\nsnapshot(): object { return { ...this }; }`))).toBe(false);
+  });
+
   it('does not count an object spread of this when the family has no arrow method', () => {
     expect(leaksThis(orderWith(`${GUARDED_REOPEN}\nsnapshot(): object { return { ...this }; }`))).toBe(false);
   });
@@ -498,12 +512,29 @@ describe('this-leak with arrow methods', () => {
     expect(leaksThis(orderWith(`clone = (): (() => Order) => { const copy = new Order(); return () => copy; };`))).toBe(true);
   });
 
-  it('counts a factory arrow method that spreads its new instance when the family has an arrow method', () => {
-    expect(leaksThis(orderWith(`clone = (): object => { const copy = new Order(); return { ...copy }; };`))).toBe(true);
+  it('counts a factory arrow method that spreads its new instance when an arrow method captures this', () => {
+    expect(leaksThis(orderWith(`clone = (): object => { const copy = new Order(); return { ...copy }; };\n${OPEN_NOW}`))).toBe(true);
+  });
+
+  it('does not count a factory arrow method that spreads its new instance when no arrow method captures this', () => {
+    expect(leaksThis(orderWith(`clone = (): object => { const copy = new Order(); return { ...copy }; };`))).toBe(false);
   });
 
   it('does not count a factory method that spreads its new instance when the family has no arrow method', () => {
     expect(leaksThis(orderWith(`clone(): object { const copy = new Order(); return { ...copy }; }`))).toBe(false);
+  });
+});
+
+describe('object spread of this with arrow methods', () => {
+  const META = 'class Meta { tags: string[] = []; }';
+  const ARCHIVE = `private meta: Meta = new Meta();\nsnapshot(): object { return { ...this }; }\narchive(): void { if (this.meta.tags.length > 3) return; this.status = 'closed'; }`;
+
+  it('judges a method reading a project field when the spread arrow method does not capture this', () => {
+    expect(reported(orderWith(`noopSp = (): void => {};\n${ARCHIVE}`, META))).toEqual(['terminal-state-leak archive']);
+  });
+
+  it('skips a method reading a project field when the spread arrow method captures this', () => {
+    expect(reported(orderWith(`noopSp = (): Status => this.status;\n${ARCHIVE}`, META))).toEqual([]);
   });
 });
 

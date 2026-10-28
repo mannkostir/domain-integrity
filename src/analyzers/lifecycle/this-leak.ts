@@ -67,6 +67,7 @@ const isCopiedInto = (node: Node): boolean => {
 type Family = {
   readonly classes: ReadonlySet<Node>;
   readonly arrowMethods: ReadonlySet<Node>;
+  readonly arrowMethodsCaptureThis: boolean;
 };
 
 const isPropsHolder = (node: Node): boolean => {
@@ -75,7 +76,7 @@ const isPropsHolder = (node: Node): boolean => {
 };
 
 const isCopiedOutOf = (node: Node, family: Family): boolean =>
-  Node.isSpreadAssignment(outermostWrapper(node).getParent()) && (family.arrowMethods.size === 0 || isPropsHolder(node));
+  Node.isSpreadAssignment(outermostWrapper(node).getParent()) && (!family.arrowMethodsCaptureThis || isPropsHolder(node));
 
 const escapesAggregate = (node: Node, family: Family): boolean =>
   escapesStateHolder(node) &&
@@ -100,11 +101,11 @@ const isNonRetainingCallback = (closure: Node): boolean => {
   );
 };
 
-const capturesAggregate = (node: Node, family: Family): boolean =>
-  Node.isArrowFunction(node) &&
-  !family.arrowMethods.has(node) &&
-  !isNonRetainingCallback(node) &&
+const capturesThis = (node: Node): boolean =>
   node.getDescendantsOfKind(SyntaxKind.ThisKeyword).some((self) => !hasForeignThis(self));
+
+const capturesAggregate = (node: Node, family: Family): boolean =>
+  Node.isArrowFunction(node) && !family.arrowMethods.has(node) && !isNonRetainingCallback(node) && capturesThis(node);
 
 const isStaticMember = (member: Node): boolean =>
   Node.isClassStaticBlockDeclaration(member) ||
@@ -223,6 +224,10 @@ export const classFamily = (cls: ClassDeclaration, subclasses: Subclasses): read
 ];
 
 export const leaksThis = (family: readonly ClassDeclaration[], arrows: ArrowMethods): boolean => {
-  const context: Family = { classes: new Set<Node>(family), arrowMethods: new Set<Node>(arrows.values()) };
+  const context: Family = {
+    classes: new Set<Node>(family),
+    arrowMethods: new Set<Node>(arrows.values()),
+    arrowMethodsCaptureThis: [...arrows.values()].some(capturesThis),
+  };
   return family.some((candidate) => leaksFrom(candidate, context));
 };
