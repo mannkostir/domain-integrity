@@ -145,7 +145,7 @@ const extractAggregate = (
 ): { readonly aggregate: AggregateModel; readonly problems: readonly Problem[] } => {
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
   const scope = aggregateScope(cls, declaration, project);
-  const methods = instanceMethods(cls, declaration.aggregateBaseClasses, scope.arrowMethods);
+  const methods = instanceMethods(cls, declaration.aggregateBaseClasses, scope);
   const resolved = resolveFields(cls, declared, methods, scope, declaration.auditFields);
   return {
     problems: resolved.problems,

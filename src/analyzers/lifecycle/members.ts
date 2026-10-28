@@ -2,7 +2,7 @@ import { ClassDeclaration, GetAccessorDeclaration, Node, SetAccessorDeclaration 
 import { ancestry } from '../shared/ancestry';
 import { isLibraryNode } from '../shared/library';
 import { ArrowMethods } from './arrow-methods';
-import { InstanceMethod, resolveInstanceMethod } from './instance-method';
+import { InstanceMethod, MethodResolution, resolveInstanceMethod } from './instance-method';
 
 const isInheritedFrom = (base: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): boolean =>
   !isLibraryNode(base) && !aggregateBaseClasses.has(base.getName() ?? '');
@@ -35,10 +35,12 @@ const methodNames =
 export const instanceMethods = (
   cls: ClassDeclaration,
   aggregateBaseClasses: readonly string[],
-  arrows: ArrowMethods,
+  resolution: MethodResolution,
 ): readonly InstanceMethod[] => {
   const chain = projectHierarchy(cls, aggregateBaseClasses);
-  return [...new Set(chain.flatMap(methodNames(arrows)))].flatMap((name) => resolveInstanceMethod(chain, name, arrows) ?? []);
+  return [...new Set(chain.flatMap(methodNames(resolution.arrowMethods)))].flatMap(
+    (name) => resolveInstanceMethod(chain, name, resolution) ?? [],
+  );
 };
 
 export const instanceAccessors = (

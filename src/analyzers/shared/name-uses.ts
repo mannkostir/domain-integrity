@@ -21,6 +21,8 @@ const bindingKeys = (element: BindingElement): readonly string[] =>
     ? propertyNameKeys(element.getPropertyNameNode() ?? element.getNameNode())
     : [];
 
+const isWrittenAccess = (access: Node): boolean => isWritten(outermostWrapper(access));
+
 const destructuringAssignmentKeys = (property: Node): readonly string[] =>
   (Node.isPropertyAssignment(property) || Node.isShorthandPropertyAssignment(property)) && isWritten(property)
     ? propertyNameKeys(property.getNameNode())
@@ -29,6 +31,7 @@ const destructuringAssignmentKeys = (property: Node): readonly string[] =>
 export class NameUses {
   private elementAccesses: ReadonlyMap<string, readonly ElementAccessExpression[]> | undefined;
   private destructured: ReadonlySet<string> | undefined;
+  private written: ReadonlySet<string> | undefined;
 
   constructor(private readonly sources: SourceIndex) {}
 
@@ -38,6 +41,20 @@ export class NameUses {
       this.elementAccessesKeyedFor(name).every(isCallee) &&
       !this.destructuredNames().has(name)
     );
+  }
+
+  isWritten(name: string): boolean {
+    this.written ??= new Set([
+      ...this.sources
+        .ofKind(SyntaxKind.PropertyAccessExpression)
+        .filter(isWrittenAccess)
+        .map((access) => access.getName()),
+      ...this.sources
+        .ofKind(SyntaxKind.ElementAccessExpression)
+        .filter(isWrittenAccess)
+        .flatMap((access) => keyNames(access.getArgumentExpression())),
+    ]);
+    return this.written.has(name);
   }
 
   private elementAccessesKeyedFor(name: string): readonly ElementAccessExpression[] {

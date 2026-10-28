@@ -126,7 +126,7 @@ const subclassExpressions = (
 };
 
 const methodImplementations = (scope: AggregateScope, aggregateBaseClasses: readonly string[]): ReadonlySet<Node> =>
-  new Set(instanceMethods(scope.cls, aggregateBaseClasses, scope.arrowMethods).map((method) => method.implementation));
+  new Set(instanceMethods(scope.cls, aggregateBaseClasses, scope).map((method) => method.implementation));
 
 const uncertainInClass = (
   scope: AggregateScope,

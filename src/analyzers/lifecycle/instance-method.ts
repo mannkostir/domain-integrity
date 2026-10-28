@@ -1,4 +1,5 @@
 import { ArrowFunction, ClassDeclaration, ClassInstanceMemberTypes, MethodDeclaration, Node, PropertyDeclaration } from 'ts-morph';
+import { NameUses } from '../shared/name-uses';
 import { ArrowMethods } from './arrow-methods';
 
 export type MethodImplementation = MethodDeclaration | ArrowFunction;
@@ -7,6 +8,11 @@ export type InstanceMethod = {
   readonly name: string;
   readonly member: MethodDeclaration | PropertyDeclaration;
   readonly implementation: MethodImplementation;
+};
+
+export type MethodResolution = {
+  readonly arrowMethods: ArrowMethods;
+  readonly nameUses: Pick<NameUses, 'isWritten'>;
 };
 
 export const declaredMethod = (method: MethodDeclaration): InstanceMethod => ({
@@ -37,9 +43,11 @@ const methodAmong = (members: readonly ClassInstanceMemberTypes[], arrows: Arrow
 export const resolveInstanceMethod = (
   chain: readonly ClassDeclaration[],
   name: string,
-  arrows: ArrowMethods,
+  resolution: MethodResolution,
 ): InstanceMethod | undefined =>
-  methodAmong(
-    chain.flatMap((cls) => cls.getInstanceMembers().filter((member) => member.getName() === name)),
-    arrows,
-  );
+  resolution.nameUses.isWritten(name)
+    ? undefined
+    : methodAmong(
+        chain.flatMap((cls) => cls.getInstanceMembers().filter((member) => member.getName() === name)),
+        resolution.arrowMethods,
+      );

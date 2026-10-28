@@ -24,5 +24,6 @@ export const aggregateScope = (
     plainEventArrays: plainEventArrays(family, project.bracketWrites, declaration.inertDecorators),
     eventBuffers: eventBuffers(family, project.bracketWrites, declaration.inertDecorators, new Set(declaration.eventMethods)),
     arrowMethods: arrows,
+    nameUses: project.nameUses,
   };
 };

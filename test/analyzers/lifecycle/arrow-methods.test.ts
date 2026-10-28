@@ -387,7 +387,7 @@ describe('methodSources of an arrow method', () => {
 describe('mutatingMethods with arrow methods', () => {
   it('counts a method that calls an arrow method assigning the aggregate', () => {
     const order = orderClass(orderWith(`private reopenNow = (): void => { this.status = 'open'; };\nreopen(): void { this.reopenNow(); }`));
-    const methods = instanceMethods(order, [], defaultScope(order).arrowMethods);
+    const methods = instanceMethods(order, [], defaultScope(order));
 
     expect([...mutatingMethods(methods, [], NO_BOOKKEEPING)].sort()).toEqual(['reopen', 'reopenNow']);
   });

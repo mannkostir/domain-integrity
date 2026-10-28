@@ -14,6 +14,10 @@ All notable changes to this project are documented here; the format follows [Kee
 
 - `HandleEvent` joins the default `events.handlerDecorators`, so `@HandleEvent(X.name)` handlers are recognised without configuration. (#134)
 
+### Fixed
+
+- A method whose name is written anywhere in the project, such as `this.cancel = …` in a constructor, `Order.prototype.cancel = …`, or `order.cancel = jest.fn()` or `order['cancel'] = …` in a test, is no longer judged or followed as an assertion helper, and a method that calls it is skipped, because the instance may run other code under that name. This removes false `terminal-state-leak` and `transition-drift` findings for methods replaced at runtime. (#134)
+
 ## [0.3.0] - 2026-10-27
 
 ### Added

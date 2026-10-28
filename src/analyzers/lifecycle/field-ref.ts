@@ -10,6 +10,7 @@ import {
   Type,
 } from 'ts-morph';
 import { isPlainArrayPush, isPushOnlyMethod } from '../shared/array-store';
+import { NameUses } from '../shared/name-uses';
 import { ArrowMethods } from './arrow-methods';
 import { isDeclaredOnlyAsMethods } from './inert-event-method';
 import { MethodImplementation, resolveInstanceMethod } from './instance-method';
@@ -64,6 +65,7 @@ export type AggregateScope = {
   readonly plainEventArrays: ReadonlySet<Node>;
   readonly eventBuffers: ReadonlySet<Node>;
   readonly arrowMethods: ArrowMethods;
+  readonly nameUses: NameUses;
 };
 
 type MemberLookup =
@@ -133,11 +135,15 @@ const absentMember = (cls: ClassDeclaration, access: Node, name: string): Member
   hasForeignThis(access) ? { kind: 'inert' } : typedMember(cls, name);
 
 const thisInstanceMethod = (scope: AggregateScope, access: Node, name: string) =>
-  isSuperAccess(access) ? undefined : resolveInstanceMethod(inheritanceChain(scope.cls), name, scope.arrowMethods);
+  isSuperAccess(access) ? undefined : resolveInstanceMethod(inheritanceChain(scope.cls), name, scope);
+
+const isReplacedMethod = (scope: AggregateScope, member: Node, name: string): boolean =>
+  Node.isMethodDeclaration(member) && scope.nameUses.isWritten(name);
 
 const tracedMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
   const member = thisInstanceMethod(scope, access, name)?.member ?? declaredMember(lookupChain(scope.cls, access), name);
-  return member === undefined ? absentMember(scope.cls, access, name) : bodyOf(member);
+  if (member === undefined) return absentMember(scope.cls, access, name);
+  return isReplacedMethod(scope, member, name) ? { kind: 'untraceable' } : bodyOf(member);
 };
 
 const isUninitialisedLibraryData = (member: MemberLookup): boolean =>
