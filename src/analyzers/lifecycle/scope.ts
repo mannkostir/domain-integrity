@@ -1,5 +1,6 @@
 import { ClassDeclaration } from 'ts-morph';
 import { DomainDeclaration } from '../../engine/declaration';
+import { arrowMethods } from './arrow-methods';
 import { AggregateScope } from './field-ref';
 import { plainEventArrays } from '../shared/array-store';
 import { eventBuffers } from './event-buffer';
@@ -10,7 +11,7 @@ import { classFamily, leaksThis } from './this-leak';
 export const aggregateScope = (
   cls: ClassDeclaration,
   declaration: Pick<DomainDeclaration, 'eventMethods' | 'inertDecorators' | 'inertEventMethods' | 'inertMembers'>,
-  project: Pick<ProjectIndex, 'sources' | 'bracketWrites' | 'subclasses'>,
+  project: Pick<ProjectIndex, 'sources' | 'bracketWrites' | 'nameUses' | 'subclasses'>,
 ): AggregateScope => {
   const family = classFamily(cls, project.subclasses);
   return {
@@ -21,5 +22,6 @@ export const aggregateScope = (
     leaksThis: leaksThis(family),
     plainEventArrays: plainEventArrays(family, project.bracketWrites, declaration.inertDecorators),
     eventBuffers: eventBuffers(family, project.bracketWrites, declaration.inertDecorators, new Set(declaration.eventMethods)),
+    arrowMethods: arrowMethods(family, project.nameUses),
   };
 };

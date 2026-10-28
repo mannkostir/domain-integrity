@@ -4,6 +4,10 @@ All notable changes to this project are documented here; the format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Arrow-function properties such as `close = () => { … }` are judged as methods when the arrow is the property's own initializer and its name is only ever called anywhere in the project. A static, decorated, wrapped, reassigned or value-read property is still not judged, and along a class chain an instance property shadows methods of the same name, so a name shared with an accessor or with a property that is not such an arrow is not judged as a method. (#PR)
+
 ### Changed
 
 - `HandleEvent` joins the default `events.handlerDecorators`, so `@HandleEvent(X.name)` handlers are recognised without configuration. (#PR)

@@ -11,6 +11,7 @@ import {
   Type,
 } from 'ts-morph';
 import { isPlainArrayPush, isPushOnlyMethod } from '../shared/array-store';
+import { ArrowMethods } from './arrow-methods';
 import { isDeclaredOnlyAsMethods } from './inert-event-method';
 import { isDefaultLibraryNode, isLibraryNode } from '../shared/library';
 import { namedClassChain } from './named-chain';
@@ -62,6 +63,7 @@ export type AggregateScope = {
   readonly leaksThis: boolean;
   readonly plainEventArrays: ReadonlySet<Node>;
   readonly eventBuffers: ReadonlySet<Node>;
+  readonly arrowMethods: ArrowMethods;
 };
 
 type MemberLookup =

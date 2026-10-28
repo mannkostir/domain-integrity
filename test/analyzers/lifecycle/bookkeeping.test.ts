@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NO_BOOKKEEPING } from '../../../src/analyzers/lifecycle/bookkeeping';
 import { eventBuffers } from '../../../src/analyzers/lifecycle/event-buffer';
+import { declaredMethod } from '../../../src/analyzers/lifecycle/instance-method';
 import { mutatingMethods } from '../../../src/analyzers/lifecycle/mutation';
 import { projectIndex } from '../../../src/analyzers/lifecycle/project-index';
 import { inMemoryProject } from '../../helpers/in-memory';
@@ -44,7 +45,7 @@ const bookkeeping = {
   eventBuffers: eventBuffers([ledger], projectIndex(project.getSourceFiles()).bracketWrites, [], new Set()),
 };
 
-const mutating = (): readonly string[] => [...mutatingMethods(ledger.getInstanceMethods(), [], bookkeeping)].sort();
+const mutating = (): readonly string[] => [...mutatingMethods(ledger.getInstanceMethods().map(declaredMethod), [], bookkeeping)].sort();
 
 describe('mutatingMethods with bookkeeping', () => {
   it('does not count methods that only write audit fields, reset event buffers or call such methods', () => {
@@ -56,6 +57,6 @@ describe('mutatingMethods with bookkeeping', () => {
   });
 
   it('counts every write without bookkeeping', () => {
-    expect([...mutatingMethods(ledger.getInstanceMethods(), [], NO_BOOKKEEPING)]).toContain('touch');
+    expect([...mutatingMethods(ledger.getInstanceMethods().map(declaredMethod), [], NO_BOOKKEEPING)]).toContain('touch');
   });
 });

@@ -1,6 +1,8 @@
-import { ClassDeclaration, GetAccessorDeclaration, MethodDeclaration, SetAccessorDeclaration } from 'ts-morph';
+import { ClassDeclaration, GetAccessorDeclaration, Node, SetAccessorDeclaration } from 'ts-morph';
 import { ancestry } from '../shared/ancestry';
 import { isLibraryNode } from '../shared/library';
+import { ArrowMethods } from './arrow-methods';
+import { InstanceMethod, resolveInstanceMethod } from './instance-method';
 
 const isInheritedFrom = (base: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): boolean =>
   !isLibraryNode(base) && !aggregateBaseClasses.has(base.getName() ?? '');
@@ -22,17 +24,21 @@ const projectBase = (cls: ClassDeclaration): ClassDeclaration | undefined => {
 
 export const projectAncestry = (cls: ClassDeclaration): readonly ClassDeclaration[] => ancestry(cls, projectBase).chain;
 
+const methodNames =
+  (arrows: ArrowMethods) =>
+  (cls: ClassDeclaration): readonly string[] =>
+    cls
+      .getInstanceMembers()
+      .filter((member) => Node.isMethodDeclaration(member) || (Node.isPropertyDeclaration(member) && arrows.has(member)))
+      .map((member) => member.getName());
+
 export const instanceMethods = (
   cls: ClassDeclaration,
   aggregateBaseClasses: readonly string[],
-): readonly MethodDeclaration[] => {
-  const byName = projectHierarchy(cls, aggregateBaseClasses)
-    .flatMap((candidate) => candidate.getInstanceMethods())
-    .reduce<ReadonlyMap<string, MethodDeclaration>>(
-      (found, method) => (found.has(method.getName()) ? found : new Map([...found, [method.getName(), method]])),
-      new Map(),
-    );
-  return [...byName.values()];
+  arrows: ArrowMethods,
+): readonly InstanceMethod[] => {
+  const chain = projectHierarchy(cls, aggregateBaseClasses);
+  return [...new Set(chain.flatMap(methodNames(arrows)))].flatMap((name) => resolveInstanceMethod(chain, name, arrows) ?? []);
 };
 
 export const instanceAccessors = (
