@@ -74,8 +74,10 @@ const reported = (files: Files, transitions?: ReadonlyMap<string, readonly strin
   ];
 };
 
-const modelledMethods = (files: Files): readonly (readonly [string, string, number])[] =>
-  (extracted(files).aggregates[0]?.methods ?? []).map((method) => [method.name, method.visibility, method.line] as const);
+const modelledMethod = (files: Files, name: string) =>
+  extracted(files).aggregates[0]?.methods.find((method) => method.name === name);
+
+const leaksThis = (files: Files): boolean => defaultScope(orderClass(files)).leaksThis;
 
 const undeclaredOrder = (members: string): Files => ({
   '/src/aggregate-root.ts': AGGREGATE_ROOT,
@@ -132,19 +134,23 @@ describe('arrow-function methods', () => {
   });
 
   it('records an arrow method at the line of its member', () => {
-    expect(modelledMethods(orderWith(`${CLOSE}\n  ${REOPEN}`))).toContainEqual(['reopen', 'public', 6]);
+    expect(modelledMethod(orderWith(`${CLOSE}\n  ${REOPEN}`), 'reopen')?.line).toBe(6);
+  });
+
+  it('records a public arrow method as public', () => {
+    expect(modelledMethod(orderWith(`${CLOSE}\n  ${REOPEN}`), 'reopen')?.visibility).toBe('public');
   });
 
   it('records a private arrow method as private', () => {
-    expect(modelledMethods(orderWith(`${CLOSE}\n  private ${REOPEN}`))).toContainEqual(['reopen', 'private', 6]);
+    expect(modelledMethod(orderWith(`${CLOSE}\n  private ${REOPEN}`), 'reopen')?.visibility).toBe('private');
   });
 
   it('records a protected arrow method as protected', () => {
-    expect(modelledMethods(orderWith(`${CLOSE}\n  protected ${REOPEN}`))).toContainEqual(['reopen', 'protected', 6]);
+    expect(modelledMethod(orderWith(`${CLOSE}\n  protected ${REOPEN}`), 'reopen')?.visibility).toBe('protected');
   });
 
   it('records a #name arrow method as private', () => {
-    expect(modelledMethods(orderWith(`${CLOSE}\n  #${REOPEN}`))).toContainEqual(['#reopen', 'private', 6]);
+    expect(modelledMethod(orderWith(`${CLOSE}\n  #${REOPEN}`), '#reopen')?.visibility).toBe('private');
   });
 
   it('does not report a private arrow method that can run in a terminal state', () => {
@@ -161,6 +167,10 @@ describe('arrow-function methods', () => {
 
   it('judges a base arrow property over the subclass method of the same name', () => {
     expect(reported(derivedOrderWith(REOPEN, `${CLOSE}\n${GUARDED_REOPEN}`))).toEqual(['terminal-state-leak reopen']);
+  });
+
+  it('counts a call through super as a call', () => {
+    expect(reported(derivedOrderWith(REOPEN, `${CLOSE}\nreopenAgain(): void { super.reopen(); }`))).toEqual(['terminal-state-leak reopen']);
   });
 
   it('still judges an arrow method that is only ever called', () => {
@@ -187,6 +197,10 @@ describe('arrow-function properties that are not judged as methods', () => {
 
   it('skips an arrow initializer under an as assertion', () => {
     expect(reported(orderWith(`${CLOSE}\nreopen = ((): void => { this.status = 'open'; }) as () => void;`))).toEqual([]);
+  });
+
+  it('skips an arrow initializer under a satisfies operator', () => {
+    expect(reported(orderWith(`${CLOSE}\nreopen = ((): void => { this.status = 'open'; }) satisfies () => void;`))).toEqual([]);
   });
 
   it('skips a decorated arrow property', () => {
@@ -229,6 +243,53 @@ export const handlerOf = (order: Order): (() => void) => order.reopen;
       '/src/use.ts': `
 import { Order } from './order';
 export const handlerOf = (order: Order): (() => void) => order['reopen'];
+`,
+    };
+
+    expect(reported(files)).toEqual([]);
+  });
+
+  it('skips an arrow property read through a keyof-typed element key', () => {
+    const files = {
+      ...orderWith(`${CLOSE}\n${REOPEN}`),
+      '/src/use.ts': `
+import { Order } from './order';
+export const peek = (order: Order, key: keyof Order): unknown => order[key];
+`,
+    };
+
+    expect(reported(files)).toEqual([]);
+  });
+
+  it('skips an arrow property that is deleted', () => {
+    const files = {
+      ...orderWith(`${CLOSE}\n${REOPEN}`),
+      '/src/use.ts': `
+import { Order } from './order';
+export const strip = (order: Partial<Order>): void => { delete order.reopen; };
+`,
+    };
+
+    expect(reported(files)).toEqual([]);
+  });
+
+  it('skips an arrow property that is incremented', () => {
+    const files = {
+      ...orderWith(`${CLOSE}\n${REOPEN}`),
+      '/src/use.ts': `
+export const bump = (order: { reopen: number }): void => { order.reopen++; };
+`,
+    };
+
+    expect(reported(files)).toEqual([]);
+  });
+
+  it('skips an arrow property that is a for-of target', () => {
+    const files = {
+      ...orderWith(`${CLOSE}\n${REOPEN}`),
+      '/src/use.ts': `
+import { Order } from './order';
+export const cycle = (order: Order, handlers: readonly (() => void)[]): void => { for (order.reopen of handlers) order.reopen(); };
 `,
     };
 
@@ -369,5 +430,79 @@ describe('uncertain writes with arrow methods', () => {
     const members = `close = (): void => { this.status = 'closed'; };\nregister = (registry: Set<object>): void => { registry.add(this); };`;
 
     expect(uncertainlyWritten(undeclaredOrder(members))).toEqual([]);
+  });
+});
+
+describe('this-leak with arrow methods', () => {
+  const OPEN_NOW = `private openNow = (): void => { this.status = 'open'; };`;
+
+  it('does not count an arrow method as capturing the aggregate', () => {
+    expect(leaksThis(orderWith(OPEN_NOW))).toBe(false);
+  });
+
+  it('judges a method reading a project field when the only capture of this is an arrow method', () => {
+    const files = orderWith(`${CLOSE}\n${OPEN_NOW}\nprivate note = { text: '' };\nannotate(text: string): void { this.note.text = text; }`);
+
+    expect(reported(files)).toEqual(['terminal-state-leak annotate']);
+  });
+
+  it('judges a method that calls an arrow method not touching the field', () => {
+    const files = orderWith(`${CLOSE}\nprivate note = '';\nprivate touch = (): void => { this.note = 'reopened'; };\nreopen(): void { this.touch(); this.status = 'open'; }`);
+
+    expect(reported(files)).toEqual(['terminal-state-leak reopen']);
+  });
+
+  it('counts a capturing arrow nested inside an arrow method', () => {
+    const later = `private openLater = (schedule: (run: () => void) => void): void => { schedule(() => { this.status = 'open'; }); };`;
+
+    expect(leaksThis(orderWith(later))).toBe(true);
+  });
+
+  it('does not count an array callback nested inside an arrow method', () => {
+    const counted = `private countOpen = (orders: readonly string[]): number => orders.filter(() => this.status === 'open').length;`;
+
+    expect(leaksThis(orderWith(counted))).toBe(false);
+  });
+
+  it('counts an arrow property read as a value', () => {
+    const listen = `listen(emitter: { on(event: string, handler: () => void): void }): void { emitter.on('x', this.reopen); }`;
+
+    expect(leaksThis(orderWith(`${REOPEN}\n${listen}`))).toBe(true);
+  });
+
+  it('counts an object spread of this when the family has an arrow method', () => {
+    expect(leaksThis(orderWith(`${OPEN_NOW}\nsnapshot(): object { return { ...this }; }`))).toBe(true);
+  });
+
+  it('counts a wrapped object spread of this when the family has an arrow method', () => {
+    expect(leaksThis(orderWith(`${OPEN_NOW}\nsnapshot(): object { return { ...(this as object) }; }`))).toBe(true);
+  });
+
+  it('counts an object spread of this when an arrow method is declared in a base class', () => {
+    expect(leaksThis(derivedOrderWith(OPEN_NOW, `snapshot(): object { return { ...this }; }`))).toBe(true);
+  });
+
+  it('does not count an object spread of this when the family has no arrow method', () => {
+    expect(leaksThis(orderWith(`${GUARDED_REOPEN}\nsnapshot(): object { return { ...this }; }`))).toBe(false);
+  });
+
+  it('does not count an object spread of this.props when the family has an arrow method', () => {
+    expect(leaksThis(orderWith(`private props = { note: '' };\n${OPEN_NOW}\nsnapshot(): object { return { ...this.props }; }`))).toBe(false);
+  });
+
+  it('does not count a factory arrow method that returns its new instance', () => {
+    expect(leaksThis(orderWith(`clone = (): Order => { const copy = new Order(); return copy; };`))).toBe(false);
+  });
+
+  it('counts a factory arrow method that captures its new instance in a closure', () => {
+    expect(leaksThis(orderWith(`clone = (): (() => Order) => { const copy = new Order(); return () => copy; };`))).toBe(true);
+  });
+
+  it('counts a factory arrow method that spreads its new instance when the family has an arrow method', () => {
+    expect(leaksThis(orderWith(`clone = (): object => { const copy = new Order(); return { ...copy }; };`))).toBe(true);
+  });
+
+  it('does not count a factory method that spreads its new instance when the family has no arrow method', () => {
+    expect(leaksThis(orderWith(`clone(): object { const copy = new Order(); return { ...copy }; }`))).toBe(false);
   });
 });

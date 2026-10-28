@@ -58,7 +58,7 @@ const keyTypeNames = (key: Node): readonly string[] => {
 export const keyNames = (key: Node | undefined): readonly string[] => {
   if (key === undefined) return [];
   const literal = literalKeyText(unwrap(key));
-  return [...new Set([...(literal === undefined ? [] : [literal]), ...keyTypeNames(key)])];
+  return literal !== undefined ? [literal] : [...new Set(keyTypeNames(key))];
 };
 
 export const isKeyFor = (key: Node | undefined, name: string): boolean => keyNames(key).includes(name);

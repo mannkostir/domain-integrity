@@ -14,14 +14,15 @@ export const aggregateScope = (
   project: Pick<ProjectIndex, 'sources' | 'bracketWrites' | 'nameUses' | 'subclasses'>,
 ): AggregateScope => {
   const family = classFamily(cls, project.subclasses);
+  const arrows = arrowMethods(family, project.nameUses);
   return {
     cls,
     eventMethods: new Set(declaration.eventMethods),
     inertEventMethods: assertedInertEventMethods(declaration.inertEventMethods, cls, family, project, declaration.inertDecorators),
     inertMembers: new Set(declaration.inertMembers),
-    leaksThis: leaksThis(family),
+    leaksThis: leaksThis(family, arrows),
     plainEventArrays: plainEventArrays(family, project.bracketWrites, declaration.inertDecorators),
     eventBuffers: eventBuffers(family, project.bracketWrites, declaration.inertDecorators, new Set(declaration.eventMethods)),
-    arrowMethods: arrowMethods(family, project.nameUses),
+    arrowMethods: arrows,
   };
 };
