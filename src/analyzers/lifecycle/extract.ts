@@ -13,7 +13,7 @@ import { initialValues } from './initial';
 import { InstanceMethod } from './instance-method';
 import { transitionMethodMissing, unknownStateValue } from './problems';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
-import { instanceMethods } from './members';
+import { declaredMethodNames, instanceMethods } from './members';
 import { Bookkeeping } from './bookkeeping';
 import { mutatingMethods } from './mutation';
 import { mentionedTokens } from './mentions';
@@ -67,9 +67,8 @@ const resolveDeclaredField = (
 const resolveDeclared = (
   cls: ClassDeclaration,
   declared: DeclaredLifecycle,
-  methods: readonly InstanceMethod[],
+  methodNames: ReadonlySet<string>,
 ): ResolvedFields => {
-  const methodNames = new Set(methods.map((method) => method.name));
   const outcomes = declared.fields.map((field) => resolveDeclaredField(cls, field, methodNames));
   const ok = outcomes.flatMap((outcome) => (outcome.kind === 'ok' ? [outcome] : []));
   return {
@@ -84,13 +83,13 @@ const unknownFields: ResolvedFields = { fields: [], declarations: new Map(), pro
 const resolveFields = (
   cls: ClassDeclaration,
   declared: DeclaredLifecycle | undefined,
-  methods: readonly InstanceMethod[],
+  methodNames: ReadonlySet<string>,
   scope: AggregateScope,
   auditFields: readonly string[],
 ): ResolvedFields => {
   if (hasCyclicInheritance(cls)) return unknownFields;
   return declared
-    ? resolveDeclared(cls, declared, methods)
+    ? resolveDeclared(cls, declared, methodNames)
     : { fields: candidateFields(scope, auditFields), declarations: new Map(), problems: [] };
 };
 
@@ -146,7 +145,8 @@ const extractAggregate = (
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
   const scope = aggregateScope(cls, declaration, project);
   const methods = instanceMethods(cls, declaration.aggregateBaseClasses, scope);
-  const resolved = resolveFields(cls, declared, methods, scope, declaration.auditFields);
+  const methodNames = declaredMethodNames(cls, declaration.aggregateBaseClasses);
+  const resolved = resolveFields(cls, declared, methodNames, scope, declaration.auditFields);
   return {
     problems: resolved.problems,
     aggregate: {

@@ -1,4 +1,4 @@
-import { ClassDeclaration, GetAccessorDeclaration, Node, SetAccessorDeclaration } from 'ts-morph';
+import { ClassDeclaration, ClassInstanceMemberTypes, GetAccessorDeclaration, Node, SetAccessorDeclaration } from 'ts-morph';
 import { ancestry } from '../shared/ancestry';
 import { isLibraryNode } from '../shared/library';
 import { ArrowMethods } from './arrow-methods';
@@ -42,6 +42,19 @@ export const instanceMethods = (
     (name) => resolveInstanceMethod(chain, name, resolution) ?? [],
   );
 };
+
+const isDeclaredMethod = (member: ClassInstanceMemberTypes): boolean =>
+  Node.isMethodDeclaration(member) || (Node.isPropertyDeclaration(member) && Node.isArrowFunction(member.getInitializer()));
+
+export const declaredMethodNames = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ReadonlySet<string> =>
+  new Set(
+    projectHierarchy(cls, aggregateBaseClasses).flatMap((candidate) =>
+      candidate
+        .getInstanceMembers()
+        .filter(isDeclaredMethod)
+        .map((member) => member.getName()),
+    ),
+  );
 
 export const instanceAccessors = (
   cls: ClassDeclaration,

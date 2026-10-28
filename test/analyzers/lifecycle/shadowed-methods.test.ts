@@ -14,12 +14,19 @@ const ORDER_FILE = '/src/order.ts';
 const aggregateClass = (files: Files, name: string, compilerOptions: CompilerOptions = {}): ClassDeclaration =>
   inMemoryProject(files, compilerOptions).getSourceFileOrThrow(ORDER_FILE).getClassOrThrow(name);
 
-const reported = (files: Files, name = 'Order', compilerOptions: CompilerOptions = {}): readonly string[] => {
+type Transitions = ReadonlyMap<string, readonly string[]>;
+
+const reported = (
+  files: Files,
+  name = 'Order',
+  compilerOptions: CompilerOptions = {},
+  transitions: Transitions | undefined = undefined,
+): readonly string[] => {
   const target = aggregateClass(files, name, compilerOptions);
   const model = lifecycleAnalyzer.extract({
     declaration: {
       ...DEFAULT_DECLARATION,
-      lifecycles: [{ target, fields: [{ name: 'status', terminal: ['closed'], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
+      lifecycles: [{ target, fields: [{ name: 'status', terminal: ['closed'], transitions, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
     },
     files: target.getProject().getSourceFiles(),
     projectRoot: '/',
@@ -176,5 +183,69 @@ export class AbOrder extends AbMiddle {}
 
   it('skips an inherited method that an initialised property shadows when class fields are assigned', () => {
     expect(reported(baseAndOrder('cancelBg = noop;'), 'BangOrder', { useDefineForClassFields: false })).toEqual([]);
+  });
+});
+
+const GUARDED_CANCEL = `cancel(): void { if (this.status !== 'open') throw new Error('not open'); this.status = 'closed'; }`;
+
+const FROM_CLOSED: Transitions = new Map([['cancel', ['closed']]]);
+
+describe('transitions entries for methods that are not judged', () => {
+  it('reports a judged method whose guard disagrees with its transitions entry', () => {
+    expect(reported(orderWith(GUARDED_CANCEL), 'Order', {}, FROM_CLOSED)).toEqual(['transition-drift cancel', 'transition-missing cancel']);
+  });
+
+  it('accepts and leaves unjudged an entry for a method whose name is written elsewhere', () => {
+    const files = {
+      ...orderWith(GUARDED_CANCEL),
+      '/test/order.spec.ts': `
+import { Order } from '../src/order';
+export const stub = (order: Order): void => { order['cancel'] = (): void => undefined; };
+`,
+    };
+
+    expect(reported(files, 'Order', {}, FROM_CLOSED)).toEqual([]);
+  });
+
+  it('accepts and leaves unjudged an entry for an arrow property read as a value', () => {
+    const files = {
+      ...orderWith(`cancel = (): void => { if (this.status !== 'open') throw new Error('not open'); this.status = 'closed'; };`),
+      '/src/use.ts': `
+import { Order } from './order';
+export const handlerOf = (order: Order): (() => void) => order.cancel;
+`,
+    };
+
+    expect(reported(files, 'Order', {}, FROM_CLOSED)).toEqual([]);
+  });
+
+  it('accepts an entry for a method declared in a project base class', () => {
+    const files = {
+      '/src/base.ts': `
+export type Status = 'open' | 'closed';
+export class BaseOrder {
+  protected status: Status = 'open';
+  ${GUARDED_CANCEL}
+}
+`,
+      [ORDER_FILE]: `
+import { BaseOrder } from './base';
+export class Order extends BaseOrder {
+  constructor() { super(); this.cancel = (): void => undefined; }
+}
+`,
+    };
+
+    expect(reported(files, 'Order', {}, FROM_CLOSED)).toEqual([]);
+  });
+
+  it('reports an entry whose name is declared nowhere as a missing method', () => {
+    expect(reported(orderWith(GUARDED_CANCEL), 'Order', {}, new Map([['archive', ['open']]]))).toEqual(['transition-method-missing']);
+  });
+
+  it('reports an entry naming a property that does not hold an arrow function as a missing method', () => {
+    expect(reported(orderWith(`${GUARDED_CANCEL}\nprivate note = '';`), 'Order', {}, new Map([['note', ['open']]]))).toEqual([
+      'transition-method-missing',
+    ]);
   });
 });
