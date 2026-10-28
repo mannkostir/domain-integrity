@@ -67,12 +67,6 @@ describe('seeded transitions in suggestions', () => {
     });
   });
 
-  it('withholds the field when a writer can run from a value outside the field', () => {
-    const cancel = method('cancel', true, { status: { sources: known('PENDING', 'ARCHIVED'), sets: assigned('CANCELLED') } });
-
-    expect(transitionsOf([confirm, cancel])).toEqual({ kind: 'withheld', methods: [{ method: 'cancel', reason: 'unlisted-source' }] });
-  });
-
   it('withholds the field when a public writer has a quoted name', () => {
     const quoted = method("'force-cancel'", true, { status: { sources: known('PENDING'), sets: assigned('CANCELLED') } });
 
@@ -98,12 +92,6 @@ describe('seeded transitions in suggestions', () => {
     const numeric = method('1', true, { status: { sources: unknownSources, sets: assigned('CANCELLED') } });
 
     expect(transitionsOf([numeric])).toEqual({ kind: 'withheld', methods: [{ method: '1', reason: 'unwritable-name' }] });
-  });
-
-  it('reports an unwritable name ahead of an unlisted source', () => {
-    const quoted = method("'cancel'", true, { status: { sources: known('ARCHIVED'), sets: assigned('CANCELLED') } });
-
-    expect(transitionsOf([quoted])).toEqual({ kind: 'withheld', methods: [{ method: "'cancel'", reason: 'unwritable-name' }] });
   });
 
   it('ignores a writer that is not public', () => {

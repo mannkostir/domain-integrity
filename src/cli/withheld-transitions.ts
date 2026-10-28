@@ -2,9 +2,8 @@ import { FieldSuggestion, LifecycleSuggestion, WithheldMethod, WithheldReason } 
 
 type MethodList = { readonly names: string; readonly plural: boolean };
 
-const CLAUSES: Readonly<Record<WithheldReason, (methods: MethodList, field: string) => string>> = {
+const CLAUSES: Readonly<Record<WithheldReason, (methods: MethodList) => string>> = {
   'unknown-sources': ({ names, plural }) => `init cannot tell which states ${names} ${plural ? 'run' : 'runs'} from`,
-  'unlisted-source': ({ names, plural }, field) => `${names} ${plural ? 'run' : 'runs'} from a value that is not a state of ${field}`,
   'unwritable-name': ({ names }) => `${names} cannot be named in transitions`,
 };
 
@@ -22,12 +21,12 @@ const reasonsInOrder = (methods: readonly WithheldMethod[]): readonly WithheldRe
 const methodsWithheldFor = (methods: readonly WithheldMethod[], reason: WithheldReason): readonly string[] =>
   methods.filter((withheld) => withheld.reason === reason).map(({ method }) => method);
 
-const clauses = (methods: readonly WithheldMethod[], field: string): readonly string[] =>
-  reasonsInOrder(methods).map((reason) => CLAUSES[reason](listed(methodsWithheldFor(methods, reason)), field));
+const clauses = (methods: readonly WithheldMethod[]): readonly string[] =>
+  reasonsInOrder(methods).map((reason) => CLAUSES[reason](listed(methodsWithheldFor(methods, reason))));
 
 const fieldNote = (className: string, { field, transitions }: FieldSuggestion): readonly string[] =>
   transitions.kind === 'withheld'
-    ? [`No transitions seeded for ${className}.${field.name}: ${clauses(transitions.methods, field.name).join('; ')}.`]
+    ? [`No transitions seeded for ${className}.${field.name}: ${clauses(transitions.methods).join('; ')}.`]
     : [];
 
 export const withheldTransitionsNotes = (suggestions: readonly LifecycleSuggestion[]): readonly string[] =>

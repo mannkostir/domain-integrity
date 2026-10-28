@@ -1,10 +1,10 @@
 import { AggregateModel, FieldBehaviour, LifecycleModel, MethodModel, StateField, StateValue } from './model';
 import { isIdentifierText } from '../../engine/identifier';
-import { allTokens, difference, hasUnknownWrite, writesField } from './values';
+import { hasUnknownWrite, writesField } from './values';
 
 export type TransitionSeed = { readonly method: string; readonly from: readonly StateValue[] };
 
-export type WithheldReason = 'unwritable-name' | 'unknown-sources' | 'unlisted-source';
+export type WithheldReason = 'unwritable-name' | 'unknown-sources';
 
 export type WithheldMethod = { readonly method: string; readonly reason: WithheldReason };
 
@@ -99,7 +99,6 @@ const withheldAs = (method: string, reason: WithheldReason): ClassifiedWriter =>
 const classifyWriter = (field: StateField, { name, behaviour: { sources } }: Writer): ClassifiedWriter => {
   if (!isIdentifierText(name)) return withheldAs(name, 'unwritable-name');
   if (sources.kind === 'unknown') return withheldAs(name, 'unknown-sources');
-  if (difference(sources.values, allTokens(field)).size > 0) return withheldAs(name, 'unlisted-source');
   return { kind: 'seed', seed: { method: name, from: field.values.filter((value) => sources.values.has(value.token)) } };
 };
 

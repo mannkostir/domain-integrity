@@ -27,12 +27,6 @@ describe('withheldTransitionsNotes', () => {
     expect(notes).toEqual(['No transitions seeded for Order.status: init cannot tell which states close() runs from.']);
   });
 
-  it('says a method runs from a value that is not a state of the field', () => {
-    const notes = withheldTransitionsNotes([order([withheldStatus([{ method: 'close', reason: 'unlisted-source' }])])]);
-
-    expect(notes).toEqual(['No transitions seeded for Order.status: close() runs from a value that is not a state of status.']);
-  });
-
   it('says a method cannot be named in transitions', () => {
     const notes = withheldTransitionsNotes([order([withheldStatus([{ method: 'close-now', reason: 'unwritable-name' }])])]);
 
@@ -44,13 +38,13 @@ describe('withheldTransitionsNotes', () => {
       order([
         withheldStatus([
           { method: 'close', reason: 'unknown-sources' },
-          { method: 'reopen', reason: 'unlisted-source' },
+          { method: 'reopen-now', reason: 'unwritable-name' },
         ]),
       ]),
     ]);
 
     expect(notes).toEqual([
-      'No transitions seeded for Order.status: init cannot tell which states close() runs from; reopen() runs from a value that is not a state of status.',
+      'No transitions seeded for Order.status: init cannot tell which states close() runs from; reopen-now() cannot be named in transitions.',
     ]);
   });
 
@@ -85,15 +79,15 @@ describe('withheldTransitionsNotes', () => {
     const notes = withheldTransitionsNotes([
       order([
         withheldStatus([
-          { method: 'open', reason: 'unlisted-source' },
+          { method: 'open-now', reason: 'unwritable-name' },
           { method: 'close', reason: 'unknown-sources' },
-          { method: 'reopen', reason: 'unlisted-source' },
+          { method: 'reopen-now', reason: 'unwritable-name' },
         ]),
       ]),
     ]);
 
     expect(notes).toEqual([
-      'No transitions seeded for Order.status: open() and reopen() run from a value that is not a state of status; init cannot tell which states close() runs from.',
+      'No transitions seeded for Order.status: open-now() and reopen-now() cannot be named in transitions; init cannot tell which states close() runs from.',
     ]);
   });
 
