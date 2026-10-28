@@ -13,7 +13,7 @@ import { initialValues } from './initial';
 import { InstanceMethod } from './instance-method';
 import { transitionMethodMissing, unknownStateValue } from './problems';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
-import { declaredInstanceMethods, declaredMethodNames, instanceMethods } from './members';
+import { allInstanceMethods, declaredMethodNames, instanceMethods } from './members';
 import { Bookkeeping } from './bookkeeping';
 import { mutatingMethods } from './mutation';
 import { mentionedTokens } from './mentions';
@@ -141,7 +141,7 @@ const modelledMethods = (
   aggregateBaseClasses: readonly string[],
   scope: AggregateScope,
 ): readonly InstanceMethod[] =>
-  declared ? instanceMethods(cls, aggregateBaseClasses, scope) : declaredInstanceMethods(cls, aggregateBaseClasses, scope.arrowMethods);
+  declared ? instanceMethods(cls, aggregateBaseClasses, scope) : allInstanceMethods(cls, aggregateBaseClasses, scope.arrowMethods);
 
 const extractAggregate = (
   cls: ClassDeclaration,

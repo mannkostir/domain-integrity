@@ -59,7 +59,7 @@ const methodAmong = (members: readonly ClassInstanceMemberTypes[], arrows: Arrow
   return method === undefined ? undefined : declaredMethod(method);
 };
 
-export const resolveDeclaredMethod = (
+export const resolveMethodIgnoringWrites = (
   chain: readonly ClassDeclaration[],
   name: string,
   arrows: ArrowMethods,
@@ -74,4 +74,4 @@ export const resolveInstanceMethod = (
   name: string,
   resolution: MethodResolution,
 ): InstanceMethod | undefined =>
-  resolution.writtenMethods.isWritten(name) ? undefined : resolveDeclaredMethod(chain, name, resolution.arrowMethods);
+  resolution.writtenMethods.isWritten(name) ? undefined : resolveMethodIgnoringWrites(chain, name, resolution.arrowMethods);

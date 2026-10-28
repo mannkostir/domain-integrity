@@ -2,7 +2,7 @@ import { ClassDeclaration, ClassInstanceMemberTypes, GetAccessorDeclaration, Nod
 import { ancestry } from '../shared/ancestry';
 import { isLibraryNode } from '../shared/library';
 import { ArrowMethods } from './arrow-methods';
-import { InstanceMethod, MethodResolution, resolveDeclaredMethod, resolveInstanceMethod } from './instance-method';
+import { InstanceMethod, MethodResolution, resolveMethodIgnoringWrites, resolveInstanceMethod } from './instance-method';
 
 const isInheritedFrom = (base: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): boolean =>
   !isLibraryNode(base) && !aggregateBaseClasses.has(base.getName() ?? '');
@@ -53,12 +53,12 @@ export const instanceMethods = (
     resolveInstanceMethod(chain, name, resolution),
   );
 
-export const declaredInstanceMethods = (
+export const allInstanceMethods = (
   cls: ClassDeclaration,
   aggregateBaseClasses: readonly string[],
   arrows: ArrowMethods,
 ): readonly InstanceMethod[] =>
-  resolvedMethods(cls, aggregateBaseClasses, arrows, (chain, name) => resolveDeclaredMethod(chain, name, arrows));
+  resolvedMethods(cls, aggregateBaseClasses, arrows, (chain, name) => resolveMethodIgnoringWrites(chain, name, arrows));
 
 const isDeclaredMethod = (member: ClassInstanceMemberTypes): boolean =>
   Node.isMethodDeclaration(member) || (Node.isPropertyDeclaration(member) && Node.isArrowFunction(member.getInitializer()));
