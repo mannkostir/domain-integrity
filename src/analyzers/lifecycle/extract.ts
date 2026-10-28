@@ -13,7 +13,7 @@ import { initialValues } from './initial';
 import { InstanceMethod } from './instance-method';
 import { transitionMethodMissing, unknownStateValue } from './problems';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
-import { declaredMethodNames, instanceMethods } from './members';
+import { declaredInstanceMethods, declaredMethodNames, instanceMethods } from './members';
 import { Bookkeeping } from './bookkeeping';
 import { mutatingMethods } from './mutation';
 import { mentionedTokens } from './mentions';
@@ -135,6 +135,14 @@ const identityOf = (identities: ReadonlyMap<ClassDeclaration, ClassIdentity>, cl
   return identity;
 };
 
+const modelledMethods = (
+  cls: ClassDeclaration,
+  declared: DeclaredLifecycle | undefined,
+  aggregateBaseClasses: readonly string[],
+  scope: AggregateScope,
+): readonly InstanceMethod[] =>
+  declared ? instanceMethods(cls, aggregateBaseClasses, scope) : declaredInstanceMethods(cls, aggregateBaseClasses, scope.arrowMethods);
+
 const extractAggregate = (
   cls: ClassDeclaration,
   identity: ClassIdentity,
@@ -144,7 +152,7 @@ const extractAggregate = (
 ): { readonly aggregate: AggregateModel; readonly problems: readonly Problem[] } => {
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
   const scope = aggregateScope(cls, declaration, project);
-  const methods = instanceMethods(cls, declaration.aggregateBaseClasses, scope);
+  const methods = modelledMethods(cls, declared, declaration.aggregateBaseClasses, scope);
   const methodNames = declaredMethodNames(cls, declaration.aggregateBaseClasses);
   const resolved = resolveFields(cls, declared, methodNames, scope, declaration.auditFields);
   return {

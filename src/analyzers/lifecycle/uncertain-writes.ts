@@ -1,7 +1,7 @@
 import { BinaryExpression, ClassDeclaration, ClassExpression, Node, SyntaxKind } from 'ts-morph';
 import { isAssignmentTarget, setsOf } from './assigned';
 import { AggregateScope, escapesStateHolder, fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
-import { instanceAccessors, instanceMethods, projectAncestry } from './members';
+import { declaredInstanceMethods, instanceAccessors, projectAncestry } from './members';
 import { AssignedValues, StateField } from './model';
 import { outsideAssignments } from './outside';
 import { hasUnknownWrite } from './values';
@@ -126,7 +126,7 @@ const subclassExpressions = (
 };
 
 const methodImplementations = (scope: AggregateScope, aggregateBaseClasses: readonly string[]): ReadonlySet<Node> =>
-  new Set(instanceMethods(scope.cls, aggregateBaseClasses, scope).map((method) => method.implementation));
+  new Set(declaredInstanceMethods(scope.cls, aggregateBaseClasses, scope.arrowMethods).map((method) => method.implementation));
 
 const uncertainInClass = (
   scope: AggregateScope,

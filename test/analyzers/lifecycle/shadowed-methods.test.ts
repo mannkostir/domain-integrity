@@ -4,7 +4,7 @@ import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
 import { methodSources } from '../../../src/analyzers/lifecycle/guards';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
 import { defaultScope, describeSources, resolvedField } from '../../helpers/describe';
-import { inMemoryProject } from '../../helpers/in-memory';
+import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
 import { methodOf } from '../../helpers/model';
 
 type Files = Readonly<Record<string, string>>;
@@ -247,5 +247,93 @@ export class Order extends BaseOrder {
     expect(reported(orderWith(`${GUARDED_CANCEL}\nprivate note = '';`), 'Order', {}, new Map([['note', ['open']]]))).toEqual([
       'transition-method-missing',
     ]);
+  });
+});
+
+const undeclaredOrderWith = (members: string): Files => ({
+  '/src/aggregate-root.ts': AGGREGATE_ROOT,
+  [ORDER_FILE]: `
+import { AggregateRoot } from './aggregate-root';
+export type Status = 'open' | 'closed';
+export class Order extends AggregateRoot<object> {
+  private status: Status = 'open';
+  private closedAt: Date | null = null;
+  ${members}
+}
+`,
+});
+
+const undeclaredModel = (files: Files) => {
+  const project = inMemoryProject(files);
+  return lifecycleAnalyzer.extract({
+    declaration: DEFAULT_DECLARATION,
+    files: project.getSourceFiles(),
+    projectRoot: '/',
+    repositoryRoot: '/',
+  });
+};
+
+const undeclaredOrder = (files: Files) => undeclaredModel(files).aggregates.find((aggregate) => aggregate.name === 'Order');
+
+const uncertainlyWritten = (files: Files): readonly string[] => [...(undeclaredOrder(files)?.uncertainlyWritten ?? [])];
+
+const suggestedTerminals = (files: Files): ReadonlyMap<string, readonly string[]> => {
+  const order = lifecycleAnalyzer.suggest(undeclaredModel(files)).find((suggestion) => suggestion.className === 'Order');
+  return new Map(order?.fields.map(({ field, terminal }) => [field.name, terminal.map((value) => value.token)]));
+};
+
+const stubbing = (name: string): Files => ({
+  '/test/order.spec.ts': `
+import { Order } from '../src/order';
+export const stub = (order: Order): void => { order.${name} = (): never => { throw new Error('stub'); }; };
+`,
+});
+
+const CLOSE_NOW = `close(): void { this.status = 'closed'; this.closedAt = new Date(); }`;
+
+describe('suggestions for an aggregate with a method whose name is written', () => {
+  it('treats a write inside such a method as a certain write', () => {
+    expect(uncertainlyWritten({ ...undeclaredOrderWith(CANCEL), ...stubbing('cancel') })).toEqual([]);
+  });
+
+  it('treats this escaping inside such a method as a modelled escape', () => {
+    const files = { ...undeclaredOrderWith(`cancel(): Order { this.status = 'closed'; return this; }`), ...stubbing('cancel') };
+
+    expect(uncertainlyWritten(files)).toEqual([]);
+  });
+
+  it('still treats a write inside a base method that a property shadows as uncertain', () => {
+    const files = {
+      '/src/aggregate-root.ts': AGGREGATE_ROOT,
+      '/src/base.ts': `
+import { AggregateRoot } from './aggregate-root';
+export type Status = 'open' | 'closed';
+export class BaseOrder extends AggregateRoot<object> {
+  protected status: Status = 'open';
+  ${CANCEL}
+}
+`,
+      [ORDER_FILE]: `
+import { BaseOrder } from './base';
+const noop = (): void => undefined;
+export class Order extends BaseOrder {
+  cancel: () => void = noop;
+}
+`,
+    };
+
+    expect(uncertainlyWritten(files)).toEqual(['status']);
+  });
+
+  it('suggests the terminal value that such a method sets', () => {
+    const files = { ...undeclaredOrderWith(`cancel(): Order { this.status = 'closed'; return this; }`), ...stubbing('cancel') };
+
+    expect(suggestedTerminals(files).get('status')).toEqual(['closed']);
+  });
+
+  it('keeps the terminal value of a timestamp that only such a method sets', () => {
+    const files = { ...undeclaredOrderWith(`${CLOSE_NOW}\nstamp(): void { this.closedAt = new Date(); }`), ...stubbing('stamp') };
+
+    expect(suggestedTerminals(files).get('closedAt')).toEqual(['set']);
   });
 });

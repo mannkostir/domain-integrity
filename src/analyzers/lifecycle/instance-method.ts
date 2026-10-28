@@ -59,14 +59,19 @@ const methodAmong = (members: readonly ClassInstanceMemberTypes[], arrows: Arrow
   return method === undefined ? undefined : declaredMethod(method);
 };
 
+export const resolveDeclaredMethod = (
+  chain: readonly ClassDeclaration[],
+  name: string,
+  arrows: ArrowMethods,
+): InstanceMethod | undefined =>
+  methodAmong(
+    chain.flatMap((cls) => cls.getInstanceMembers().filter((member) => member.getName() === name)),
+    arrows,
+  );
+
 export const resolveInstanceMethod = (
   chain: readonly ClassDeclaration[],
   name: string,
   resolution: MethodResolution,
 ): InstanceMethod | undefined =>
-  resolution.nameUses.isWritten(name)
-    ? undefined
-    : methodAmong(
-        chain.flatMap((cls) => cls.getInstanceMembers().filter((member) => member.getName() === name)),
-        resolution.arrowMethods,
-      );
+  resolution.nameUses.isWritten(name) ? undefined : resolveDeclaredMethod(chain, name, resolution.arrowMethods);

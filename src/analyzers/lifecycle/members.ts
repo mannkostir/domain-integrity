@@ -2,7 +2,7 @@ import { ClassDeclaration, ClassInstanceMemberTypes, GetAccessorDeclaration, Nod
 import { ancestry } from '../shared/ancestry';
 import { isLibraryNode } from '../shared/library';
 import { ArrowMethods } from './arrow-methods';
-import { InstanceMethod, MethodResolution, resolveInstanceMethod } from './instance-method';
+import { InstanceMethod, MethodResolution, resolveDeclaredMethod, resolveInstanceMethod } from './instance-method';
 
 const isInheritedFrom = (base: ClassDeclaration, aggregateBaseClasses: ReadonlySet<string>): boolean =>
   !isLibraryNode(base) && !aggregateBaseClasses.has(base.getName() ?? '');
@@ -32,16 +32,33 @@ const methodNames =
       .filter((member) => Node.isMethodDeclaration(member) || (Node.isPropertyDeclaration(member) && arrows.has(member)))
       .map((member) => member.getName());
 
+type MethodResolver = (chain: readonly ClassDeclaration[], name: string) => InstanceMethod | undefined;
+
+const resolvedMethods = (
+  cls: ClassDeclaration,
+  aggregateBaseClasses: readonly string[],
+  arrows: ArrowMethods,
+  resolve: MethodResolver,
+): readonly InstanceMethod[] => {
+  const chain = projectHierarchy(cls, aggregateBaseClasses);
+  return [...new Set(chain.flatMap(methodNames(arrows)))].flatMap((name) => resolve(chain, name) ?? []);
+};
+
 export const instanceMethods = (
   cls: ClassDeclaration,
   aggregateBaseClasses: readonly string[],
   resolution: MethodResolution,
-): readonly InstanceMethod[] => {
-  const chain = projectHierarchy(cls, aggregateBaseClasses);
-  return [...new Set(chain.flatMap(methodNames(resolution.arrowMethods)))].flatMap(
-    (name) => resolveInstanceMethod(chain, name, resolution) ?? [],
+): readonly InstanceMethod[] =>
+  resolvedMethods(cls, aggregateBaseClasses, resolution.arrowMethods, (chain, name) =>
+    resolveInstanceMethod(chain, name, resolution),
   );
-};
+
+export const declaredInstanceMethods = (
+  cls: ClassDeclaration,
+  aggregateBaseClasses: readonly string[],
+  arrows: ArrowMethods,
+): readonly InstanceMethod[] =>
+  resolvedMethods(cls, aggregateBaseClasses, arrows, (chain, name) => resolveDeclaredMethod(chain, name, arrows));
 
 const isDeclaredMethod = (member: ClassInstanceMemberTypes): boolean =>
   Node.isMethodDeclaration(member) || (Node.isPropertyDeclaration(member) && Node.isArrowFunction(member.getInitializer()));
