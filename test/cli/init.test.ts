@@ -60,7 +60,9 @@ describe('init --base-class', () => {
     const dir = writeProject(MODEL_SOURCES);
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
 
-    expect(readConfig(dir)).toContain("    lifecycle(Invoice, {\n      states: {\n        state: { terminal: 'void' },\n      },\n    }),\n");
+    expect(readConfig(dir)).toContain(
+      "    lifecycle(Invoice, {\n      states: {\n        state: {\n          terminal: 'void',\n          transitions: {\n            cancel: { from: ['draft'] },\n          },\n        },\n      },\n    }),\n",
+    );
   });
 
   it('records the named base class in the written config', async () => {
@@ -451,16 +453,21 @@ export class Shipment extends AggregateRoot<{ stage: ShipmentStage | null }> {
 `,
 };
 
+const SHIPMENT_SOURCES_CANCELLED_BY_QUOTED_METHOD = {
+  ...SHIPMENT_SOURCES,
+  'src/shipment.ts': SHIPMENT_SOURCES['src/shipment.ts'].replace('  cancel(): void', "  'cancel now'(): void"),
+};
+
 describe('init for an enum field that may be null', () => {
   it('suggests the unset value as the terminal state', async () => {
     const dir = writeProject(SHIPMENT_SOURCES);
     await run(['init', '--yes'], captureIo(dir).io);
 
-    expect(readConfig(dir)).toContain("stage: { terminal: 'unset' },");
+    expect(readConfig(dir)).toContain("stage: {\n          terminal: 'unset',\n");
   });
 
   it('imports only the aggregate when no enum member is written', async () => {
-    const dir = writeProject(SHIPMENT_SOURCES);
+    const dir = writeProject(SHIPMENT_SOURCES_CANCELLED_BY_QUOTED_METHOD);
     await run(['init', '--yes'], captureIo(dir).io);
 
     expect(readConfig(dir).split('\n').filter((line) => line.startsWith('import'))).toEqual([
@@ -499,7 +506,7 @@ describe('init', () => {
 
     return run(['init', '--yes'], captureIo(dir).io).then(() =>
       expect(readConfig(dir)).toMatch(
-        /import \{ Ticket, TicketStatus \} from '\.\/src\/ticket';[\s\S]*lifecycle\(Ticket, \{\n {6}states: \{\n {8}status: \{ terminal: TicketStatus\.closed \},/,
+        /import \{ Ticket, TicketStatus \} from '\.\/src\/ticket';[\s\S]*lifecycle\(Ticket, \{\n {6}states: \{\n {8}status: \{\n {10}terminal: TicketStatus\.closed,\n {10}transitions: \{\n {12}close: \{ from: \[TicketStatus\.open\] \},/,
       ),
     );
   });
@@ -512,7 +519,9 @@ describe('init', () => {
 
     expect({
       keptTicket: config.includes("lifecycle(Ticket, { states: { status: { terminal: [] } } })"),
-      addedPayment: config.includes("  lifecycle(Payment, {\n    states: {\n      state: { terminal: 'paid' },\n    },\n  }),\n"),
+      addedPayment: config.includes(
+        "  lifecycle(Payment, {\n    states: {\n      state: {\n        terminal: 'paid',\n        transitions: {\n          pay: { from: ['open'] },\n        },\n      },\n    },\n  }),\n",
+      ),
       ticketCount: config.split('lifecycle(Ticket').length - 1,
     }).toEqual({ keptTicket: true, addedPayment: true, ticketCount: 1 });
   });
@@ -708,8 +717,8 @@ describe('init', () => {
     expect({
       sales: config.includes("import { Order } from './src/sales/order';"),
       shipping: config.includes("import { Order as Order2 } from './src/shipping/order';"),
-      salesLifecycle: config.includes("    lifecycle(Order, {\n      states: {\n        state: { terminal: 'paid' },\n"),
-      shippingLifecycle: config.includes("    lifecycle(Order2, {\n      states: {\n        state: { terminal: 'shipped' },\n"),
+      salesLifecycle: config.includes("    lifecycle(Order, {\n      states: {\n        state: {\n          terminal: 'paid',\n"),
+      shippingLifecycle: config.includes("    lifecycle(Order2, {\n      states: {\n        state: {\n          terminal: 'shipped',\n"),
       check: await run(['check'], captureIo(dir).io),
     }).toEqual({ sales: true, shipping: true, salesLifecycle: true, shippingLifecycle: true, check: 0 });
   });
@@ -725,7 +734,9 @@ describe('init', () => {
 
     expect({
       shipping: config.includes("import { Order as Order2, OrderStatus as OrderStatus2 } from './src/shipping/order';"),
-      shippingLifecycle: config.includes('    lifecycle(Order2, {\n      states: {\n        status: { terminal: OrderStatus2.shipped },\n'),
+      shippingLifecycle: config.includes(
+        '    lifecycle(Order2, {\n      states: {\n        status: {\n          terminal: OrderStatus2.shipped,\n          transitions: {\n            finish: { from: [OrderStatus2.open] },\n',
+      ),
       check: await run(['check'], captureIo(dir).io),
     }).toEqual({ shipping: true, shippingLifecycle: true, check: 0 });
   });

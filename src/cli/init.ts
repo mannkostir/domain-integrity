@@ -14,6 +14,7 @@ import { reviewSuggestions } from './init-prompt';
 import { initRetryCommand, noAggregatesForInitMessage } from './init-retry';
 import { Io, Paths } from './io';
 import { moduleSpecifiers } from './module-specifier';
+import { withheldTransitionsNotes } from './withheld-transitions';
 import { toPosixRelative } from '../engine/path';
 
 export type InitOptions = { readonly yes?: boolean; readonly baseClass?: readonly string[] };
@@ -70,6 +71,14 @@ const nothingWrittenMessage = (reason: string, options: InitOptions, configPath:
     ? `${reason}\n`
     : `${reason}\n${unsavedBaseClassesNote(configPath, declaration.aggregateBaseClasses)}`;
 
+const declaredMessage = (accepted: readonly LifecycleSuggestion[], configName: string): string =>
+  [
+    `Declared ${accepted.length} aggregate${accepted.length === 1 ? '' : 's'} in ${configName}. Review the terminal states and transitions, then run "domain-integrity check".`,
+    ...withheldTransitionsNotes(accepted),
+  ]
+    .map((line) => `${line}\n`)
+    .join('');
+
 export const initCommand = async (paths: Paths, options: InitOptions, io: Io): Promise<number> => {
   assertIdentifiers(options.baseClass ?? []);
   const project = loadProject(paths.tsconfig, paths.config, io.cwd);
@@ -107,8 +116,6 @@ export const initCommand = async (paths: Paths, options: InitOptions, io: Io): P
     return 0;
   }
   await writeLifecycles(project, config ?? openedConfig(project, location), location, accepted);
-  io.out(
-    `Declared ${accepted.length} aggregate${accepted.length === 1 ? '' : 's'} in ${configName}. Review the terminal states, then run "domain-integrity check".\n`,
-  );
+  io.out(declaredMessage(accepted, configName));
   return 0;
 };

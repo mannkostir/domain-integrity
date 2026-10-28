@@ -23,6 +23,11 @@ export class Parcel extends AggregateRoot<{ state: 'packed' | 'sent'; label: 'bl
 `,
 };
 
+const TICKET_CLOSED_BY_QUOTED_METHOD = {
+  ...TICKET_SOURCES,
+  'src/ticket.ts': TICKET_SOURCES['src/ticket.ts'].replace('  close(): void', "  'close now'(): void"),
+};
+
 const SEPARATED = `
 import { AggregateRoot } from './aggregate-root';
 export class Separated extends AggregateRoot<{ state: 'open' | 'a,b' | 'c' }> {
@@ -63,13 +68,13 @@ describe('init prompt', () => {
   it('declares the suggestion when the answer is empty', async () => {
     const config = await configAfterAnswering(TICKET_SOURCES, ['']);
 
-    expect(config).toContain('status: { terminal: TicketStatus.closed },');
+    expect(config).toContain('status: {\n          terminal: TicketStatus.closed,\n');
   });
 
   it('declares the suggestion when the answer is yes in any case', async () => {
     const config = await configAfterAnswering(TICKET_SOURCES, [' Yes ']);
 
-    expect(config).toContain('status: { terminal: TicketStatus.closed },');
+    expect(config).toContain('status: {\n          terminal: TicketStatus.closed,\n');
   });
 
   it('skips the suggestion when the answer is no', async () => {
@@ -102,19 +107,19 @@ describe('init prompt', () => {
   it('writes the enum member typed by its label', async () => {
     const config = await configAfterAnswering(TICKET_SOURCES, ['edit', 'open']);
 
-    expect(config).toContain('status: { terminal: TicketStatus.open },');
+    expect(config).toContain('status: {\n          terminal: TicketStatus.open,\n');
   });
 
   it('writes several typed values as an array in the order of the field values', async () => {
     const config = await configAfterAnswering(INVITATION_SOURCES, ['e', 'rejected, pending']);
 
-    expect(config).toContain("state: { terminal: ['pending', 'rejected'] },");
+    expect(config).toContain("state: {\n          terminal: ['pending', 'rejected'],\n");
   });
 
   it('collapses a value typed twice', async () => {
     const config = await configAfterAnswering(INVITATION_SOURCES, ['e', 'rejected,rejected']);
 
-    expect(config).toContain("state: { terminal: 'rejected' },");
+    expect(config).toContain("state: {\n          terminal: 'rejected',\n");
   });
 
   it('shows a dash as the current value of a field without terminal values', async () => {
@@ -126,17 +131,17 @@ describe('init prompt', () => {
   it('writes a typed value that contains a comma', async () => {
     const config = await configAfterAnswering(SEPARATED_SOURCES, ['e', ' a,b ']);
 
-    expect(config).toContain("state: { terminal: 'a,b' },");
+    expect(config).toContain("state: {\n          terminal: 'a,b',\n");
   });
 
-  it('imports only the aggregate when an edited enum field has no terminal values', async () => {
-    const config = await configAfterAnswering(TICKET_SOURCES, ['e', '-']);
+  it('imports only the aggregate when an edited enum field has no terminal values and no seeded transitions', async () => {
+    const config = await configAfterAnswering(TICKET_CLOSED_BY_QUOTED_METHOD, ['e', '-']);
 
     expect(config).toContain("import { defineDomain, lifecycle } from 'domain-integrity';\nimport { Ticket } from './src/ticket';\n\n");
   });
 
   it('writes a config that check accepts with noUnusedLocals when an edited enum field has no terminal values', async () => {
-    const dir = writeProject(TICKET_SOURCES, { noUnusedLocals: true });
+    const dir = writeProject(TICKET_CLOSED_BY_QUOTED_METHOD, { noUnusedLocals: true });
     await run(['init'], captureIo(dir, ['e', '-']).io);
 
     expect(await run(['check'], captureIo(dir).io)).toBe(0);
@@ -145,13 +150,13 @@ describe('init prompt', () => {
   it('writes no terminal values for a dash', async () => {
     const config = await configAfterAnswering(INVITATION_SOURCES, ['e', '-']);
 
-    expect(config).toContain('state: { terminal: [] },');
+    expect(config).toContain('state: {\n          terminal: [],\n');
   });
 
   it('keeps the suggested values when the edit is left empty', async () => {
     const config = await configAfterAnswering(INVITATION_SOURCES, ['e', '']);
 
-    expect(config).toContain("state: { terminal: ['accepted', 'rejected'] },");
+    expect(config).toContain("state: {\n          terminal: ['accepted', 'rejected'],\n");
   });
 
   it('names an unknown typed value and the known values', async () => {
@@ -175,7 +180,7 @@ describe('init prompt', () => {
   it('writes the value typed after an unknown one', async () => {
     const config = await configAfterAnswering(TICKET_SOURCES, ['e', 'open, done', 'open']);
 
-    expect(config).toContain('status: { terminal: TicketStatus.open },');
+    expect(config).toContain('status: {\n          terminal: TicketStatus.open,\n');
   });
 
   it('asks for the field again after an unknown value', async () => {
@@ -199,7 +204,9 @@ describe('init prompt', () => {
   it('writes the values typed for each field', async () => {
     const config = await configAfterAnswering(PARCEL_SOURCES, ['e', '', '-']);
 
-    expect(config).toContain("states: {\n        state: { terminal: 'sent' },\n        label: { terminal: [] },\n      },");
+    expect(config).toContain(
+      "states: {\n        state: {\n          terminal: 'sent',\n          transitions: {\n            send: { from: ['packed'] },\n          },\n        },\n        label: {\n          terminal: [],\n          transitions: {\n            print: { from: ['blank'] },\n          },\n        },\n      },",
+    );
   });
 
   it('never prompts with --yes', async () => {
