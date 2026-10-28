@@ -1,9 +1,10 @@
-import { Project, SourceFile, ts } from 'ts-morph';
+import { Project, SourceFile } from 'ts-morph';
 import { lifecycleAnalyzer } from '../analyzers/lifecycle/analyzer';
 import { LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
 import { DEFAULT_DECLARATION, DomainDeclaration } from '../engine/declaration';
 import { ProjectError, UsageError } from '../engine/errors';
 import { fileErrorReason } from '../engine/file-error';
+import { isIdentifierText } from '../engine/identifier';
 import { analysedSourceFiles, configSourceFile, loadProject } from '../engine/project';
 import { readDeclaration } from '../engine/read-config';
 import { addLifecycles, openConfig, recordBaseClasses } from './config-writer';
@@ -16,17 +17,6 @@ import { moduleSpecifiers } from './module-specifier';
 import { toPosixRelative } from '../engine/path';
 
 export type InitOptions = { readonly yes?: boolean; readonly baseClass?: readonly string[] };
-
-const codePoints = (text: string): readonly number[] => Array.from(text, (character) => character.codePointAt(0) ?? Number.NaN);
-
-const isIdentifierText = (name: string): boolean => {
-  const [first, ...rest] = codePoints(name);
-  return (
-    first !== undefined &&
-    ts.isIdentifierStart(first, ts.ScriptTarget.Latest) &&
-    rest.every((codePoint) => ts.isIdentifierPart(codePoint, ts.ScriptTarget.Latest))
-  );
-};
 
 const assertIdentifiers = (names: readonly string[]): void => {
   const invalid = names.find((name) => !isIdentifierText(name));

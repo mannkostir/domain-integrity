@@ -1,11 +1,16 @@
 import { AggregateModel, FieldBehaviour, LifecycleModel, MethodModel, StateField, StateValue } from './model';
-import { hasUnknownWrite, writesField } from './values';
+import { isIdentifierText } from '../../engine/identifier';
+import { allTokens, difference, hasUnknownWrite, writesField } from './values';
 
 export type TransitionSeed = { readonly method: string; readonly from: readonly StateValue[] };
 
+export type WithheldReason = 'unwritable-name' | 'unknown-sources' | 'unlisted-source';
+
+export type WithheldMethod = { readonly method: string; readonly reason: WithheldReason };
+
 export type SeededTransitions =
   | { readonly kind: 'seeded'; readonly entries: readonly TransitionSeed[] }
-  | { readonly kind: 'withheld'; readonly unknownMethods: readonly string[] }
+  | { readonly kind: 'withheld'; readonly methods: readonly WithheldMethod[] }
   | { readonly kind: 'none' };
 
 export type FieldSuggestion = {
@@ -79,27 +84,38 @@ const coveredByLifecycle = (
 
 type Writer = { readonly name: string; readonly behaviour: FieldBehaviour };
 
-const publicWriters = (aggregate: AggregateModel, field: StateField): Writer[] =>
+type ClassifiedWriter =
+  | { readonly kind: 'seed'; readonly seed: TransitionSeed }
+  | { readonly kind: 'withheld'; readonly withheld: WithheldMethod };
+
+const publicWriters = (aggregate: AggregateModel, field: StateField): readonly Writer[] =>
   aggregate.methods
     .filter((method) => method.visibility === 'public')
     .map((method) => ({ name: method.name, behaviour: method.fields.get(field.name) }))
     .filter((writer): writer is Writer => writer.behaviour !== undefined && writesField(writer.behaviour.sets));
 
-const sourcesUnknownFor = (field: StateField, { behaviour }: Writer): boolean =>
-  behaviour.sources.kind === 'unknown' ||
-  [...behaviour.sources.values].some((token) => !field.values.some((value) => value.token === token));
+const withheldAs = (method: string, reason: WithheldReason): ClassifiedWriter => ({ kind: 'withheld', withheld: { method, reason } });
 
-const seedOf = (field: StateField, { name, behaviour }: Writer): TransitionSeed => ({
-  method: name,
-  from: field.values.filter((value) => behaviour.sources.kind === 'known' && behaviour.sources.values.has(value.token)),
-});
+const classifyWriter = (field: StateField, { name, behaviour: { sources } }: Writer): ClassifiedWriter => {
+  if (!isIdentifierText(name)) return withheldAs(name, 'unwritable-name');
+  if (sources.kind === 'unknown') return withheldAs(name, 'unknown-sources');
+  if (difference(sources.values, allTokens(field)).size > 0) return withheldAs(name, 'unlisted-source');
+  return { kind: 'seed', seed: { method: name, from: field.values.filter((value) => sources.values.has(value.token)) } };
+};
+
+const withheldMethods = (classified: readonly ClassifiedWriter[]): readonly WithheldMethod[] =>
+  classified.flatMap((writer) => (writer.kind === 'withheld' ? [writer.withheld] : []));
+
+const seeds = (classified: readonly ClassifiedWriter[]): readonly TransitionSeed[] =>
+  classified.flatMap((writer) => (writer.kind === 'seed' ? [writer.seed] : []));
 
 const seededTransitions = (aggregate: AggregateModel, field: StateField): SeededTransitions => {
   const writers = publicWriters(aggregate, field);
   if (writers.length === 0) return { kind: 'none' };
-  const unknownMethods = writers.filter((writer) => sourcesUnknownFor(field, writer)).map((writer) => writer.name);
-  if (unknownMethods.length > 0) return { kind: 'withheld', unknownMethods };
-  return { kind: 'seeded', entries: writers.map((writer) => seedOf(field, writer)) };
+  const classified = writers.map((writer) => classifyWriter(field, writer));
+  const withheld = withheldMethods(classified);
+  if (withheld.length > 0) return { kind: 'withheld', methods: withheld };
+  return { kind: 'seeded', entries: seeds(classified) };
 };
 
 const suggestFields = (aggregate: AggregateModel): FieldSuggestion[] => {
