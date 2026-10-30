@@ -1,7 +1,8 @@
-import { MethodDeclaration, Node, SyntaxKind } from 'ts-morph';
+import { Node, SyntaxKind } from 'ts-morph';
 import { isAssignmentOperator } from './assigned';
 import { Bookkeeping, isAuditWrite, isBookkeepingAssignment, isBookkeepingCollectionCall } from './bookkeeping';
 import { isRootedAtThis } from './field-ref';
+import { InstanceMethod, MethodImplementation } from './instance-method';
 
 const COLLECTION_MUTATORS = new Set([
   'push',
@@ -28,24 +29,28 @@ const isCollection = (node: Node): boolean => {
 
 const INCREMENTS = new Set<SyntaxKind>([SyntaxKind.PlusPlusToken, SyntaxKind.MinusMinusToken]);
 
-const assignsThis = (method: MethodDeclaration, bookkeeping: Bookkeeping): boolean =>
-  method
+const assignsThis = (implementation: MethodImplementation, bookkeeping: Bookkeeping): boolean =>
+  implementation
     .getDescendantsOfKind(SyntaxKind.BinaryExpression)
     .some(
       (binary) => isAssignmentOperator(binary) && isRootedAtThis(binary.getLeft()) && !isBookkeepingAssignment(binary, bookkeeping),
     );
 
-const incrementsThis = (method: MethodDeclaration, bookkeeping: Bookkeeping): boolean =>
+const incrementsThis = (implementation: MethodImplementation, bookkeeping: Bookkeeping): boolean =>
   [
-    ...method.getDescendantsOfKind(SyntaxKind.PrefixUnaryExpression),
-    ...method.getDescendantsOfKind(SyntaxKind.PostfixUnaryExpression),
+    ...implementation.getDescendantsOfKind(SyntaxKind.PrefixUnaryExpression),
+    ...implementation.getDescendantsOfKind(SyntaxKind.PostfixUnaryExpression),
   ].some(
     (unary) =>
       INCREMENTS.has(unary.getOperatorToken()) && isRootedAtThis(unary.getOperand()) && !isAuditWrite(unary.getOperand(), bookkeeping),
   );
 
-const callsMutator = (method: MethodDeclaration, eventMethods: ReadonlySet<string>, bookkeeping: Bookkeeping): boolean =>
-  method.getDescendantsOfKind(SyntaxKind.CallExpression).some((call) => {
+const callsMutator = (
+  implementation: MethodImplementation,
+  eventMethods: ReadonlySet<string>,
+  bookkeeping: Bookkeeping,
+): boolean =>
+  implementation.getDescendantsOfKind(SyntaxKind.CallExpression).some((call) => {
     const callee = call.getExpression();
     if (!Node.isPropertyAccessExpression(callee)) return false;
     const receiver = callee.getExpression();
@@ -57,37 +62,43 @@ const callsMutator = (method: MethodDeclaration, eventMethods: ReadonlySet<strin
     return callee.getText() === 'Object.assign' && target !== undefined && isRootedAtThis(target);
   });
 
-const calledThisMethods = (method: MethodDeclaration): string[] =>
-  method
+const calledThisMethods = (implementation: MethodImplementation): string[] =>
+  implementation
     .getDescendantsOfKind(SyntaxKind.CallExpression)
     .map((call) => call.getExpression())
     .filter(Node.isPropertyAccessExpression)
     .filter((callee) => Node.isThisExpression(callee.getExpression()))
     .map((callee) => callee.getName());
 
-const closeOverCalls = (methods: readonly MethodDeclaration[], mutating: ReadonlySet<string>): ReadonlySet<string> => {
+const closeOverCalls = (methods: readonly InstanceMethod[], mutating: ReadonlySet<string>): ReadonlySet<string> => {
   const next = new Set([
     ...mutating,
     ...methods
-      .filter((method) => calledThisMethods(method).some((name) => mutating.has(name)))
-      .map((method) => method.getName()),
+      .filter((method) => calledThisMethods(method.implementation).some((name) => mutating.has(name)))
+      .map((method) => method.name),
   ]);
   return next.size === mutating.size ? mutating : closeOverCalls(methods, next);
 };
 
+const isDirectlyMutating = (
+  implementation: MethodImplementation,
+  eventMethods: ReadonlySet<string>,
+  bookkeeping: Bookkeeping,
+): boolean =>
+  assignsThis(implementation, bookkeeping) ||
+  incrementsThis(implementation, bookkeeping) ||
+  callsMutator(implementation, eventMethods, bookkeeping);
+
 export const mutatingMethods = (
-  methods: readonly MethodDeclaration[],
+  methods: readonly InstanceMethod[],
   eventMethods: readonly string[],
   bookkeeping: Bookkeeping,
 ): ReadonlySet<string> => {
   const events = new Set(eventMethods);
   const direct = new Set(
     methods
-      .filter(
-        (method) =>
-          assignsThis(method, bookkeeping) || incrementsThis(method, bookkeeping) || callsMutator(method, events, bookkeeping),
-      )
-      .map((method) => method.getName()),
+      .filter(({ implementation }) => isDirectlyMutating(implementation, events, bookkeeping))
+      .map((method) => method.name),
   );
   return closeOverCalls(methods, direct);
 };

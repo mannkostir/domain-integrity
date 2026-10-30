@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { setsOf } from '../../../src/analyzers/lifecycle/assigned';
 import { initialValues } from '../../../src/analyzers/lifecycle/initial';
 import { NO_BOOKKEEPING } from '../../../src/analyzers/lifecycle/bookkeeping';
+import { declaredMethod } from '../../../src/analyzers/lifecycle/instance-method';
 import { mutatingMethods } from '../../../src/analyzers/lifecycle/mutation';
 import { describeAssigned, resolvedField } from '../../helpers/describe';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
@@ -98,7 +99,7 @@ const lockedAt = resolvedField(account, 'lockedAt');
 
 describe('mutatingMethods', () => {
   it('finds assignments, collection changes, events and calls to mutating methods', () => {
-    expect([...mutatingMethods(account.getInstanceMethods(), ['addEvent'], NO_BOOKKEEPING)].sort()).toEqual([
+    expect([...mutatingMethods(account.getInstanceMethods().map(declaredMethod), ['addEvent'], NO_BOOKKEEPING)].sort()).toEqual([
       'addItem',
       'close',
       'closeViaHelper',
@@ -115,7 +116,7 @@ describe('mutatingMethods', () => {
 
 describe('mutatingMethods on value objects', () => {
   it('ignores a collection-style call on a value object field', () => {
-    expect([...mutatingMethods(file.getClassOrThrow('Priced').getInstanceMethods(), [], NO_BOOKKEEPING)]).toEqual([]);
+    expect([...mutatingMethods(file.getClassOrThrow('Priced').getInstanceMethods().map(declaredMethod), [], NO_BOOKKEEPING)]).toEqual([]);
   });
 });
 

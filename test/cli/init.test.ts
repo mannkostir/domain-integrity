@@ -484,6 +484,31 @@ describe('init for an enum field that may be null', () => {
   });
 });
 
+const STUBBED_ORDER_SOURCES = {
+  'src/aggregate-root.ts': AGGREGATE_ROOT,
+  'src/order.ts': `
+import { AggregateRoot } from './aggregate-root';
+export type Status = 'open' | 'closed';
+export class Order extends AggregateRoot<object> {
+  private status: Status = 'open';
+  cancel(): Order { this.status = 'closed'; return this; }
+}
+`,
+  'src/order.spec.ts': `
+import { Order } from './order';
+export const stub = (order: Order): void => { order.cancel = (): Order => order; };
+`,
+};
+
+describe('init for a method whose name is written', () => {
+  it('suggests the terminal value that the method sets', async () => {
+    const dir = writeProject(STUBBED_ORDER_SOURCES);
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(readConfig(dir)).toContain("terminal: 'closed'");
+  });
+});
+
 describe('init', () => {
   it('writes a config that check can read', async () => {
     const dir = writeProject(TICKET_SOURCES);

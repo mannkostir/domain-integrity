@@ -45,15 +45,23 @@ export const accessOf = (reference: Node): Node | undefined => {
 const literalKeyText = (key: Node | undefined): string | undefined =>
   Node.isStringLiteral(key) || Node.isNoSubstitutionTemplateLiteral(key) ? key.getLiteralText() : undefined;
 
-const isLiteralTypeOf = (type: Type, name: string): boolean => type.isStringLiteral() && type.getLiteralValue() === name;
-
-const keyTypeIncludes = (key: Node, name: string): boolean => {
-  const type = key.getType();
-  return isLiteralTypeOf(type, name) || type.getUnionTypes().some((member) => isLiteralTypeOf(member, name));
+const stringLiteralValues = (type: Type): readonly string[] => {
+  const value = type.getLiteralValue();
+  return type.isStringLiteral() && typeof value === 'string' ? [value] : [];
 };
 
-export const isKeyFor = (key: Node | undefined, name: string): boolean =>
-  key !== undefined && (literalKeyText(unwrap(key)) === name || keyTypeIncludes(key, name));
+const keyTypeNames = (key: Node): readonly string[] => {
+  const type = key.getType();
+  return [...stringLiteralValues(type), ...type.getUnionTypes().flatMap(stringLiteralValues)];
+};
+
+export const keyNames = (key: Node | undefined): readonly string[] => {
+  if (key === undefined) return [];
+  const literal = literalKeyText(unwrap(key));
+  return literal !== undefined ? [literal] : [...new Set(keyTypeNames(key))];
+};
+
+export const isKeyFor = (key: Node | undefined, name: string): boolean => keyNames(key).includes(name);
 
 const isAssignKey = (key: Node | undefined): boolean => isKeyFor(key, 'assign');
 

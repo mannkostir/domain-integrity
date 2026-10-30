@@ -1,4 +1,4 @@
-import { ClassDeclaration, SyntaxKind } from 'ts-morph';
+import { ClassDeclaration, Node, SyntaxKind } from 'ts-morph';
 import { SET } from '../../engine/value-token';
 import { setsOf } from './assigned';
 import { AggregateScope, referencesField } from './field-ref';
@@ -18,9 +18,14 @@ const fieldNames = (cls: ClassDeclaration): string[] => {
   return [...new Set([...own, ...props])];
 };
 
+const ownMethodImplementations = (scope: AggregateScope): readonly Node[] => [
+  ...scope.cls.getMethods(),
+  ...scope.cls.getProperties().flatMap((property) => scope.arrowMethods.get(property) ?? []),
+];
+
 const behavesLikeState = (scope: AggregateScope, field: StateField): boolean =>
   field.kind !== 'nullable' ||
-  scope.cls.getMethods().some((method) => setsOf(method, field).tokens.has(SET)) ||
+  ownMethodImplementations(scope).some((implementation) => setsOf(implementation, field).tokens.has(SET)) ||
   scope.cls
     .getDescendantsOfKind(SyntaxKind.IfStatement)
     .some((statement) => referencesField(statement.getExpression(), field.name, scope));
