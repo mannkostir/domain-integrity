@@ -125,7 +125,9 @@ npx domain-integrity init
 npx domain-integrity check
 ```
 
-`init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. When your tsconfig resolves modules as `node16` or `nodenext`, the imports carry runtime extensions: `.js`, or `.mjs` and `.cjs` for `.mts` and `.cts` files. You review the suggestions once; after that, `check` runs on every commit. For each suggestion, `Y` or Enter declares it as suggested, `n` skips it, and `e` asks for each field's terminal values: type them comma-separated from the field's known values (a value that contains a comma goes on its own), `-` for none, or press Enter to keep the suggestion. An unknown value is named and asked again, and nothing is written until every suggestion is answered.
+`init` finds your aggregates and suggests their state fields and terminal values. It writes `domain.config.ts` with real imports, so renaming an enum member makes `check` fail instead of silently drifting. When your tsconfig resolves modules as `node16` or `nodenext`, the imports carry runtime extensions: `.js`, or `.mjs` and `.cjs` for `.mts` and `.cts` files. You review the suggestions once; after that, `check` runs on every commit. For each suggestion, `Y` or Enter declares it as suggested, `n` skips it, and `e` asks for each field's terminal values: type them comma-separated from the field's known values (a value that contains a comma goes on its own), `-` for none, or press Enter to keep the suggestion. For a field with seeded transitions, `e` then asks whether to keep them (`Y` or Enter), drop them (`n`) or edit them (`e`), which asks each method's `from` states the same way. An unknown value is named and asked again, and nothing is written until every suggestion is answered.
+
+`init` also seeds `transitions` from the guards it reads; see [Transitions and unreachable states](#transitions-and-unreachable-states).
 
 When a timestamp or other nullable field is only ever set by methods that also set an enum or literal-union status field, and only to the status's suggested terminal values, `init` leaves the nullable field's terminal list empty. The status already marks the end of that lifecycle, and a second terminal field would report methods that are guarded on the status. Both writes must be plain `this.field = value;` statements (or `this.props.field = value;`), and the status write must sit in the same or an enclosing block, either before the timestamp write or after it with no `return`, `throw`, `break`, `continue`, `await`, `for await`, `yield`, call, `new` or tagged template in between, because a call can throw before the status is written. Code that runs implicitly, such as a getter read or the `toString` behind a template literal, is not treated as a call. A status write behind its own `if`, or a timestamp written inside a `?:`, `&&` or `||` expression, keeps the suggestion. So does a timestamp also written anywhere `init` cannot follow: by a getter or setter, a property initializer or closure, a static member, a subclass, another instance, a computed key, a compound or destructuring assignment, a `for…of` or `for…in` target, `delete`, a plain assignment or `Object.assign` outside the class (a write through a generic helper or `Reflect.set` there is not seen), `Object.assign(this, …)` or `this` passed to a function in a method, or a write whose value cannot be resolved. Any escape of `this` outside the aggregate's instance methods, in the class, a subclass, including a class expression that extends it, or any project base class including one listed in `aggregates.baseClasses`, such as `this` passed to a function, aliased, returned or stored in the constructor, a method of a listed base class, a property initializer or a closure, keeps the suggestion for every field; comparing `this` with `===` or `!==` is not an escape. A write in a method of a base class listed in `aggregates.baseClasses` counts as one `init` cannot follow, and library base classes are not scanned. Plain constructor writes and `Object.assign(this, …)` in the constructor set the initial state and do not count. A timestamp set on its own, say `lockedAt` set by `lock()`, keeps its suggestion.
 
@@ -272,11 +274,134 @@ An event method pushes events onto a private buffer that no production code read
 
 Dispatch the events in the buffer after saving the aggregate and clear it, or stop raising them. Accept the finding into the baseline only if the buffer is honestly read by code the analysis cannot see, such as reflection or library code.
 
+## Transitions and unreachable states
+
+`transition-drift`, `transition-missing` and `unreachable-state` compare the code with what you declared, so they stay quiet until there is something to compare. In the real-world validation over 15 repositories, they reported one finding between them: a `transition-drift` in the only config that declared `transitions` by hand. This section shows when they pay off and how to get there.
+
+### When the transition rules pay off
+
+`transition-drift` and `transition-missing` run only for a state field whose declaration has `transitions`. Once a field has them, any later change that lets a method run from a state it should not, or stops it from running from one it should, is reported against the declaration. That holds even when no terminal state is involved, so `terminal-state-leak` has nothing to say.
+
+`init` seeds `transitions` for every state field it declares. Each public method that writes the field gets a `{ from: [...] }` entry holding the states its guards let it run from. A freshly seeded config therefore reports no `transition-drift` or `transition-missing` on the code it was seeded from. The entries record what the code does today, not what it should do, so review them like the terminal states.
+
+`init` seeds no `transitions` for a field when any public method that writes it has a guard `init` cannot follow, such as a predicate method (see [Quiet by design](#quiet-by-design)), or has a name that `transitions` cannot list, such as a quoted, computed or `#private` name. For each such field it prints why:
+
+```text
+No transitions seeded for Gate.state: init cannot tell which states close() runs from.
+```
+
+A field that no public method writes gets no `transitions` either. On an existing config, `init` seeds only the aggregates it adds; write `transitions` for the aggregates already declared yourself.
+
+Given this aggregate:
+
+```ts
+export class Order extends AggregateRoot {
+  private status: OrderStatus = OrderStatus.Pending;
+
+  confirm(): void {
+    if (this.status !== OrderStatus.Pending) throw new Error('not pending');
+    this.status = OrderStatus.Confirmed;
+  }
+
+  ship(): void {
+    if (this.status !== OrderStatus.Confirmed) throw new Error('not confirmed');
+    this.status = OrderStatus.Shipped;
+  }
+
+  cancel(): void {
+    if (this.status === OrderStatus.Shipped || this.status === OrderStatus.Cancelled) throw new Error('too late');
+    this.status = OrderStatus.Cancelled;
+  }
+}
+```
+
+`init --yes` writes:
+
+```ts
+lifecycle(Order, {
+  states: {
+    status: {
+      terminal: [OrderStatus.Shipped, OrderStatus.Cancelled],
+      transitions: {
+        confirm: { from: [OrderStatus.Pending] },
+        ship: { from: [OrderStatus.Confirmed] },
+        cancel: { from: [OrderStatus.Pending, OrderStatus.Confirmed] },
+      },
+    },
+  },
+}),
+```
+
+Suppose `confirm()`'s guard is later loosened to `if (this.status === OrderStatus.Shipped || this.status === OrderStatus.Cancelled)`. `confirm()` can then run on an order that is already confirmed. `Confirmed` is not terminal, so `terminal-state-leak` stays silent, but `check` reports:
+
+```text
+error transition-drift  Order.confirm()  src/order.ts:5
+  confirm() can run from 'Confirmed', which the declaration does not allow.
+  Fix: Add a guard that excludes 'Confirmed', or add it to transitions.confirm.
+```
+
+If instead `cancel()`'s guard is tightened to `if (this.status !== OrderStatus.Pending)`, `check` reports a warning:
+
+```text
+warning transition-missing  Order.cancel()  src/order.ts:13
+  cancel() cannot run from 'Confirmed', although the declaration allows it.
+  Fix: Remove 'Confirmed' from transitions.cancel, or relax the guard.
+```
+
+### When unreachable-state pays off
+
+`unreachable-state` runs for the enum and literal-union fields you declare, and reports a value that no code assigns. Two things keep it quiet, both because unknown never produces a finding:
+
+- **A write it cannot resolve.** If any assignment to the field holds a value the analysis cannot resolve, such as `this.status = props.status` from a constructor parameter, that write might set any value, so the rule skips the whole field.
+- **A mention outside a comparison.** A value counts as reached when it appears anywhere in the analysed files other than a comparison, a `case` label, a type or the enum's own declaration. That includes a DTO, a mapper, a test, a validation decorator such as `@IsEnum(PostStatus)`, or `Object.values(PostStatus)`, which mentions every member. Any such mention might be the code that sets the value.
+
+In the real-world validation, 186 of the 223 values of declared enum and union fields are never assigned by code the analysis can read. A write it cannot resolve silences 173 of them, and a mention the other 13. None is left to report.
+
+The rule pays off for a field whose every write assigns a literal or an enum member, as factories and commands usually do. It then fires for a value that the code mentions only in comparisons and types. To keep DTOs, controllers and tests from silencing it, check with a tsconfig that includes only the domain code:
+
+```json
+{ "extends": "./tsconfig.json", "include": ["src/domain"] }
+```
+
+Two limits apply:
+
+- Files that the domain code imports are still analysed, so mentions in them still count.
+- Excluded files are no longer evidence for any rule. A value that only a persistence mapper outside the domain code sets can then be reported; accept it into the baseline if the value really is set there.
+
+Given this aggregate:
+
+```ts
+export enum PostStatus { Draft = 'draft', Published = 'published', Archived = 'archived' }
+
+export class Post extends AggregateRoot {
+  private status: PostStatus = PostStatus.Draft;
+
+  publish(): void {
+    if (this.status !== PostStatus.Draft) throw new Error('not a draft');
+    this.status = PostStatus.Published;
+  }
+
+  isArchived(): boolean {
+    return this.status === PostStatus.Archived;
+  }
+}
+```
+
+No method archives a post, so `check` reports:
+
+```text
+error unreachable-state  Post  src/domain/post.ts:3
+  status value 'Archived' is never assigned.
+  Fix: Add the method that moves Post into 'Archived', or remove the value from the type.
+```
+
+Add `src/api/post.dto.ts` holding `Object.values(PostStatus)`, or just the string `'archived'`, and the finding goes away. `check -p tsconfig.domain.json`, with the tsconfig above saved as `tsconfig.domain.json`, reports it again.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. It asks to declare (`Y`), skip (`n`) or edit (`e`) each suggestion, which needs an interactive terminal; without one it exits `2` unless `--yes` accepts them all, and a run with nothing to declare exits `0`. Editing takes each field's terminal values from its known values, `-` for none. If the input ends before every suggestion is answered, it exits `2` and writes nothing. `--base-class` is repeatable and records each name in `aggregates.baseClasses`. In a new config the names replace `AggregateRoot` and `Entity`; to keep one, pass it too. In an existing config they are added to the defaults when it lists no base classes yet, to its list otherwise. |
+| `init [--yes] [--base-class <name>]` | Suggests and writes declarations. On an existing config it only adds new aggregates. It asks to declare (`Y`), skip (`n`) or edit (`e`) each suggestion, which needs an interactive terminal; without one it exits `2` unless `--yes` accepts them all, and a run with nothing to declare exits `0`. Editing takes each field's terminal values from its known values, `-` for none, then asks to keep (`Y`), drop (`n`) or edit (`e`) a field's seeded transitions; editing them takes each method's `from` states the same way. If the input ends before every suggestion is answered, it exits `2` and writes nothing. `--base-class` is repeatable and records each name in `aggregates.baseClasses`. In a new config the names replace `AggregateRoot` and `Entity`; to keep one, pass it too. In an existing config they are added to the defaults when it lists no base classes yet, to its list otherwise. |
 | `check [--format text\|json\|sarif]` | Reports findings. Exit `0` clean or warnings only, `1` error findings, `2` config, project or usage error, or an internal error. |
 | `show [name]` | Prints Mermaid state diagrams, then an event-flow flowchart. Takes an aggregate class name, an event name, or `path:Class` such as `src/orders/order.ts:Order`, with the path relative to the repository root; a file outside the repository appears as `../…`; `./` prefixes and backslashes are accepted. When several aggregates share the class name, a plain name exits `2` and lists the `path:Class` candidates. A name that matches no declared aggregate or handled event exits `2` and lists the names it accepts. |
 | `context [--write AGENTS.md]` | Writes a summary of lifecycles and event flows for coding agents, with paths relative to the repository root. |
@@ -649,7 +774,7 @@ A lint rule that cries wolf gets switched off. `domain-integrity` reports only w
 - **Object fields in aggregates that leak `this` anywhere.** Methods that read those fields are skipped, because a field might hold a callback into the aggregate.
 - **Library base-class members**, other than the configured `events.raiseMethods` and `inert.members`, because library code can call back into your overrides. A method that reads a library getter such as `this.id` or calls `this.clearDomainEvents()` is skipped until you list that member in `inert.members`.
 - **Bookkeeping methods.** A method whose only writes stamp an `aggregates.auditFields` field or empty a private event array, such as `touch()`, `clearEvents()` or `pullDomainEvents()`, is not a domain command, so `terminal-state-leak` does not judge it. Pushing an event is a domain write. A private array that only ever receives `new X(…)` values and is only handed out of the aggregate, never read back through its own members, is treated as an event array, so a method that empties such an array goes unreported even when clearing it is a real domain act.
-- **Values mentioned elsewhere.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types.
+- **Values mentioned elsewhere, and fields written from unresolved values.** `unreachable-state` stays quiet about a value that appears anywhere outside comparisons and types, and about every value of a field that some assignment writes from a value it cannot resolve, such as a constructor parameter. See [When unreachable-state pays off](#when-unreachable-state-pays-off) for how to make it fire.
 - **Writes through the aggregate's own setters.** `order.status = x` or `Object.assign(order, { status })` is not an outside mutation when `status` is a setter on the aggregate or one of its project base classes, because the setter is the aggregate's own code. A write through a setter declared only in library code is still reported as `outside-mutation`. The value still counts as assigned for `unreachable-state`. Setters themselves are not judged, so a setter without a guard goes unreported.
 - **Outside mutations in test files.** An assignment in a `*.spec.*` or `*.test.*` file, or in a file under `__tests__/`, `test/` or `tests/`, is not reported as `outside-mutation` unless `rules['outside-mutation'].testFiles` is `true`. Its value still counts as assigned for `unreachable-state`.
 - **Statuses held in objects.** A status kept in an object, such as a value object in a props bag whose methods decide the transitions, is not followed: the field is not a supported state field, or, when its type also includes `null` or `undefined`, only a nullable one whose values are `set` and `unset`.

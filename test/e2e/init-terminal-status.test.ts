@@ -44,7 +44,7 @@ describe('init for a timestamp set only alongside a terminal status', () => {
 
     const config = readFileSync(join(dir, 'domain.config.ts'), 'utf8');
 
-    expect(config).toContain('closedAt: { terminal: [] }');
+    expect(config).toContain('closedAt: {\n          terminal: [],\n');
   });
 
   it('writes a JSON report the schema accepts', async () => {

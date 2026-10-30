@@ -11,8 +11,8 @@ import {
   SyntaxKind,
   ts,
 } from 'ts-morph';
-import { ValueSource } from '../analyzers/lifecycle/model';
-import { FieldSuggestion, LifecycleSuggestion } from '../analyzers/lifecycle/suggest';
+import { StateField, StateValue, ValueSource } from '../analyzers/lifecycle/model';
+import { FieldSuggestion, LifecycleSuggestion, TransitionSeed } from '../analyzers/lifecycle/suggest';
 import { ConfigError } from '../engine/errors';
 import { ModuleSpecifiers } from './module-specifier';
 
@@ -216,14 +216,10 @@ const bindExport = (
 const renamedEnumSource = (source: string, enumName: string, local: string): string =>
   source.startsWith(`${enumName}.`) ? `${local}${source.slice(enumName.length)}` : source;
 
-const terminalSources = (
-  file: SourceFile,
-  specifierOf: ModuleSpecifiers,
-  { field, terminal }: FieldSuggestion,
-): readonly string[] => {
+const writtenValues = (file: SourceFile, specifierOf: ModuleSpecifiers, field: StateField, values: readonly StateValue[]): readonly string[] => {
   const reference = field.enumReference;
-  const written = terminal.map((value) => writtenSource(value.source, quoteKindIn(file)));
-  if (reference === undefined || !terminal.some((value) => value.source.kind === 'expression')) return written;
+  const written = values.map((value) => writtenSource(value.source, quoteKindIn(file)));
+  if (reference === undefined || !values.some((value) => value.source.kind === 'expression')) return written;
   const local = bindExport(file, specifierOf, reference.name, reference.file);
   return written.map((source) => renamedEnumSource(source, reference.name, local));
 };
@@ -237,8 +233,15 @@ const terminalSource = (sources: readonly string[]): string => {
   return only !== undefined && rest.length === 0 ? only : `[${sources.join(', ')}]`;
 };
 
-const fieldSource = (file: SourceFile, specifierOf: ModuleSpecifiers, suggestion: FieldSuggestion): string =>
-  `${suggestion.field.name}: { terminal: ${terminalSource(terminalSources(file, specifierOf, suggestion))} },`;
+const transitionLine = (file: SourceFile, specifierOf: ModuleSpecifiers, field: StateField, { method, from }: TransitionSeed): string =>
+  `${method}: { from: [${writtenValues(file, specifierOf, field, from).join(', ')}] },`;
+
+const fieldLines = (file: SourceFile, specifierOf: ModuleSpecifiers, { field, terminal, transitions }: FieldSuggestion, unit: string): Lines => {
+  const written = terminalSource(writtenValues(file, specifierOf, field, terminal));
+  if (transitions.kind !== 'seeded') return [`${field.name}: { terminal: ${written} },`];
+  const entries = transitions.entries.map((seed) => transitionLine(file, specifierOf, field, seed));
+  return [`${field.name}: {`, ...indented(unit, [`terminal: ${written},`, 'transitions: {', ...indented(unit, entries), '},']), '},'];
+};
 
 const lifecycleLines = (
   file: SourceFile,
@@ -247,7 +250,7 @@ const lifecycleLines = (
   unit: string,
 ): Lines => {
   const target = bindExport(file, specifierOf, suggestion.className, suggestion.file);
-  const fields = suggestion.fields.map((field) => fieldSource(file, specifierOf, field));
+  const fields = suggestion.fields.flatMap((field) => fieldLines(file, specifierOf, field, unit));
   return [`lifecycle(${target}, {`, ...indented(unit, ['states: {', ...indented(unit, fields), '},']), '}),'];
 };
 
