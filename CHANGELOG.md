@@ -14,7 +14,7 @@ All notable changes to this project are documented here; the format follows [Kee
 
 ### Fixed
 
-- `init` quotes private state field names in generated configs and creates configs with `--base-class` when `noUnusedLocals` is enabled. (PR pending)
+- `init` quotes private state field names in generated configs and creates configs with `--base-class` when `noUnusedLocals` is enabled. (#135)
 
 ## [0.3.0] - 2026-10-27
 
