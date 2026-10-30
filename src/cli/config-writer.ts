@@ -14,9 +14,10 @@ import {
 import { StateField, StateValue, ValueSource } from '../analyzers/lifecycle/model';
 import { FieldSuggestion, LifecycleSuggestion, TransitionSeed } from '../analyzers/lifecycle/suggest';
 import { ConfigError } from '../engine/errors';
+import { isIdentifierText } from '../engine/identifier';
 import { ModuleSpecifiers } from './module-specifier';
 
-const INITIAL_CONFIG = `import { defineDomain, lifecycle } from 'domain-integrity';
+const INITIAL_CONFIG = `import { defineDomain } from 'domain-integrity';
 
 export default defineDomain({
   lifecycles: [],
@@ -237,10 +238,11 @@ const transitionLine = (file: SourceFile, specifierOf: ModuleSpecifiers, field: 
   `${method}: { from: [${writtenValues(file, specifierOf, field, from).join(', ')}] },`;
 
 const fieldLines = (file: SourceFile, specifierOf: ModuleSpecifiers, { field, terminal, transitions }: FieldSuggestion, unit: string): Lines => {
+  const name = isIdentifierText(field.name) ? field.name : inQuotes(field.name, quoteKindIn(file));
   const written = terminalSource(writtenValues(file, specifierOf, field, terminal));
-  if (transitions.kind !== 'seeded') return [`${field.name}: { terminal: ${written} },`];
+  if (transitions.kind !== 'seeded') return [`${name}: { terminal: ${written} },`];
   const entries = transitions.entries.map((seed) => transitionLine(file, specifierOf, field, seed));
-  return [`${field.name}: {`, ...indented(unit, [`terminal: ${written},`, 'transitions: {', ...indented(unit, entries), '},']), '},'];
+  return [`${name}: {`, ...indented(unit, [`terminal: ${written},`, 'transitions: {', ...indented(unit, entries), '},']), '},'];
 };
 
 const lifecycleLines = (

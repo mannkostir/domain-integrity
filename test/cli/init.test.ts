@@ -56,6 +56,21 @@ const MIXED_BASE_PROJECT = {
 const declaredBaseClasses = (dir: string): readonly string[] => declarationIn(dir).aggregateBaseClasses;
 
 describe('init --base-class', () => {
+  it('creates a config when unused imports are errors', async () => {
+    const dir = writeProject(MODEL_SOURCES, { noUnusedLocals: true });
+
+    const exitCode = await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(exitCode).toBe(0);
+  });
+
+  it('writes a config that check reads when unused imports are errors', async () => {
+    const dir = writeProject(MODEL_SOURCES, { noUnusedLocals: true });
+    await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(1);
+  });
+
   it('declares an aggregate extending the named base class', async () => {
     const dir = writeProject(MODEL_SOURCES);
     await run(['init', '--yes', '--base-class', 'Model'], captureIo(dir).io);
@@ -485,6 +500,20 @@ describe('init for an enum field that may be null', () => {
 });
 
 describe('init', () => {
+  it('writes a config that check reads for an ECMAScript private state field', async () => {
+    const dir = writeProject({
+      'src/entity.ts': `class Entity {}
+export class Ticket extends Entity {
+  #state: 'open' | 'closed' = 'open';
+  close(): void { if (this.#state === 'closed') return; this.#state = 'closed'; }
+}
+`,
+    });
+    await run(['init', '--yes'], captureIo(dir).io);
+
+    expect(await run(['check'], captureIo(dir).io)).toBe(0);
+  });
+
   it('writes a config that check can read', async () => {
     const dir = writeProject(TICKET_SOURCES);
     await run(['init', '--yes'], captureIo(dir).io);
