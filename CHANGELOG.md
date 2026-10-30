@@ -12,6 +12,10 @@ All notable changes to this project are documented here; the format follows [Kee
 
 - `init` writes a field with seeded transitions over several lines, as `status: { terminal: ..., transitions: { confirm: { from: [...] } } }`, lists the seeded and withheld transitions in each suggestion's question, and its closing line asks you to review the terminal states and transitions. (#133)
 
+### Fixed
+
+- `init` quotes private state field names in generated configs and creates configs with `--base-class` when `noUnusedLocals` is enabled. (#135)
+
 ## [0.3.0] - 2026-10-27
 
 ### Added
