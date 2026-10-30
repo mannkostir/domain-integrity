@@ -4,6 +4,14 @@ All notable changes to this project are documented here; the format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `init` seeds `transitions` for every state field it declares: each public method that writes the field gets a `{ from: [...] }` entry with the states its guards let it run from, so a freshly seeded config reports no `transition-drift` or `transition-missing` on the code it was seeded from. When any public method that writes the field has a guard `init` cannot follow, or a name `transitions` cannot list, `init` seeds no `transitions` for that field and prints why. Editing a suggestion with `e` asks whether to keep, drop or edit a field's seeded transitions. The README gains a section on when `transition-drift`, `transition-missing` and `unreachable-state` pay off and how to make `unreachable-state` fire. (#133)
+
+### Changed
+
+- `init` writes a field with seeded transitions over several lines, as `status: { terminal: ..., transitions: { confirm: { from: [...] } } }`, lists the seeded and withheld transitions in each suggestion's question, and its closing line asks you to review the terminal states and transitions. (#133)
+
 ## [0.3.0] - 2026-10-27
 
 ### Added

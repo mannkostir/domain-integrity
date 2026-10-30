@@ -86,6 +86,8 @@ Out-of-repo probes, each declaring one constructed event with no handler, report
 
 The event-flow declaration re-run was repeated over the broadened set of 15 repositories, with the same three `events.inProcess` lists and the broadened-set configs everywhere else. It reports 78 findings: the 65 of the broadened-set run and the same 13 `unhandled-event`. Every original repository's JSON output apart from the tool version is identical to the 10-repository run, and the five added repositories have no `events` block, so they add no event-flow finding. Of the five, only schulcloud-server has an in-process bus worth declaring: 12 `@EventsHandler` classes for 8 event classes and 8 `eventBus.publish` calls in production code on the `@nestjs/cqrs` bus, for events such as `GroupDeletedEvent`, `RoomDeletedEvent` and `UserChangedSchoolEvent`. Declaring its event classes in `events.inProcess` and triaging the result is left as a follow-up. Its `saga` folders hold `SagaStep` classes that an orchestrating service calls in turn and that return step reports; nothing in them is keyed on an event, so they cannot be declared with `saga()`. typescript-event-sourcing-sample-app binds its `IEventBus` to a Kafka producer and consumer, which is out of process. SiweAuthMicroservice, adonisjs/application and openlayers have no domain event bus. No added repository has a saga with a success and a failure outcome, so `saga-missing-failure-path` stays experimental.
 
+The seeded-transitions run, in which `init` seeds `transitions` from the guards it reads, is recorded under [Seeded transitions](#seeded-transitions), together with what keeps `unreachable-state` quiet on these repositories.
+
 ## Summary
 
 - **Repositories run:** 15: fourteen public repositories plus the private reference repo, which is counted among the 15. Five of them were added by the broadened-set run. Of the first ten, 9 produced a model and 1 (CodelyTV/typescript-ddd-example) has no state fields, so there was nothing to declare. Of the five added, `init` declared aggregates in four, and openlayers needed a hand-written config. There were also 2 thin repositories (mguay22/nestjs-ddd, mbrookson/nestjs-ddd). They were cloned, but their aggregates have no state fields and they were dropped. dyrector-io/dyrectorio was cloned and dropped because its Prisma client could not be generated.
@@ -358,14 +360,84 @@ An `allowJs` ESM project with `"module": "node16"`, 374 JavaScript files under `
 
 There are no findings. Every `Tile` method that writes a field is "guard not analysed": each touches a field assigned only in a constructor, such as `state`, `key` or `transitionStarts_`, directly or through a method it calls, and the base class `Target` also hands `this` to listeners (`evt.target = this.eventTarget_ || this`). Out-of-repo probes show how far the analysis sees `allowJs` code. In a `.js` class with `closed` and `label` assigned in the constructor, `init` suggests nothing; declared by hand, an unguarded `close()` that writes `closed` is reported, but an unguarded `rename()` that writes `label` is not, and neither is one that reads or writes `label` before it writes `closed`. Declared as class fields, `closed = false;` and `label = '';`, `init` suggests `closed: true` and both methods are reported, as in TypeScript.
 
+## Seeded transitions
+
+The transition-seeding run used this branch's build on the same 15 repositories and commits. With the recorded configs, `check` reports the same 78 findings with the same exit codes and stderr in every repository, since only `init` changed.
+
+To seed, each repository's recorded config was copied to a new file outside the repository, with `lifecycles` emptied and every other option kept: base classes, inert members, inert event methods and `events`. `init --yes` was then run against that file, and `check --format json` with the seeded config on the unchanged code. codely has no recorded config, so its seed started from an empty `defineDomain({ lifecycles: [] })`. The private reference repo's config was written outside it too. Three seeded configs needed hand edits before `check` would read them, all for `init` faults that are older than seeding and are listed under [Open issues](#open-issues):
+
+- daruma (9 lines) and schulcloud-server (57 lines) had symbol-keyed fields, such as `__@IS_AUTO_COMMIT_ENABLED@2676`, written as bare keys; those lines were dropped. None of them had transitions.
+- adonisjs had its five `#private` fields written as bare keys; they were quoted, as in the recorded config.
+- daruma had a `Foo` class from a spec file, which the file does not export, declared as an aggregate; its entry was dropped.
+
+| Repository | Fields declared | Seeded | `from` entries | Withheld | No public writer | Transition findings | Problems |
+|---|---|---|---|---|---|---|---|
+| kyhsa93 | 2 | 2 | 2 | 0 | 0 | 0 | 0 |
+| bitloops | 2 | 1 | 1 | 1 | 0 | 0 | 0 |
+| undb | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
+| Sairyss | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
+| ddd-forum | 7 | 0 | 0 | 1 | 6 | 0 | 0 |
+| codely | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Private reference repo | 7 | 2 | 4 | 0 | 5 | 0 | 0 |
+| daruma | 15 | 0 | 0 | 0 | 15 | 0 | 0 |
+| Booking-System | 5 | 3 | 6 | 0 | 2 | 0 | 0 |
+| ticket-sale | 5 | 5 | 9 | 0 | 0 | 0 | 0 |
+| schulcloud-server | 97 | 9 | 15 | 2 | 86 | 0 | 0 |
+| SiweAuthMicroservice | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
+| typescript-event-sourcing-sample-app | 1 | 1 | 1 | 0 | 0 | 0 | 0 |
+| adonisjs/application | 7 | 0 | 0 | 4 | 3 | 0 | 0 |
+| openlayers | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| **Total** | **157** | **23** | **38** | **8** | **126** | **0** | **0** |
+
+"No public writer" counts fields that only private or protected methods, constructors or factories write, or that nothing in the class writes, such as daruma's `_isRemoved`, which only the `on*` appliers set. `init` seeds nothing for them, and `check` judges no method for them, so they cannot drift. Every withheld field has a public writer whose guard `init` cannot follow:
+
+| Repository | Field | Withheld method | Guard shape |
+|---|---|---|---|
+| bitloops | `TodoEntity.completed` | `complete()`, `uncomplete()` | a rule object passed to `Domain.applyRules` |
+| ddd-forum | `User.isDeleted` | `delete()` | a wrapping `if (!this.props.isDeleted)` whose block raises an event built from `this` |
+| schulcloud-server | `FileEntity._creatorId` | `removeCreatorId()` | a comparison of a parameter with `this._creatorId?.toHexString()` |
+| schulcloud-server | `Submission.student` | `removeStudentById()` | the same shape, a parameter compared with a value read from the field |
+| adonisjs/application | `#terminating`, `#environment`, `#mode`, `#state` | `terminate()`, `setEnvironment()`, `setMode()`, and `init()`, `boot()`, `warmUp()`, `start()`, `terminate()` | guards `init` cannot follow |
+
+So, as intended, the 23 seeded fields add no `transition-drift` or `transition-missing` on the code they were seeded from, and no problem.
+
+Probes outside the repository show both rules firing once a seeded declaration exists. The probe is an `Order` with an enum `status`. `confirm()` is guarded to run from `Pending`, `ship()` from `Confirmed`, and `cancel()` from anything but `Shipped` and `Cancelled`. `init --yes` seeds `confirm: { from: [Pending] }`, `ship: { from: [Confirmed] }` and `cancel: { from: [Pending, Confirmed] }`, and `check` is clean. Then:
+
+- Removing `ship()`'s guard reports `transition-drift` (`extra`: `Pending`, `Shipped`, `Cancelled`), as well as `terminal-state-leak`.
+- Loosening `confirm()`'s guard to exclude only the terminal states reports `transition-drift` (`extra`: `Confirmed`) and nothing else, a change that `terminal-state-leak` cannot see.
+- Tightening `cancel()`'s guard to `Pending` only reports the `transition-missing` warning for `Confirmed`, and `check` exits `0`.
+
+### unreachable-state
+
+A diagnostic run over the recorded configs listed every value of a declared enum or union field that no read assignment sets, and what keeps `unreachable-state` quiet about it:
+
+| Repository | Enum or union fields | Values | Not assigned | Silenced by a write that cannot be resolved | Silenced by a mention |
+|---|---|---|---|---|---|
+| undb | 2 | 6 | 5 | 5 | 0 |
+| Sairyss | 1 | 3 | 3 | 3 | 0 |
+| ddd-forum | 3 | 6 | 2 | 2 | 0 |
+| Private reference repo | 2 | 8 | 1 | 0 | 1 |
+| ticket-sale | 1 | 3 | 0 | 0 | 0 |
+| schulcloud-server | 26 | 178 | 166 | 154 | 12 |
+| SiweAuthMicroservice | 1 | 3 | 2 | 2 | 0 |
+| typescript-event-sourcing-sample-app | 1 | 2 | 0 | 0 | 0 |
+| adonisjs/application | 3 | 14 | 7 | 7 | 0 |
+| **Total** | **40** | **223** | **186** | **173** | **13** |
+
+The other repositories declare no enum or union field. Most unassigned values belong to fields that a constructor or factory writes from a parameter, such as `this.role = props.role`, so the field might hold any value. 12 of the 13 mentioned values are discriminators of schulcloud-server's news and board-element subclasses. Each subclass's constructor sets only its own value, and its siblings' values are mentioned in the siblings' `@Entity` decorators and constructors. The 13th is an order status in the private reference repo, mentioned outside a comparison. The mention rule stays as it is: a mention may be the code that sets the value, and unknown never produces a finding.
+
+A re-run with tsconfigs that include only each repository's `domain` directories reports no `unreachable-state` where it runs, because every remaining value is either assigned or silenced by a write that cannot be resolved. Where the include pattern leaves out a declared class, the run exits `2`. A probe outside the repository shows the documented way to make the rule fire. A `Post` whose `Archived` value is only compared reports `unreachable-state`. An `api/post.dto.ts` holding `Object.values(PostStatus)`, or the string `'archived'`, silences it. `check -p` with a tsconfig that includes only `src/domain` reports it again.
+
 ## Open issues
 
-The first was not fixed, because it needs a design change rather than a correction of an existing rule. The others were found by the broadened-set run, which does not change the analyzer.
+The first was not fixed, because it needs a design change rather than a correction of an existing rule. Issues 2 to 4 were found by the broadened-set run, and 5 and 6 by the seeded-transitions run; neither run changes the analyzer.
 
 1. **Aggregates that leak `this` silence methods that read object fields.** An aggregate leaks `this` when its project class family (its project base classes and project subclasses) lets `this` or `this.props` escape anywhere, or contains an arrow function that references `this` other than a direct callback of `filter`, `map`, `some`, `every`, `find`, `findIndex`, `forEach`, `reduce`, `flatMap` or `sort` called on a built-in array or tuple. Factory members are static members and any member that calls `new` on a class in the family, such as `clone()`, including constructors, property initializers and accessors. Inside a factory member, a variable or parameter is treated like `this` when it is typed as the aggregate, initialized with `new` on a class in the family, or assigned one with `=`, `??=`, `||=` or `&&=`, whatever its declared type. It leaks when it escapes or is captured by any function other than a direct array callback, except in a bare `return v;`, which is how a factory hands back the instance it built; `return Result.ok(v)` is an escape. Two forms that only copy values are not leaks: `Object.assign(this, …)` or `Object.assign(this.props, …)` as a statement whose result is discarded, and a spread of `this` or `this.props` inside an object literal. In a leaking aggregate every project data field whose type is not primitive (string, number, boolean, bigint, symbol, literal, enum, or a built-in TypeScript library type such as `Date` whose type arguments are primitive and which has no index signature) counts as reading the state field. In an aggregate that does not leak, project data fields never count, whatever their type. The leak check does not see every way to wire a back-reference. These shapes are not seen, and a guard through a field wired by them is read as no guard, which can produce a false leak: a factory or service outside the class, for example `agg.policy = new Policy(agg)` or `agg.canEdit = () => agg.isOpen()`; the instance held inside another object (`box.o.policy.owner = box.o`); and a module-level factory function. None of the validation repositories is affected by the unseen shapes today.
 2. **Public event-sourcing appliers are judged as commands.** typescript-event-sourcing-sample-app's `applyJobCreated`, `applyJobUpdated` and `applyJobArchived` are public because they have no modifier, and are reached only through `applyChange` and `loadFromHistory`, which dispatch to `apply<EventName>` by a computed name. They are reported as `terminal-state-leak` after `ARCHIVED`, as daruma-backend's appliers were before they became private. Listing them in `allowAfterTerminal` resolves it by configuration.
 3. **`allowJs` fields assigned in a constructor are barely seen.** `init` suggests none of them, so openlayers gets no config, and a method that reads or writes one before it writes the declared state field is skipped as unknown, so an unguarded method that writes only such fields is never reported. The same class with class fields is analysed as in TypeScript.
 4. **`init` and `#private` fields or `noUnusedLocals`.** `init` writes `#private` field names as bare object keys, which do not type-check, so the config it writes makes `check` exit 2. With no existing config, `init --base-class` exits 2 in a project with `noUnusedLocals`, because its starting config imports `lifecycle` before any lifecycle is added.
+5. **`init` and symbol-keyed fields.** A field keyed by a `unique symbol`, such as one a library base class declares, is suggested under its internal name, for example `__@IS_AUTO_COMMIT_ENABLED@2676`, and written as a bare key, which is a syntax error. The seeded-transitions run met it in daruma and schulcloud-server.
+6. **`init` and classes a module does not export.** daruma's `Foo`, a class in a spec file that the file does not export, is discovered and declared, so the written import does not type-check and `check` exits 2.
 
 ## Resolved during validation
 

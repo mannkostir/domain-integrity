@@ -10,8 +10,9 @@ import { AggregateRoot } from './aggregate-root';
 export enum LightState { off = 'OFF', on = 'ON' }
 export class Light extends AggregateRoot<{ state: LightState }> {
   static off(): Light { return new Light({ state: LightState.off }); }
-  turnOn(): void { if (this.props.state === LightState.on) return; this.props.state = LightState.on; }
-  turnOff(): void { if (this.props.state === LightState.off) return; this.props.state = LightState.off; }
+  isOn(): boolean { return this.props.state === LightState.on; }
+  turnOn(): void { if (this.isOn()) return; this.props.state = LightState.on; }
+  turnOff(): void { if (!this.isOn()) return; this.props.state = LightState.off; }
 }
 `;
 
@@ -83,7 +84,12 @@ const TRAILING_COMMENT_LIFECYCLES_CONFIG = configText({
 const PAYMENT_LIFECYCLE_LINES = [
   '    lifecycle(Payment, {',
   '      states: {',
-  "        state: { terminal: 'paid' },",
+  '        state: {',
+  "          terminal: 'paid',",
+  '          transitions: {',
+  "            pay: { from: ['open'] },",
+  '          },',
+  '        },',
   '      },',
   '    }),',
 ];
@@ -91,7 +97,12 @@ const PAYMENT_LIFECYCLE_LINES = [
 const TICKET_LIFECYCLE_LINES = [
   '    lifecycle(Ticket, {',
   '      states: {',
-  '        status: { terminal: TicketStatus.closed },',
+  '        status: {',
+  '          terminal: TicketStatus.closed,',
+  '          transitions: {',
+  '            close: { from: [TicketStatus.open] },',
+  '          },',
+  '        },',
   '      },',
   '    }),',
 ];
@@ -152,7 +163,12 @@ export default defineDomain({
   lifecycles: [
     lifecycle(Ticket, {
       states: {
-        status: { terminal: TicketStatus.closed },
+        status: {
+          terminal: TicketStatus.closed,
+          transitions: {
+            close: { from: [TicketStatus.open] },
+          },
+        },
       },
     }),
   ],
@@ -170,7 +186,13 @@ export default defineDomain({
   lifecycles: [
     lifecycle(Invitation, {
       states: {
-        state: { terminal: ['accepted', 'rejected'] },
+        state: {
+          terminal: ['accepted', 'rejected'],
+          transitions: {
+            accept: { from: ['pending'] },
+            reject: { from: ['pending'] },
+          },
+        },
       },
     }),
   ],
@@ -188,7 +210,13 @@ export default defineDomain({
   lifecycles: [
     lifecycle(Switch, {
       states: {
-        state: { terminal: [] },
+        state: {
+          terminal: [],
+          transitions: {
+            turnOn: { from: ['off'] },
+            turnOff: { from: ['on'] },
+          },
+        },
       },
     }),
   ],
@@ -196,7 +224,7 @@ export default defineDomain({
 `);
   });
 
-  it('imports only the aggregate when an enum field gets no terminal values', async () => {
+  it('imports only the aggregate when an enum field gets neither terminal values nor transitions', async () => {
     const config = await initIn({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/light.ts': LIGHT });
 
     expect(config).toContain("import { defineDomain, lifecycle } from 'domain-integrity';\nimport { Light } from './src/light';\n\n");
@@ -212,7 +240,12 @@ export default defineDomain({
     lifecycles: [
         lifecycle(Ticket, {
             states: {
-                status: { terminal: TicketStatus.closed },
+                status: {
+                    terminal: TicketStatus.closed,
+                    transitions: {
+                        close: { from: [TicketStatus.open] },
+                    },
+                },
             },
         }),
     ],
@@ -230,7 +263,12 @@ export default defineDomain({
 \tlifecycles: [
 \t\tlifecycle(Ticket, {
 \t\t\tstates: {
-\t\t\t\tstatus: { terminal: TicketStatus.closed },
+\t\t\t\tstatus: {
+\t\t\t\t\tterminal: TicketStatus.closed,
+\t\t\t\t\ttransitions: {
+\t\t\t\t\t\tclose: { from: [TicketStatus.open] },
+\t\t\t\t\t},
+\t\t\t\t},
 \t\t\t},
 \t\t}),
 \t],
@@ -248,7 +286,12 @@ export default defineDomain({
    lifecycles: [
      lifecycle(Ticket, {
        states: {
-         status: { terminal: TicketStatus.closed },
+         status: {
+           terminal: TicketStatus.closed,
+           transitions: {
+             close: { from: [TicketStatus.open] },
+           },
+         },
        },
      }),
    ],
@@ -322,7 +365,12 @@ describe('init config layout of an existing config', () => {
           '  lifecycles: [',
           '    lifecycle(Payment, {',
           '      states: {',
-          '        state: { terminal: "paid" },',
+          '        state: {',
+          '          terminal: "paid",',
+          '          transitions: {',
+          '            pay: { from: ["open"] },',
+          '          },',
+          '        },',
           '      },',
           '    }),',
           '  ],',
@@ -342,7 +390,12 @@ describe('init config layout of an existing config', () => {
           '  lifecycles: [',
           '    lifecycle(Invoice, {',
           '      states: {',
-          '        state: { terminal: "void" },',
+          '        state: {',
+          '          terminal: "void",',
+          '          transitions: {',
+          '            cancel: { from: ["draft"] },',
+          '          },',
+          '        },',
           '      },',
           '    }),',
           '  ],',
@@ -361,7 +414,12 @@ describe('init config layout of an existing config', () => {
           '  lifecycles: [',
           '    lifecycle(Notice, {',
           '      states: {',
-          '        state: { terminal: "say \\"done\\"" },',
+          '        state: {',
+          '          terminal: "say \\"done\\"",',
+          '          transitions: {',
+          '            finish: { from: ["draft"] },',
+          '          },',
+          '        },',
           '      },',
           '    }),',
           '  ],',
@@ -373,7 +431,7 @@ describe('init config layout of an existing config', () => {
   it('escapes a single quote inside a terminal value written in single quotes', async () => {
     const config = await initIn({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/notice.ts': NOTICE.replace(/say "done"/g, `it\\'s "done"`) });
 
-    expect(config).toContain(`state: { terminal: 'it\\'s "done"' },`);
+    expect(config).toContain(`terminal: 'it\\'s "done"',`);
   });
 
   it('writes a config with an escaped terminal value that check reads', async () => {
@@ -417,7 +475,7 @@ describe('init config layout of an existing config', () => {
   it('writes a numeric terminal value unquoted', async () => {
     const config = await initIn({ 'src/aggregate-root.ts': AGGREGATE_ROOT, 'src/level.ts': LEVEL, 'domain.config.ts': DOUBLE_QUOTED_CONFIG });
 
-    expect(config).toContain('        level: { terminal: 2 },\n');
+    expect(config).toContain('        level: {\n          terminal: 2,\n          transitions: {\n            finish: { from: [1] },\n');
   });
 
   it('nests relative to the line of a config object that opens on its own line', async () => {
@@ -435,7 +493,12 @@ describe('init config layout of an existing config', () => {
         '    lifecycles: [',
         '      lifecycle(Ticket, {',
         '        states: {',
-        '          status: { terminal: TicketStatus.closed },',
+        '          status: {',
+        '            terminal: TicketStatus.closed,',
+        '            transitions: {',
+        '              close: { from: [TicketStatus.open] },',
+        '            },',
+        '          },',
         '        },',
         '      }),',
         '    ],',
@@ -582,7 +645,12 @@ describe('init config layout of an existing config', () => {
         'export default defineDomain({ lifecycles: [',
         '  lifecycle(Ticket, {',
         '    states: {',
-        '      status: { terminal: TicketStatus.closed },',
+        '      status: {',
+        '        terminal: TicketStatus.closed,',
+        '        transitions: {',
+        '          close: { from: [TicketStatus.open] },',
+        '        },',
+        '      },',
         '    },',
         '  }),',
         '] });',
@@ -604,7 +672,12 @@ describe('init config layout of an existing config', () => {
         '    { lifecycles: [',
         '      lifecycle(Ticket, {',
         '        states: {',
-        '          status: { terminal: TicketStatus.closed },',
+        '          status: {',
+        '            terminal: TicketStatus.closed,',
+        '            transitions: {',
+        '              close: { from: [TicketStatus.open] },',
+        '            },',
+        '          },',
         '        },',
         '      }),',
         '    ] },',
