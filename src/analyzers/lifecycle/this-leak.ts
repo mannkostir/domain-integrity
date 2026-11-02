@@ -7,6 +7,7 @@ import {
   SyntaxKind,
   Type,
 } from 'ts-morph';
+import { ArrowMethods } from './arrow-methods';
 import {
   escapesStateHolder,
   hasForeignThis,
@@ -63,14 +64,26 @@ const isCopiedInto = (node: Node): boolean => {
   );
 };
 
-const isCopiedOutOf = (node: Node): boolean => Node.isSpreadAssignment(outermostWrapper(node).getParent());
+type Family = {
+  readonly classes: ReadonlySet<Node>;
+  readonly arrowMethods: ReadonlySet<Node>;
+  readonly arrowMethodsCaptureThis: boolean;
+};
 
-const escapesAggregate = (node: Node): boolean =>
+const isPropsHolder = (node: Node): boolean => {
+  const target = unwrap(node);
+  return Node.isPropertyAccessExpression(target) || Node.isElementAccessExpression(target);
+};
+
+const isCopiedOutOf = (node: Node, family: Family): boolean =>
+  Node.isSpreadAssignment(outermostWrapper(node).getParent()) && (!family.arrowMethodsCaptureThis || isPropsHolder(node));
+
+const escapesAggregate = (node: Node, family: Family): boolean =>
   escapesStateHolder(node) &&
   !hasForeignThis(node) &&
   !isAssignmentTarget(node) &&
   !isCopiedInto(node) &&
-  !isCopiedOutOf(node);
+  !isCopiedOutOf(node, family);
 
 const isBuiltInArray = (type: Type): boolean => {
   const target = type.getNonNullableType();
@@ -88,10 +101,13 @@ const isNonRetainingCallback = (closure: Node): boolean => {
   );
 };
 
-const capturesAggregate = (node: Node): boolean =>
-  Node.isArrowFunction(node) &&
-  !isNonRetainingCallback(node) &&
-  node.getDescendantsOfKind(SyntaxKind.ThisKeyword).some((self) => !hasForeignThis(self));
+const capturesThis = (node: Node): boolean =>
+  [...node.getDescendantsOfKind(SyntaxKind.ThisKeyword), ...node.getDescendantsOfKind(SyntaxKind.SuperKeyword)].some(
+    (self) => !hasForeignThis(self),
+  );
+
+const capturesAggregate = (node: Node, family: Family): boolean =>
+  Node.isArrowFunction(node) && !family.arrowMethods.has(node) && !isNonRetainingCallback(node) && capturesThis(node);
 
 const isStaticMember = (member: Node): boolean =>
   Node.isClassStaticBlockDeclaration(member) ||
@@ -166,13 +182,13 @@ const holderOf = (reference: Node): Node => {
 
 const isReturnedAsIs = (node: Node): boolean => Node.isReturnStatement(node.getParent());
 
-const instanceEscapes = (reference: Node): boolean => {
+const instanceEscapes = (reference: Node, family: Family): boolean => {
   const holder = holderOf(reference);
   return (
     !isReceiverOfAccess(holder) &&
     !isAssignmentTarget(holder) &&
     !isCopiedInto(holder) &&
-    !isCopiedOutOf(holder) &&
+    !isCopiedOutOf(holder, family) &&
     !isReturnedAsIs(holder)
   );
 };
@@ -183,25 +199,25 @@ const isClosure = (node: Node): boolean =>
   Node.isFunctionDeclaration(node) ||
   (Node.isMethodDeclaration(node) && Node.isObjectLiteralExpression(node.getParent()));
 
-const capturedInClosure = (reference: Node, member: Node): boolean => {
+const capturedInClosure = (reference: Node, member: Node, family: Family): boolean => {
   const ancestors = reference.getAncestors();
   return ancestors
     .slice(0, ancestors.indexOf(member))
-    .some((ancestor) => isClosure(ancestor) && !isNonRetainingCallback(ancestor));
+    .some((ancestor) => isClosure(ancestor) && !family.arrowMethods.has(ancestor) && !isNonRetainingCallback(ancestor));
 };
 
-const factoryMembersLeak = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
+const factoryMembersLeak = (cls: ClassDeclaration, family: Family): boolean =>
   cls
     .getMembers()
-    .filter((member) => isFactoryMember(member, family))
+    .filter((member) => isFactoryMember(member, family.classes))
     .some((member) =>
-      instanceReferences(member, family).some(
-        (reference) => instanceEscapes(reference) || capturedInClosure(reference, member),
+      instanceReferences(member, family.classes).some(
+        (reference) => instanceEscapes(reference, family) || capturedInClosure(reference, member, family),
       ),
     );
 
-const leaksFrom = (cls: ClassDeclaration, family: ReadonlySet<Node>): boolean =>
-  cls.getDescendants().some((node) => escapesAggregate(node) || capturesAggregate(node)) ||
+const leaksFrom = (cls: ClassDeclaration, family: Family): boolean =>
+  cls.getDescendants().some((node) => escapesAggregate(node, family) || capturesAggregate(node, family)) ||
   factoryMembersLeak(cls, family);
 
 export const classFamily = (cls: ClassDeclaration, subclasses: Subclasses): readonly ClassDeclaration[] => [
@@ -209,7 +225,11 @@ export const classFamily = (cls: ClassDeclaration, subclasses: Subclasses): read
   ...subclasses.of(cls),
 ];
 
-export const leaksThis = (family: readonly ClassDeclaration[]): boolean => {
-  const members = new Set<Node>(family);
-  return family.some((candidate) => leaksFrom(candidate, members));
+export const leaksThis = (family: readonly ClassDeclaration[], arrows: ArrowMethods): boolean => {
+  const context: Family = {
+    classes: new Set<Node>(family),
+    arrowMethods: new Set<Node>(arrows.values()),
+    arrowMethodsCaptureThis: [...arrows.values()].some(capturesThis),
+  };
+  return family.some((candidate) => leaksFrom(candidate, context));
 };

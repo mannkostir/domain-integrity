@@ -63,7 +63,7 @@ describe('a project with nothing to check', () => {
         'Searched for classes extending or implementing: AggregateRoot, Entity.',
         `Set "aggregates.baseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregates: { baseClasses: ['MyAggregateBase'] } })`,
         'No event handlers were found either.',
-        'Recognised handlers use the decorators EventsHandler, OnEvent (set "events.handlerDecorators" for your own), the methods register (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().',
+        'Recognised handlers use the decorators EventsHandler, OnEvent, HandleEvent (set "events.handlerDecorators" for your own), the methods register (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().',
         '',
       ].join('\n'),
     );
@@ -81,7 +81,7 @@ describe('a project with nothing to check', () => {
         'Searched for classes extending or implementing: AggregateRoot, Entity.',
         `Set "aggregates.baseClasses" in domain.config.ts to the base class or interface your aggregates extend or implement, for example: export default defineDomain({ aggregates: { baseClasses: ['MyAggregateBase'] } })`,
         'No event handlers were found either.',
-        'Recognised handlers use the decorators EventsHandler, OnEvent (set "events.handlerDecorators" for your own), the methods register (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().',
+        'Recognised handlers use the decorators EventsHandler, OnEvent, HandleEvent (set "events.handlerDecorators" for your own), the methods register (set "events.registerMethods"), subscribedTo(), or @Saga() with ofType().',
         '',
       ].join('\n'),
     );
