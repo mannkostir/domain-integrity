@@ -1,5 +1,9 @@
 # Real-world validation
 
+## Plain setter writes: phase 1
+
+Issue #130 has focused regression tests and external CLI probes for plain setter writes that leave the tracked field untouched. The final public comparison is pending phase 2 after coordinator integration and independent review. It must use the public repositories and pinned commits in Setup, preserve their recorded configs, compare findings and exit codes, and triage every difference. The private reference repository remains a maintainer validation gate. No public or private rerun is claimed for this phase.
+
 The v0.1 CLI was run against nine public TypeScript DDD repositories and one private reference repository. Each finding was triaged by reading the code. The tables below reflect the v0.1.1 CLI (09ab249), after the fixes listed under [Resolved during validation](#resolved-during-validation).
 
 The v0.1.1 re-run used the same commits and configs as the v0.1 run. It reports 37 findings, 3 more than v0.1: ticket-sale `Order.pay` and `Order.cancel`, and bitloops `TodoEntity.delete`. All three come from ignoring reads after the method's first assignment of the field. Every other finding is unchanged, and none was lost. The build before the change that tracks `new` instances of the class family and instance-method factories reports the same 37, so that change silences nothing here.

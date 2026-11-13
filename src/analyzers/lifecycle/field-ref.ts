@@ -5,6 +5,7 @@ import {
   NewExpression,
   Node,
   PropertyAccessExpression,
+  SetAccessorDeclaration,
   SyntaxKind,
   ts,
   Type,
@@ -107,10 +108,14 @@ const bodyOf = (member: Node): MemberLookup => {
   return { kind: 'untraceable' };
 };
 
+const instanceMembersOf = (cls: ClassDeclaration, name: string) =>
+  cls.getInstanceMembers().filter((member) => member.getName() === name);
+
 const declaredMember = (chain: readonly ClassDeclaration[], name: string): Node | undefined =>
-  chain
-    .map((candidate) => candidate.getGetAccessor(name) ?? candidate.getMethod(name) ?? candidate.getProperty(name))
-    .find((found) => found !== undefined);
+  chain.map((candidate) => {
+    const members = instanceMembersOf(candidate, name);
+    return members.find(Node.isGetAccessorDeclaration) ?? members.find(Node.isMethodDeclaration) ?? members.find(Node.isPropertyDeclaration);
+  }).find((member) => member !== undefined);
 
 const typedMember = (cls: ClassDeclaration, name: string): MemberLookup => {
   const declarations = cls.getType().getProperty(name)?.getDeclarations() ?? [];
@@ -281,15 +286,39 @@ const dataReadsField = (access: Node, declarations: readonly Node[], field: stri
     : projectDataReadsField(access, scope);
 };
 
-const findGetter = (cls: ClassDeclaration, access: Node, name: string) =>
-  lookupChain(cls, access)
-    .map((candidate) => candidate.getGetAccessor(name))
-    .find((accessor) => accessor !== undefined);
+const findGetter = (cls: ClassDeclaration, access: Node, name: string) => {
+  const member = declaredMember(lookupChain(cls, access), name);
+  return Node.isGetAccessorDeclaration(member) ? member : undefined;
+};
 
-const findSetter = (cls: ClassDeclaration, access: Node, name: string) =>
-  lookupChain(cls, access)
-    .map((candidate) => candidate.getSetAccessor(name))
-    .find((accessor) => accessor !== undefined);
+type SetterLookup =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'untraceable' }
+  | { readonly kind: 'shadowed'; readonly declaration: SetAccessorDeclaration }
+  | { readonly kind: 'resolved'; readonly declaration: SetAccessorDeclaration };
+
+const resolveSetter = (cls: ClassDeclaration, access: Node, name: string): SetterLookup => {
+  const chain = lookupChain(cls, access);
+  const declarations = chain
+    .map((candidate) => instanceMembersOf(candidate, name));
+  const members = declarations.find((group) => group.length > 0);
+  const setters = members?.filter(Node.isSetAccessorDeclaration) ?? [];
+  const [setter] = setters;
+  if (setter === undefined || members === undefined) {
+    const shadowed = declarations.flat().find(Node.isSetAccessorDeclaration);
+    return shadowed === undefined ? { kind: 'absent' } : { kind: 'shadowed', declaration: shadowed };
+  }
+  if (
+    setters.length !== 1 ||
+    members.filter(Node.isGetAccessorDeclaration).length > 1 ||
+    members.some((member) =>
+      !(Node.isSetAccessorDeclaration(member) || Node.isGetAccessorDeclaration(member)) || member.getDecorators().length > 0) ||
+    chain.some((candidate) =>
+      candidate.getDecorators().length > 0 ||
+      candidate.getInstanceMembers().some((member) => Node.isComputedPropertyName(member.getNameNode())))
+  ) return { kind: 'untraceable' };
+  return { kind: 'resolved', declaration: setter };
+};
 
 const superMethod = (access: PropertyAccessExpression): MethodImplementation | undefined => {
   const member = declaredMember(superChain(access), access.getName());
@@ -392,9 +421,7 @@ const escapesIntoUnknown = (node: Node, scope: AggregateScope): boolean =>
 export const isComputedStateAccess = (node: Node): boolean =>
   Node.isElementAccessExpression(node) && isStateHolder(node.getExpression()) && memberName(node) === undefined;
 
-const writesThroughSetter = (node: Node, name: string, field: string, scope: AggregateScope, depth: number): boolean => {
-  const setter = isWritten(outermostWrapper(node)) ? findSetter(scope.cls, node, name) : undefined;
-  if (setter === undefined) return false;
+const setterReferencesField = (setter: SetAccessorDeclaration, field: string, scope: AggregateScope, depth: number): boolean => {
   const body = setter.getBody();
   return (
     body === undefined ||
@@ -408,7 +435,12 @@ const readsThroughMember = (node: Node, field: string, scope: AggregateScope, de
   if (name === undefined || name === STATE_HOLDER || name === field) return false;
   const member = lookupMember(scope, node, name);
   if (member.kind === 'inert') return false;
-  if (writesThroughSetter(node, name, field, scope, depth)) return true;
+  const setter = isWritten(outermostWrapper(node)) ? resolveSetter(scope.cls, node, name) : { kind: 'absent' as const };
+  if (setter.kind === 'untraceable') return true;
+  if (setter.kind === 'resolved' || setter.kind === 'shadowed') {
+    if (setterReferencesField(setter.declaration, field, scope, depth)) return true;
+    if (setter.kind === 'resolved' && isOverwritten(node)) return false;
+  }
   if (member.kind === 'data') {
     return (
       dataReadsField(node, member.declarations, field, scope) ||
