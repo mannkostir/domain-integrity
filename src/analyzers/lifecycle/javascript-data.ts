@@ -1,12 +1,13 @@
-import { BinaryExpression, ClassDeclaration, Node, ParameterDeclaration, ScriptKind, Symbol as MorphSymbol, SyntaxKind } from 'ts-morph';
+import { BinaryExpression, ClassDeclaration, Node, ParameterDeclaration, Project, ScriptKind, SourceFile, Symbol as MorphSymbol, SyntaxKind } from 'ts-morph';
 import { isLibraryNode } from '../shared/library';
+import { SourceIndex } from '../shared/source-index';
 import { namedClassChain } from './named-chain';
 
 export type JavaScriptDataProof =
   | { readonly kind: 'data'; readonly constructorAssignments: readonly BinaryExpression[] }
   | { readonly kind: 'unknown' };
 
-const UNKNOWN: JavaScriptDataProof = { kind: 'unknown' };
+const UNKNOWN = { kind: 'unknown' } as const;
 const PROTOTYPE_OPERATIONS = new Set([
   'prototype', '__proto__', 'constructor', 'getPrototypeOf', 'setPrototypeOf', 'defineProperty', 'defineProperties',
   'getOwnPropertyDescriptor', 'getOwnPropertyDescriptors', '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__',
@@ -39,6 +40,12 @@ const isPlainParameter = (parameter: ParameterDeclaration): boolean => {
   return Node.isIdentifier(parameter.getNameNode()) && !parameter.isRestParameter() && (value === undefined || isScalarLiteral(value));
 };
 
+const isConstructorValue = (node: Node, parameters: ReadonlySet<MorphSymbol>): boolean => {
+  if (isScalarLiteral(node)) return true;
+  const symbol = Node.isIdentifier(node) ? node.getSymbol() : undefined;
+  return symbol !== undefined && parameters.has(symbol);
+};
+
 const constructorStores = (cls: ClassDeclaration): readonly BinaryExpression[] | undefined => {
   const constructors = cls.getConstructors();
   if (constructors.length === 0) return [];
@@ -46,6 +53,10 @@ const constructorStores = (cls: ClassDeclaration): readonly BinaryExpression[] |
   const [constructor] = constructors;
   const body = constructor?.getBody();
   if (!constructor || !Node.isBlock(body) || !constructor.getParameters().every(isPlainParameter)) return undefined;
+  const parameters = new Set(constructor.getParameters().flatMap((parameter) => {
+    const symbol = parameter.getSymbol();
+    return symbol === undefined ? [] : [symbol];
+  }));
   const statements = body.getStatements();
   const derived = cls.getExtends() !== undefined;
   const stores: BinaryExpression[] = [];
@@ -53,9 +64,9 @@ const constructorStores = (cls: ClassDeclaration): readonly BinaryExpression[] |
     if (!Node.isExpressionStatement(statement)) return undefined;
     const expression = statement.getExpression();
     if (derived && index === 0) {
-      if (!Node.isCallExpression(expression) || !Node.isSuperExpression(expression.getExpression()) || !expression.getArguments().every(isScalarLiteral)) return undefined;
+      if (!Node.isCallExpression(expression) || !Node.isSuperExpression(expression.getExpression()) || !expression.getArguments().every((argument) => isConstructorValue(argument, parameters))) return undefined;
     } else {
-      if (!Node.isBinaryExpression(expression) || thisStoreName(expression) === undefined || !isScalarLiteral(expression.getRight())) return undefined;
+      if (!Node.isBinaryExpression(expression) || thisStoreName(expression) === undefined || !isConstructorValue(expression.getRight(), parameters)) return undefined;
       stores.push(expression);
     }
   }
@@ -102,8 +113,8 @@ const isPotentialPrototypeOperation = (node: Node): boolean => {
   return false;
 };
 
-const hasPrototypeInterference = (cls: ClassDeclaration): boolean =>
-  cls.getProject().getSourceFiles().filter((file) => !isLibraryNode(file)).some((file) =>
+const hasPrototypeInterference = (files: readonly SourceFile[]): boolean =>
+  files.some((file) =>
     file.getDescendants().some(isPotentialPrototypeOperation),
   );
 
@@ -114,9 +125,9 @@ const isConstructionReference = (reference: Node): boolean => {
     Node.isImportSpecifier(parent) || Node.isImportClause(parent) || Node.isExportSpecifier(parent);
 };
 
-const hasConstructorEscape = (cls: ClassDeclaration): boolean => {
+const hasConstructorEscape = (cls: ClassDeclaration, runtimeFiles: ReadonlySet<SourceFile>): boolean => {
   const name = cls.getNameNode();
-  return name === undefined || name.findReferencesAsNodes().some((reference) => reference !== name && !isConstructionReference(reference));
+  return name === undefined || name.findReferencesAsNodes().some((reference) => reference !== name && runtimeFiles.has(reference.getSourceFile()) && !isConstructionReference(reference));
 };
 
 const interceptsStore = (chain: readonly ClassDeclaration[], name: string): boolean =>
@@ -139,22 +150,72 @@ const isOwnedDeclaration = (node: Node, chain: readonly ClassDeclaration[], name
     implementation.getBody() === block && Node.isClassDeclaration(owner) && chain.includes(owner);
 };
 
-export const proveJavaScriptDataProperty = (
-  cls: ClassDeclaration,
-  symbol: MorphSymbol | undefined,
-): JavaScriptDataProof => {
-  if (!isJavaScriptClass(cls) || symbol === undefined || cls.getType().getProperty(symbol.getName()) !== symbol) return UNKNOWN;
-  const chain = namedClassChain(cls);
-  if (chain === undefined || !chain.every(isJavaScriptClass) || chain.some(hasUnsupportedMembers) || hasPrototypeInterference(cls) || chain.some(hasConstructorEscape)) return UNKNOWN;
-  const stores = [...chain].reverse().map(constructorStores);
-  if (stores.some((assignments) => assignments === undefined)) return UNKNOWN;
-  const assignments = stores.flatMap((entry) => entry ?? []);
-  if (assignments.some((assignment) => {
-    const name = thisStoreName(assignment);
-    return name === undefined || interceptsStore(chain, name);
-  })) return UNKNOWN;
-  const declarations = symbol.getDeclarations();
-  if (declarations.length === 0 || !declarations.every((node) => isOwnedDeclaration(node, chain, symbol.getName()))) return UNKNOWN;
-  const constructorAssignments = assignments.filter((assignment) => thisStoreName(assignment) === symbol.getName());
-  return constructorAssignments.length === 0 ? UNKNOWN : { kind: 'data', constructorAssignments };
+type ClassConstruction = {
+  readonly chain: readonly ClassDeclaration[];
+  readonly assignments: readonly BinaryExpression[];
 };
+
+export class JavaScriptDataProperties {
+  private readonly files: readonly SourceFile[];
+  private readonly included: ReadonlySet<SourceFile>;
+  private readonly project: Project | undefined;
+  private readonly validSources: boolean;
+  private prototypeInterference: boolean | undefined;
+  private readonly classes = new Map<ClassDeclaration, ClassConstruction | undefined>();
+  private readonly properties = new Map<ClassDeclaration, Map<MorphSymbol, JavaScriptDataProof>>();
+
+  constructor(runtimeSources: SourceIndex) {
+    this.files = [...runtimeSources.files];
+    this.included = new Set(this.files);
+    this.project = this.files[0]?.getProject();
+    this.validSources = this.project !== undefined && this.files.every((file) =>
+      !file.wasForgotten() && file.getProject() === this.project && this.project?.getSourceFile(file.getFilePath()) === file,
+    );
+  }
+
+  prove(cls: ClassDeclaration, symbol: MorphSymbol | undefined): JavaScriptDataProof {
+    if (!this.validSources || cls.wasForgotten() || !this.included.has(cls.getSourceFile()) || cls.getProject() !== this.project || !isJavaScriptClass(cls)) return UNKNOWN;
+    if (symbol === undefined || cls.getType().getProperty(symbol.getName()) !== symbol) return UNKNOWN;
+    let cached = this.properties.get(cls);
+    if (cached === undefined) {
+      cached = new Map();
+      this.properties.set(cls, cached);
+    }
+    const known = cached.get(symbol);
+    if (known !== undefined) return known;
+    const proof = this.proveProperty(cls, symbol);
+    cached.set(symbol, proof);
+    return proof;
+  }
+
+  private constructionOf(cls: ClassDeclaration): ClassConstruction | undefined {
+    if (this.classes.has(cls)) return this.classes.get(cls);
+    const construction = this.proveConstruction(cls);
+    this.classes.set(cls, construction);
+    return construction;
+  }
+
+  private proveConstruction(cls: ClassDeclaration): ClassConstruction | undefined {
+    const chain = namedClassChain(cls);
+    if (chain === undefined || !chain.every((member) => this.included.has(member.getSourceFile()) && isJavaScriptClass(member)) || chain.some(hasUnsupportedMembers)) return undefined;
+    this.prototypeInterference ??= hasPrototypeInterference(this.files);
+    if (this.prototypeInterference || chain.some((member) => hasConstructorEscape(member, this.included))) return undefined;
+    const stores = [...chain].reverse().map(constructorStores);
+    if (stores.some((assignments) => assignments === undefined)) return undefined;
+    const assignments = stores.flatMap((entry) => entry ?? []);
+    if (assignments.some((assignment) => {
+      const name = thisStoreName(assignment);
+      return name === undefined || interceptsStore(chain, name);
+    })) return undefined;
+    return { chain, assignments };
+  }
+
+  private proveProperty(cls: ClassDeclaration, symbol: MorphSymbol): JavaScriptDataProof {
+    const construction = this.constructionOf(cls);
+    if (construction === undefined) return UNKNOWN;
+    const declarations = symbol.getDeclarations();
+    if (declarations.length === 0 || !declarations.every((node) => isOwnedDeclaration(node, construction.chain, symbol.getName()))) return UNKNOWN;
+    const constructorAssignments = construction.assignments.filter((assignment) => thisStoreName(assignment) === symbol.getName());
+    return constructorAssignments.length === 0 ? UNKNOWN : { kind: 'data', constructorAssignments };
+  }
+}

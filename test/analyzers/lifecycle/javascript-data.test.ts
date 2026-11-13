@@ -1,7 +1,14 @@
-import { Node, SyntaxKind } from 'ts-morph';
+import { ClassDeclaration, Node, Symbol as MorphSymbol, SyntaxKind } from 'ts-morph';
 import { describe, expect, it } from 'vitest';
-import { proveJavaScriptDataProperty } from '../../../src/analyzers/lifecycle/javascript-data';
+import { JavaScriptDataProperties } from '../../../src/analyzers/lifecycle/javascript-data';
+import { SourceIndex } from '../../../src/analyzers/shared/source-index';
+import { analysedSourceFiles } from '../../../src/engine/project';
+import { assignedValue } from '../../../src/analyzers/lifecycle/assigned';
+import { describeAssigned, resolvedField } from '../../helpers/describe';
 import { inMemoryProject } from '../../helpers/in-memory';
+
+const proveJavaScriptDataProperty = (cls: ClassDeclaration, symbol: MorphSymbol | undefined) =>
+  new JavaScriptDataProperties(new SourceIndex(cls.getProject().getSourceFiles())).prove(cls, symbol);
 
 const sample = (source: string, additional: Readonly<Record<string, string>> = {}) => {
   const project = inMemoryProject({ '/sample.js': source, ...additional }, { allowJs: true, checkJs: true, noEmit: true });
@@ -207,5 +214,162 @@ describe('JavaScript constructor data proof', () => {
     const assignment = cls.getMethodOrThrow('close').getFirstDescendantByKindOrThrow(SyntaxKind.BinaryExpression);
 
     expect(proveJavaScriptDataProperty(cls, Node.isPropertyAccessExpression(assignment.getLeft()) ? assignment.getLeft().getSymbol() : undefined).kind).toBe('unknown');
+  });
+});
+
+const STATIC_CONFIG = `
+import { defineDomain, lifecycle } from 'domain-integrity';
+import { Sample } from './sample.js';
+export default defineDomain({ lifecycles: [lifecycle(Sample, { states: { closed: { terminal: [true] } } })] });
+`;
+
+describe('JavaScript runtime-source proof context', () => {
+  it('proves a class referenced by its excluded static lifecycle config', () => {
+    const { project, cls, symbol } = sample(PLAIN, { '/domain.config.ts': STATIC_CONFIG });
+    const config = project.getSourceFileOrThrow('/domain.config.ts');
+    const proof = new JavaScriptDataProperties(new SourceIndex(analysedSourceFiles(project, config)));
+
+    expect(proof.prove(cls, symbol).kind).toBe('data');
+  });
+
+  it('uses a diagnostic-free static config fixture', () => {
+    const { project } = sample(PLAIN, { '/domain.config.ts': STATIC_CONFIG });
+
+    expect(project.getPreEmitDiagnostics().map((diagnostic) => diagnostic.getMessageText())).toEqual([]);
+  });
+
+  it('keeps the same lifecycle-shaped call unknown in included runtime code', () => {
+    const { project, cls, symbol } = sample(PLAIN, {
+      '/runtime.ts': `import { Sample } from './sample.js'; function lifecycle(value: unknown) { return value; } lifecycle(Sample);`,
+    });
+    const proof = new JavaScriptDataProperties(new SourceIndex(analysedSourceFiles(project)));
+
+    expect(proof.prove(cls, symbol).kind).toBe('unknown');
+  });
+
+  it('ignores harmless metadata spellings confined to excluded config', () => {
+    const { project, cls, symbol } = sample(PLAIN, { '/domain.config.ts': STATIC_CONFIG + `export const keys = Object.keys({ prototype: 'display' });` });
+    const config = project.getSourceFileOrThrow('/domain.config.ts');
+    const proof = new JavaScriptDataProperties(new SourceIndex(analysedSourceFiles(project, config)));
+
+    expect(proof.prove(cls, symbol).kind).toBe('data');
+  });
+
+  it('retains prototype barriers from another included runtime file', () => {
+    const { project, cls, symbol } = sample(PLAIN, {
+      '/domain.config.ts': STATIC_CONFIG,
+      '/mutation.js': `Object.defineProperty(Object.prototype, 'closed', { set(value) {}, get() { return true; }, configurable: true });`,
+    });
+    const config = project.getSourceFileOrThrow('/domain.config.ts');
+    const proof = new JavaScriptDataProperties(new SourceIndex(analysedSourceFiles(project, config)));
+
+    expect(proof.prove(cls, symbol).kind).toBe('unknown');
+  });
+
+  it('does not silently discard an explicitly included external-looking mutation file', () => {
+    const { project, cls, symbol } = sample(PLAIN, {
+      '/node_modules/mutation/index.js': `Object.defineProperty(Object.prototype, 'closed', { set(value) {}, get() { return true; }, configurable: true });`,
+    });
+    const proof = new JavaScriptDataProperties(new SourceIndex(project.getSourceFiles()));
+
+    expect(proof.prove(cls, symbol).kind).toBe('unknown');
+  });
+
+  it('keeps property proofs distinct when a context is reused', () => {
+    const { project, cls } = sample(`export class Sample { constructor(closed = false, label = '') { this.closed = closed; this.label = label; } close() { this.closed = true; } }`);
+    const proof = new JavaScriptDataProperties(new SourceIndex(analysedSourceFiles(project)));
+
+    expect(['closed', 'label', 'close'].map((name) => proof.prove(cls, cls.getType().getProperty(name)).kind)).toEqual(['data', 'data', 'unknown']);
+  });
+
+  it('does not replace an empty analysis source set with all Project files', () => {
+    const { cls, symbol } = sample(PLAIN);
+    const proof = new JavaScriptDataProperties(new SourceIndex([]));
+
+    expect(proof.prove(cls, symbol).kind).toBe('unknown');
+  });
+
+  it('does not certify a requested class absent from its runtime source set', () => {
+    const { project, cls, symbol } = sample(PLAIN, { '/other.js': 'export const other = false;' });
+    const proof = new JavaScriptDataProperties(new SourceIndex([project.getSourceFileOrThrow('/other.js')]));
+
+    expect(proof.prove(cls, symbol).kind).toBe('unknown');
+  });
+
+  it('requires a project ancestor to be included in the same runtime source set', () => {
+    const { project, cls, symbol } = sample(`import { Base } from './base.js'; export class Sample extends Base { constructor() { super(); this.closed = false; } }`, {
+      '/base.js': 'export class Base {}',
+    });
+    const proof = new JavaScriptDataProperties(new SourceIndex([project.getSourceFileOrThrow('/sample.js')]));
+
+    expect(proof.prove(cls, symbol).kind).toBe('unknown');
+  });
+
+  it('rejects source files from a different Project with the same path', () => {
+    const { cls, symbol } = sample(PLAIN);
+    const foreign = sample(PLAIN);
+    const proof = new JavaScriptDataProperties(new SourceIndex(foreign.project.getSourceFiles()));
+
+    expect(proof.prove(cls, symbol).kind).toBe('unknown');
+  });
+
+  it('does not share cached prototype facts across analysis lifetimes', () => {
+    const { project, cls, symbol } = sample(PLAIN);
+    const first = new JavaScriptDataProperties(new SourceIndex(analysedSourceFiles(project)));
+    first.prove(cls, symbol);
+    project.createSourceFile('/mutation.js', `Object.defineProperty(Object.prototype, 'closed', { set(value) {}, get() { return true; }, configurable: true });`);
+    const second = new JavaScriptDataProperties(new SourceIndex(analysedSourceFiles(project)));
+
+    expect(second.prove(cls, cls.getType().getProperty('closed')).kind).toBe('unknown');
+  });
+});
+
+describe('JavaScript constructor parameter stores', () => {
+  it.each([
+    `export class Sample { constructor(closed) { this.closed = closed; } }`,
+    `export class Sample { constructor(closed = false) { this.closed = closed; } }`,
+    `export class Sample { constructor(label = '') { this.closed = false; this.label = label; } }`,
+    `export class Sample { constructor(closed = false, label = '') { this['closed'] = closed; this.label = label; } }`,
+    `class Base { constructor(closed = false) { this.closed = closed; } } export class Sample extends Base { constructor(closed = false) { super(closed); } }`,
+    `class Base { constructor(label = '') { this.label = label; } } export class Sample extends Base { constructor(label = '') { super(label); this.closed = false; } }`,
+  ])('proves a slot without interpreting the parameter value in %s', (source) => {
+    const { cls, symbol } = sample(source);
+
+    expect(proveJavaScriptDataProperty(cls, symbol).kind).toBe('data');
+  });
+
+  it('retains a parameter RHS as unresolved instead of inferring its false default', () => {
+    const { cls, symbol } = sample(`export class Sample { constructor(closed = false) { this.closed = closed; } }`);
+    const proof = proveJavaScriptDataProperty(cls, symbol);
+    const assignment = proof.kind === 'data' ? proof.constructorAssignments[0] : undefined;
+
+    expect(assignment && describeAssigned(assignedValue(assignment.getRight(), resolvedField(cls, 'closed')))).toEqual({ tokens: [], unresolved: true, mayWrite: false });
+  });
+
+  it('keeps the original parameter identifier as constructor evidence', () => {
+    const { cls, symbol } = sample(`export class Sample { constructor(closed = false) { this.closed = closed; } }`);
+    const proof = proveJavaScriptDataProperty(cls, symbol);
+    const parameter = cls.getConstructors()[0]?.getParameters()[0];
+
+    expect(proof.kind === 'data' ? proof.constructorAssignments[0]?.getRight().getSymbol() : undefined).toBe(parameter?.getSymbol());
+  });
+
+  it.each([
+    `const closed = false; export class Sample { constructor(value = false) { this.closed = closed; } }`,
+    `export class Sample { constructor(closed = false) { const value = closed; this.closed = value; } }`,
+    `export class Sample { constructor(closed = false) { { const closed = true; this.closed = closed; } } }`,
+    `export class Sample { constructor(closed = false) { closed = true; this.closed = closed; } }`,
+    `export class Sample { constructor(closed = makeValue()) { this.closed = closed; } }`,
+    `export class Sample { constructor(closed = false) { this.closed = makeValue(closed); } }`,
+    `export class Sample { constructor(closed = false) { (() => { this.closed = closed; })(); } }`,
+    `export class Sample { constructor({ closed } = {}) { this.closed = closed; } }`,
+    `export class Sample { constructor(...closed) { this.closed = closed; } }`,
+    `class Base { constructor(closed = false) { this.closed = closed; } } export class Sample extends Base { constructor(closed = false) { super(makeValue(closed)); } }`,
+    `class Base { constructor(closed = false) { this.closed = closed; } } export class Sample extends Base { constructor(closed = false) { super(...[closed]); } }`,
+    `class Base { get closed() { return false; } set closed(value) {} } export class Sample extends Base { constructor(closed = false) { super(); this.closed = closed; } }`,
+  ])('keeps unproven parameter construction unknown in %s', (source) => {
+    const { cls, symbol } = sample(source);
+
+    expect(proveJavaScriptDataProperty(cls, symbol).kind).toBe('unknown');
   });
 });
