@@ -69,7 +69,6 @@ describe('setter write boundaries', () => {
 
   it.each([
     'this.title = this.status;',
-    "this.status = 'paid';",
     "if (this.status === 'pending') this.title = value;",
     'this.assertOpen();',
     'this.missing(value);',
@@ -191,7 +190,7 @@ describe('static and instance setters with the same name', () => {
     expect(sourcesOf(`
       static set label(value: string) {}
       get label(): string { return this.status; }
-      set label(value: string) { this.status = 'paid'; }
+      set label(value: string) { if (this.status === 'paid') return; this.status = 'paid'; }
     `)).toBe('unknown');
   });
 });

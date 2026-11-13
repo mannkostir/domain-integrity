@@ -136,12 +136,12 @@ describe('private accessor guards and writes', () => {
     expect(describeSources(methodSources(cls.getMethodOrThrow('rename'), resolvedField(cls, 'status'), defaultScope(cls)))).toEqual(['cancelled', 'paid', 'pending']);
   });
 
-  it('keeps a lexical state-writing setter unknown', () => {
+  it('preserves guards before a lexical transparent state-writing setter', () => {
     expect(sourcesOf(
       inertPrivate.replace('this.title = value;', "this.status = 'paid';"),
       inertPrivate,
       "if (this.status === 'cancelled') return; this.#label = 'x';",
-    )).toBe('unknown');
+    )).toEqual(['paid', 'pending']);
   });
 });
 

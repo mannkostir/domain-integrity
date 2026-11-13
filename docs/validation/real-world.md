@@ -1,5 +1,9 @@
 # Real-world validation
 
+## State setter cutoff: issue #129, validation pending
+
+Phase 1 adds focused regressions and external positive/negative CLI probes for transparent state-writing setters against accepted base `739d467`. A setter's entry cutoff and assigned-value facts now share the same proof. Focused review fixes also preserve unknown sources across ambiguous private state brands and restore direct-write cutoff for inferred object-literal data properties; independent re-review remains pending. This phase does not rerun the 14 pinned public repositories, the full test suite, coverage or installed-package checks. Those gates remain required after independent review and integration with the current base. The earlier public counts below describe their recorded revisions, not issue #129. No private reference repository was accessed; its rerun remains a maintainer validation gate.
+
 ## Plain setter writes: issue #130
 
 The final comparison used all 14 pinned public repositories in Setup against accepted main `4f2be2a` and reviewed implementation `7ba41d4`. Ordinary configurations retain **63 findings**, and the explicitly declared event sets retain **83 findings**. All 28 base/branch comparisons have identical finding objects, exit codes, problem arrays and stderr; no finding was added or lost. The existing Codely configuration failure remains identical. Original configs and pinned source commits were preserved. No private reference repository was accessed; its rerun remains a maintainer validation gate.

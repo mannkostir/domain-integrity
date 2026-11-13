@@ -18,6 +18,8 @@ All notable changes to this project are documented here; the format follows [Kee
 
 ### Fixed
 
+- Preserve entry guards before proven state-writing setters and carry their assigned values into lifecycle analysis. (#TBD)
+
 - Plain writes through a resolved setter that does not touch the tracked state field no longer trace its getter, so surrounding guards and terminal-state leaks remain visible. Compound and update assignments still trace the getter. Private accessors and their method or arrow helpers use their lexical declaration rather than an unrelated subclass accessor with the same spelling; ordinary string keys remain virtual. The plain-setter exemption stays disabled when the tracked private name represents multiple lexical brands. (#138)
 - Event-flow checks no longer mistake an event’s own type mentions or class-name strings for handling, or the first name in a multi-name import for a value escape. Genuine external handling, self construction and factory escapes remain conservative. (#137)
 

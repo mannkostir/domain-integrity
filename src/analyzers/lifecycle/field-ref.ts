@@ -322,7 +322,11 @@ type SetterLookup =
   | { readonly kind: 'shadowed'; readonly declaration: SetAccessorDeclaration }
   | { readonly kind: 'resolved'; readonly declaration: SetAccessorDeclaration };
 
-const resolveSetter = (cls: ClassDeclaration, access: Node, name: string): SetterLookup => {
+export const hasAmbiguousInstanceShape = (cls: ClassDeclaration): boolean =>
+  cls.getDecorators().length > 0 ||
+  cls.getInstanceMembers().some((member) => Node.isComputedPropertyName(member.getNameNode()));
+
+export const resolveSetter = (cls: ClassDeclaration, access: Node, name: string): SetterLookup => {
   const chain = lookupChain(cls, access);
   const declarations = chain
     .map((candidate) => instanceMembersOf(candidate, name, access));
@@ -338,9 +342,7 @@ const resolveSetter = (cls: ClassDeclaration, access: Node, name: string): Sette
     members.filter(Node.isGetAccessorDeclaration).length > 1 ||
     members.some((member) =>
       !(Node.isSetAccessorDeclaration(member) || Node.isGetAccessorDeclaration(member)) || member.getDecorators().length > 0) ||
-    chain.some((candidate) =>
-      candidate.getDecorators().length > 0 ||
-      candidate.getInstanceMembers().some((member) => Node.isComputedPropertyName(member.getNameNode())))
+    chain.some(hasAmbiguousInstanceShape)
   ) return { kind: 'untraceable' };
   return { kind: 'resolved', declaration: setter };
 };
@@ -455,7 +457,7 @@ const setterReferencesField = (setter: SetAccessorDeclaration, field: string, sc
   );
 };
 
-const hasAmbiguousPrivateField = (cls: ClassDeclaration, field: string): boolean =>
+export const hasAmbiguousPrivateField = (cls: ClassDeclaration, field: string): boolean =>
   inheritanceChain(cls).filter((candidate) => candidate.getInstanceMembers().some((member) =>
     Node.isPrivateIdentifier(member.getNameNode()) && member.getName() === field
   )).length > 1;
