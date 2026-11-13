@@ -1,8 +1,10 @@
 # Real-world validation
 
-## State setter cutoff: issue #129, validation pending
+## State setter cutoff: issue #129
 
-Phase 1 adds focused regressions and external positive/negative CLI probes for transparent state-writing setters against accepted base `739d467`. A setter's entry cutoff and assigned-value facts now share the same proof. Focused review fixes also preserve unknown sources across ambiguous private state brands and restore direct-write cutoff for inferred object-literal data properties; independent re-review remains pending. This phase does not rerun the 14 pinned public repositories, the full test suite, coverage or installed-package checks. Those gates remain required after independent review and integration with the current base. The earlier public counts below describe their recorded revisions, not issue #129. No private reference repository was accessed; its rerun remains a maintainer validation gate.
+The final comparison used all 14 pinned public repositories in Setup against accepted main `739d467` and the independently reviewed setter implementation. All 28 ordinary/declared-event comparisons retain identical finding objects, exit codes, problem arrays and stderr: **63 ordinary findings** and **83 declared-event findings**, with no additions or losses. The recorded Codely configuration failure is unchanged. Pinned commits, original configs, dependencies and the shared harness were preserved. The private reference repository was not accessed; its rerun remains a maintainer validation gate.
+
+Focused regressions and external positive/negative CLI probes cover guard order, outer RHS reads, assigned-value substitution, inferred props data, conditional writes, exact instance/private/super lookup and conservative rejection of guarded or effectful setters. Independent final review resolved the private-brand and inferred-props regressions and passed 22 additional zero-diagnostic probes. All **2,579 tests**, coverage, typecheck, lint, build and installed-package checks passed on the reviewed source. Coverage is **98.18% statements, 93.31% branches, 99.14% functions and 99.34% lines**.
 
 ## Plain setter writes: issue #130
 
