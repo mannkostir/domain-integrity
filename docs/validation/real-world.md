@@ -1,5 +1,11 @@
 # Real-world validation
 
+## Plain setter writes: issue #130
+
+The final comparison used all 14 pinned public repositories in Setup against accepted main `4f2be2a` and reviewed implementation `7ba41d4`. Ordinary configurations retain **63 findings**, and the explicitly declared event sets retain **83 findings**. All 28 base/branch comparisons have identical finding objects, exit codes, problem arrays and stderr; no finding was added or lost. The existing Codely configuration failure remains identical. Original configs and pinned source commits were preserved. No private reference repository was accessed; its rerun remains a maintainer validation gate.
+
+Focused regressions and outside-repository CLI probes cover the newly judged plain writes and conservative boundaries: exact instance setter/getter selection, inherited and static collisions, lexical private accessors and helper calls, ordinary string keys, ambiguous private tracked-field brands, compound/update reads, guarded or state-writing setters, and unresolved members. Independent final review found no must-fix issues and verified 23 zero-diagnostic analyzer probes. All 2,491 tests and the coverage, typecheck, lint, build and installed-package checks passed on the frozen reviewed source. Coverage is 98.13% statements, 93.10% branches, 99.13% functions and 99.31% lines. These public counts do not claim the separately tracked replay-applier false findings are fixed.
+
 The v0.1 CLI was run against nine public TypeScript DDD repositories and one private reference repository. Each finding was triaged by reading the code. The tables below reflect the v0.1.1 CLI (09ab249), after the fixes listed under [Resolved during validation](#resolved-during-validation).
 
 The v0.1.1 re-run used the same commits and configs as the v0.1 run. It reports 37 findings, 3 more than v0.1: ticket-sale `Order.pay` and `Order.cancel`, and bitloops `TodoEntity.delete`. All three come from ignoring reads after the method's first assignment of the field. Every other finding is unchanged, and none was lost. The build before the change that tracks `new` instances of the class family and instance-method factories reports the same 37, so that change silences nothing here.
