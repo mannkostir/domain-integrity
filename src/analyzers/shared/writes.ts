@@ -1,4 +1,4 @@
-import { ClassDeclaration, ClassExpression, ElementAccessExpression, Node, SyntaxKind, Type } from 'ts-morph';
+import { CallExpression, ClassDeclaration, ClassExpression, ElementAccessExpression, Node, SyntaxKind, Type } from 'ts-morph';
 import { SourceIndex } from './source-index';
 import { outermostWrapper, unwrap } from './wrappers';
 
@@ -69,6 +69,41 @@ const isAssignAccess = (callee: Node): boolean =>
   (Node.isIdentifier(callee) && callee.getText() === 'assign') ||
   (Node.isPropertyAccessExpression(callee) && callee.getName() === 'assign') ||
   (Node.isElementAccessExpression(callee) && isAssignKey(callee.getArgumentExpression()));
+
+const isAssignProperty = (name: Node): boolean =>
+  Node.isIdentifier(name) ? name.getText() === 'assign' :
+    isAssignKey(Node.isComputedPropertyName(name) ? name.getExpression() : name);
+
+const invocationTarget = (node: Node): Node | undefined => {
+  const access = Node.isCallExpression(node) ? unwrap(node.getExpression()) : node;
+  const names = Node.isPropertyAccessExpression(access) ? [access.getName()] :
+    Node.isElementAccessExpression(access) ? keyNames(access.getArgumentExpression()) : [];
+  return names.some((name) => name === 'call' || name === 'apply' || name === 'bind') &&
+    (Node.isPropertyAccessExpression(access) || Node.isElementAccessExpression(access)) ? access.getExpression() : undefined;
+};
+
+const isAssignReference = (node: Node, seen: ReadonlySet<Node>): boolean => {
+  const target = unwrap(node);
+  if (isAssignAccess(target)) return true;
+  const invocation = invocationTarget(target);
+  if (invocation !== undefined) return isAssignReference(invocation, seen);
+  if (!Node.isIdentifier(target) && !Node.isPropertyAccessExpression(target) && !Node.isElementAccessExpression(target)) return false;
+  const symbol = target.getSymbol();
+  const resolved = symbol?.isAlias() ? symbol.getAliasedSymbol() : symbol;
+  return (resolved?.getDeclarations() ?? []).some((declaration) => {
+    if (seen.has(declaration)) return false;
+    if (Node.isBindingElement(declaration)) return isAssignProperty(declaration.getPropertyNameNode() ?? declaration.getNameNode());
+    const initializer = Node.isVariableDeclaration(declaration) || Node.isPropertyAssignment(declaration) ||
+      Node.isPropertyDeclaration(declaration) || Node.isParameterDeclaration(declaration) ? declaration.getInitializer() : undefined;
+    return initializer !== undefined && isAssignReference(initializer, new Set([...seen, declaration]));
+  });
+};
+
+export const assignedSources = (call: CallExpression): readonly Node[] => {
+  if (!isAssignReference(call.getExpression(), new Set())) return [];
+  const args = call.getArguments();
+  return args.some(Node.isSpreadElement) ? args.filter(Node.isSpreadElement) : args.slice(1);
+};
 
 export const isAssignOntoThis = (node: Node): boolean => {
   if (!Node.isCallExpression(node)) return false;

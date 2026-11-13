@@ -2,7 +2,8 @@ import { ClassDeclaration, Node, ParameterDeclaration, SyntaxKind, VariableDecla
 import { sourceDeclaration } from '../../engine/source-declaration';
 import { NameUses } from '../shared/name-uses';
 import { SourceIndex } from '../shared/source-index';
-import { unwrap } from '../shared/wrappers';
+import { isWritten } from '../shared/writes';
+import { outermostWrapper, unwrap } from '../shared/wrappers';
 import { InstanceMethod, resolveInstanceMethod } from './instance-method';
 import { AggregateScope } from './field-ref';
 
@@ -21,8 +22,29 @@ const sourceChain = (cls: ClassDeclaration, sources: SourceIndex, seen = new Set
   return [source, ...(base === undefined ? [] : sourceChain(base, sources, new Set([...seen, source])))];
 };
 
+const bindingSymbol = (node: Node) => {
+  const parent = node.getParent();
+  return Node.isShorthandPropertyAssignment(parent) && parent.getNameNode() === node
+    ? node.getProject().getTypeChecker().getShorthandAssignmentValueSymbol(parent)
+    : node.getSymbol();
+};
+
 const sameBinding = (left: Node, right: Node): boolean =>
-  Node.isIdentifier(left) && left.getSymbol() !== undefined && left.getSymbol() === right.getSymbol();
+  Node.isIdentifier(left) && bindingSymbol(left) !== undefined && bindingSymbol(left) === bindingSymbol(right);
+
+const unmodifiedBinding = (binding: Node, within: Node): boolean =>
+  !within.getDescendantsOfKind(SyntaxKind.Identifier).some((reference) =>
+    sameBinding(reference, binding) && isWritten(outermostWrapper(reference)),
+  );
+
+const unaliasedCollection = (collection: Node, within: Node): boolean =>
+  within.getDescendantsOfKind(SyntaxKind.Identifier).filter((reference) => sameBinding(reference, collection)).every((reference) => {
+    const parent = reference.getParent();
+    return reference === collection ||
+      (Node.isParameterDeclaration(parent) && parent.getNameNode() === reference) ||
+      (Node.isPropertyAccessExpression(parent) && parent.getExpression() === reference && parent.getName() === 'length' &&
+        !isWritten(outermostWrapper(parent)));
+  });
 
 const keyExpression = (node: Node): Node => {
   const expression = unwrap(node);
@@ -55,6 +77,7 @@ const dispatches = (method: InstanceMethod): readonly Dispatch[] =>
     if (!Node.isPropertyAccessExpression(discriminator)) return [];
     const parameter = method.implementation.getParameters().find((candidate) => sameBinding(discriminator.getExpression(), candidate.getNameNode()));
     if (parameter === undefined || call.getArguments()[0] === undefined || !sameBinding(call.getArguments()[0]!, parameter.getNameNode())) return [];
+    if (!unmodifiedBinding(parameter.getNameNode(), method.implementation)) return [];
     const prefix = key.getHead().getLiteralText();
     const suffix = span.getLiteral().getLiteralText();
     return prefix.length + suffix.length === 0 ? [] : [{ method, parameter, prefix, suffix, discriminator: discriminator.getName() }];
@@ -65,12 +88,14 @@ const replays = (method: InstanceMethod, dispatch: Dispatch): boolean =>
     if (!belongsTo(loop, method)) return false;
     const collection = loop.getExpression();
     if (!method.implementation.getParameters().some((parameter) => sameBinding(collection, parameter.getNameNode()))) return false;
+    if (!unaliasedCollection(collection, method.implementation)) return false;
     if (!collection.getType().isArray() && !collection.getType().isReadonlyArray()) return false;
     const initializer = loop.getInitializer();
     if (!Node.isVariableDeclarationList(initializer) || initializer.getDeclarationKind() !== VariableDeclarationKind.Const) return false;
     const bindings = initializer.getDeclarations();
     if (bindings.length !== 1) return false;
     const binding = bindings[0]!.getNameNode();
+    if (!unmodifiedBinding(binding, loop.getStatement())) return false;
     const index = dispatch.method.implementation.getParameters().indexOf(dispatch.parameter);
     return loop.getStatement().getDescendantsOfKind(SyntaxKind.CallExpression).some((call) => {
       if (!belongsTo(call, method)) return false;
@@ -101,10 +126,10 @@ export const replayAppliers = (scope: AggregateScope, sources: SourceIndex, uses
   const chain = sourceChain(scope.cls, sources);
   const names = [...new Set(chain.flatMap((cls) => cls.getInstanceMethods().map((method) => method.getName())))];
   const methods = names.flatMap((name) => resolveInstanceMethod(chain, name, scope) ?? []);
-  const evidence = methods.filter((method) => uses.writtenAccessesNamed(method.name).length === 0);
+  const evidence = methods.filter((method) => !uses.mayBeWritten(method.name));
   const dispatch = evidence.flatMap(dispatches).filter((candidate) => evidence.some((method) => replays(method, candidate)));
   return new Set(methods.filter((method) => !uses.isReferenced(method.name) && dispatch.some((candidate) => {
-    if (uses.writtenAccessesNamed(candidate.discriminator).length > 0) return false;
+    if (uses.mayBeWritten(candidate.discriminator)) return false;
     const value = discriminatorValue(method, candidate.discriminator);
     return value !== undefined && method.name === candidate.prefix + value + candidate.suffix;
   })).map((method) => method.name));

@@ -217,6 +217,178 @@ describe('public replay appliers', () => {
       .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
   });
 
+  it.each(['applyEvent', 'loadFromHistory'])('rejects constructor bulk replacement of %s', (name) => {
+    const root = base.replace('  protected applyChange', `  constructor() { Object.assign(this, { ${name}: () => {} }); }\n  protected applyChange`);
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it.each(['applyEvent', 'loadFromHistory'])('rejects mapped source bulk replacement of %s', (name) => {
+    const root = base.replace('  protected applyChange', `  replace() { Object.assign(this, { ${name}: () => {} }); }\n  protected applyChange`);
+    const model = extract(account, root, '', undefined, true);
+
+    expect(lifecycleAnalyzer.check(model).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort())
+      .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('rejects a bulk-replaced event discriminator', () => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+    const extra = "class Reassigned { eventName = 'Archived'; constructor() { Object.assign(this, { eventName: 'Other' }); } }";
+
+    expect(leaks(source, base, extra)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('rejects an externally bulk-replaced event discriminator', () => {
+    expect(leaks(account, base, "Object.assign(new Archived(), { eventName: 'Other' });"))
+      .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('keeps ordinary commands judged beside a replaced dispatcher', () => {
+    const source = account.replace('  updateInfo()', "  applyDiscount(amount: number) { this.title = String(amount); }\n  updateInfo()");
+    const root = base.replace('  protected applyChange', '  constructor() { Object.assign(this, { applyEvent: () => {} }); }\n  protected applyChange');
+
+    expect(leaks(source, root)).toEqual(['applyArchived', 'applyCreated', 'applyDiscount', 'applyUpdated']);
+  });
+
+  it.each([
+    "event = { eventName: 'Other' };",
+    "({ event } = { event: { eventName: 'Other' } });",
+    "for (event of [{ eventName: 'Other' }]) {}",
+  ])('rejects a reassigned dispatcher parameter: %s', (write) => {
+    const root = base.replace('    const handlerMethod', `    ${write}\n    const handlerMethod`);
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('rejects a reassigned replay collection parameter', () => {
+    const root = base.replace('    for (const event of events)', "    events = [{ eventName: 'Other' }];\n    for (const event of events)");
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('rejects a reassigned replay element binding', () => {
+    const root = base.replace('{ this.applyEvent(event); }', "{ event = { eventName: 'Other' }; this.applyEvent(event); }");
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it.each([
+    "events.fill({ eventName: 'Other' });",
+    "events[0] = { eventName: 'Other' };",
+    "const alias = events; alias.fill({ eventName: 'Other' });",
+  ])('rejects mutation of replay collection contents: %s', (write) => {
+    const root = base.replace('    for (const event of events)', `    ${write}\n    for (const event of events)`);
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it.each(['applyEvent', 'loadFromHistory'])('rejects an unknown computed replacement of %s', (name) => {
+    const root = base.replace('  protected applyChange', `  constructor(key: string) { (this as any)[key] = () => {}; }\n  protected applyChange`);
+    const extra = `new Account('${name}');`;
+
+    expect(leaks(account, root, extra)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('rejects an unknown computed replacement of a discriminator', () => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+    const extra = "class Reassigned { eventName = 'Archived'; constructor(key: string) { this[key] = 'Other'; } }";
+
+    expect(leaks(source, base, extra)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('preserves replay evidence beside known unrelated bulk writes', () => {
+    const root = base.replace('  protected applyChange', "  constructor() { Object.assign(this, { label: 'label' }); }\n  protected applyChange");
+
+    expect(leaks(account, root)).toEqual([]);
+  });
+
+  it.each([
+    "Object['assign'](AggregateRoot.prototype, { ['applyEvent']: () => {} });",
+    "Object.assign(unknownTarget, replacements);",
+    "Object.assign(unknownTarget, { ...replacements });",
+  ])('rejects indirect or uncertain bulk replacements: %s', (write) => {
+    expect(leaks(account, base, write)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('preserves replay evidence with a history length check', () => {
+    const root = base.replace('    for (const event of events)', '    if (events.length === 0) return;\n    for (const event of events)');
+
+    expect(leaks(account, root)).toEqual([]);
+  });
+
+  it.each(['applyEvent', 'loadFromHistory'])('rejects bulk replacement through an initializer alias of %s', (name) => {
+    const root = base.replace('  protected applyChange', `  constructor() { const replace = Object.assign; replace(this, { ${name}: () => {} }); }\n  protected applyChange`);
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it.each([
+    "const { 'assign': replace } = Object; replace(this, { applyEvent: () => {} });",
+    "const first = Object.assign; const replace = first; replace(this, { applyEvent: () => {} });",
+    "const writers = { replace: Object.assign }; writers.replace(this, { applyEvent: () => {} });",
+  ])('rejects bulk replacement through a referenced alias: %s', (write) => {
+    const root = base.replace('  protected applyChange', `  constructor() { ${write} }\n  protected applyChange`);
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('rejects an aliased bulk replacement of an event discriminator', () => {
+    const extra = "const replace = Object.assign; replace(new Archived(), { eventName: 'Other' });";
+
+    expect(leaks(account, base, extra)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('rejects an aliased bulk replacement in mapped source', () => {
+    const root = base.replace('  protected applyChange', '  constructor() { const replace = Object.assign; replace(this, { applyEvent: () => {} }); }\n  protected applyChange');
+    const model = extract(account, root, '', undefined, true);
+
+    expect(lifecycleAnalyzer.check(model).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort())
+      .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('rejects bulk replacements through a spread argument list', () => {
+    const root = base.replace('  protected applyChange', '  constructor() { Object.assign(...[this, { applyEvent: () => {} }]); }\n  protected applyChange');
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('preserves replay evidence beside unrelated aliased bulk writes', () => {
+    const root = base.replace('  protected applyChange', "  constructor() { const copy = Object.assign; copy(this, { label: 'label' }); }\n  protected applyChange");
+
+    expect(leaks(account, root)).toEqual([]);
+  });
+
+  it.each([
+    "Object.assign.call(null, this, { applyEvent: () => {} });",
+    "Object.assign.apply(null, [this, { applyEvent: () => {} }]);",
+    "const replace = Object.assign.bind(null); replace(this, { applyEvent: () => {} });",
+    "const replace = Object.assign.bind(null, this); replace({ applyEvent: () => {} });",
+  ])('rejects bulk replacement through a native invocation wrapper: %s', (write) => {
+    const root = base.replace('  protected applyChange', `  constructor() { ${write} }\n  protected applyChange`);
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('preserves replay evidence beside dynamic deletes on a separate plain result', () => {
+    const extra = `
+declare function toPlain(value: Archived): Record<string, unknown>;
+function serialize(event: Archived, key: string) {
+  const dto = toPlain(event);
+  delete dto[key];
+}
+`;
+
+    expect(leaks(account, base, extra)).toEqual([]);
+  });
+
+  it.each([
+    "const event = new Archived(); event[key] = 'Other';",
+    "const erased: Record<string, unknown> = new Archived(); delete erased[key];",
+    "function replace(event: any) { event[key] = 'Other'; }",
+  ])('rejects uncertain writes on related receivers: %s', (write) => {
+    expect(leaks(account, base, `declare const key: string; ${write}`)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
   it('recognises literal event discriminators', () => {
     expect(leaks(account.replace('event: Updated', 'event: LiteralUpdated'), base, "class LiteralUpdated { eventName = 'Updated'; }")).toEqual([]);
   });
