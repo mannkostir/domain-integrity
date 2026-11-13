@@ -960,6 +960,7 @@ describe('methodSources with an assertion helper call', () => {
     ['viaOverloaded', ['DRAFT', 'OPEN']],
     ['viaWrapperBody', ['OPEN']],
     ['viaMessageRead', ['DRAFT', 'OPEN']],
+    ['viaArrow', ['DRAFT', 'OPEN']],
   ])('%s can run from %j', (method, expected) => {
     expect(sourcesOf('Visa', method)).toEqual(expected);
   });
@@ -970,7 +971,6 @@ describe('methodSources with an assertion helper call', () => {
     'viaGenerator',
     'viaStaticByName',
     'viaStaticThroughThis',
-    'viaArrow',
     'viaLogsFirst',
     'viaLogsInBranch',
     'viaAssigning',

@@ -2,7 +2,6 @@ import {
   CallExpression,
   ClassDeclaration,
   Expression,
-  MethodDeclaration,
   NewExpression,
   Node,
   PropertyAccessExpression,
@@ -11,7 +10,10 @@ import {
   Type,
 } from 'ts-morph';
 import { isPlainArrayPush, isPushOnlyMethod } from '../shared/array-store';
+import { ArrowMethods } from './arrow-methods';
+import { WrittenMethods } from './written-methods';
 import { isDeclaredOnlyAsMethods } from './inert-event-method';
+import { MethodImplementation, resolveInstanceMethod } from './instance-method';
 import { isDefaultLibraryNode, isLibraryNode } from '../shared/library';
 import { namedClassChain } from './named-chain';
 import { ancestry } from '../shared/ancestry';
@@ -62,6 +64,8 @@ export type AggregateScope = {
   readonly leaksThis: boolean;
   readonly plainEventArrays: ReadonlySet<Node>;
   readonly eventBuffers: ReadonlySet<Node>;
+  readonly arrowMethods: ArrowMethods;
+  readonly writtenMethods: WrittenMethods;
 };
 
 type MemberLookup =
@@ -130,9 +134,16 @@ export const hasForeignThis = (access: Node): boolean => {
 const absentMember = (cls: ClassDeclaration, access: Node, name: string): MemberLookup =>
   hasForeignThis(access) ? { kind: 'inert' } : typedMember(cls, name);
 
-const tracedMember = (cls: ClassDeclaration, access: Node, name: string): MemberLookup => {
-  const member = declaredMember(lookupChain(cls, access), name);
-  return member === undefined ? absentMember(cls, access, name) : bodyOf(member);
+const thisInstanceMethod = (scope: AggregateScope, access: Node, name: string) =>
+  isSuperAccess(access) ? undefined : resolveInstanceMethod(inheritanceChain(scope.cls), name, scope);
+
+const isReplacedMethod = (scope: AggregateScope, member: Node, name: string): boolean =>
+  Node.isMethodDeclaration(member) && scope.writtenMethods.isWritten(name);
+
+const tracedMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
+  const member = thisInstanceMethod(scope, access, name)?.member ?? declaredMember(lookupChain(scope.cls, access), name);
+  if (member === undefined) return absentMember(scope.cls, access, name);
+  return isReplacedMethod(scope, member, name) ? { kind: 'untraceable' } : bodyOf(member);
 };
 
 const isUninitialisedLibraryData = (member: MemberLookup): boolean =>
@@ -178,7 +189,7 @@ const isAssumedInert = (scope: AggregateScope, access: Node, name: string, membe
 
 const lookupMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
   if (isAssertedInertEventMethod(scope, access, name)) return { kind: 'inert' };
-  const member = tracedMember(scope.cls, access, name);
+  const member = tracedMember(scope, access, name);
   return isAssumedInert(scope, access, name, member) ? { kind: 'inert' } : member;
 };
 
@@ -280,10 +291,16 @@ const findSetter = (cls: ClassDeclaration, access: Node, name: string) =>
     .map((candidate) => candidate.getSetAccessor(name))
     .find((accessor) => accessor !== undefined);
 
-export const thisMethodDeclaration = (access: PropertyAccessExpression, cls: ClassDeclaration): MethodDeclaration | undefined => {
-  const member = declaredMember(lookupChain(cls, access), access.getName());
+const superMethod = (access: PropertyAccessExpression): MethodImplementation | undefined => {
+  const member = declaredMember(superChain(access), access.getName());
   return Node.isMethodDeclaration(member) ? member : undefined;
 };
+
+export const thisMethodImplementation = (
+  access: PropertyAccessExpression,
+  scope: AggregateScope,
+): MethodImplementation | undefined =>
+  isSuperAccess(access) ? superMethod(access) : thisInstanceMethod(scope, access, access.getName())?.implementation;
 
 const thisMemberName = (node: Node): string | undefined =>
   (Node.isPropertyAccessExpression(node) || Node.isElementAccessExpression(node)) && isThis(node.getExpression())

@@ -7,13 +7,14 @@ export class Paid { readonly paidAt = 1; }
 export class Failed { readonly reason = ''; }
 export const EventsHandler = (...events: unknown[]) => (target: unknown) => target;
 export const OnEvent = (...args: unknown[]) => (target: unknown, key: string) => target;
-export const HandleEvent = (event: unknown) => (target: unknown) => target;
+export const HandleEvent = (eventType: string) => (target: unknown, key: string) => target;
+export const Subscribe = (event: unknown) => (target: unknown) => target;
 `;
 
 const run = (handlers: string, handlerDecorators?: readonly string[]) =>
   recognise(decoratorRecogniser, {
     '/src/events.ts': EVENTS,
-    '/src/handlers.ts': `import { Paid, Failed, EventsHandler, OnEvent, HandleEvent } from './events';\nimport { LibraryEvent } from '../types/lib';\ndeclare const someKey: unknown; declare const deco: ((target: unknown) => unknown)[]; declare const curry: () => () => (target: unknown) => unknown; declare const ns: { EventsHandler: typeof EventsHandler };\n${handlers}`,
+    '/src/handlers.ts': `import { Paid, Failed, EventsHandler, OnEvent, HandleEvent, Subscribe } from './events';\nimport { LibraryEvent } from '../types/lib';\ndeclare const someKey: unknown; declare const deco: ((target: unknown) => unknown)[]; declare const curry: () => () => (target: unknown) => unknown; declare const ns: { EventsHandler: typeof EventsHandler };\n${handlers}`,
   }, handlerDecorators ? { handlerDecorators } : {});
 
 describe('decoratorRecogniser', () => {
@@ -86,9 +87,13 @@ describe('decoratorRecogniser', () => {
 
   it('ignores decorators that are not configured and reads configured ones', () => {
     expect({
-      defaults: run('@HandleEvent(Paid) export class Custom { handle(event: Paid) {} }'),
-      configured: run('@HandleEvent(Paid) export class Custom { handle(event: Paid) {} }', ['HandleEvent']),
+      defaults: run('@Subscribe(Paid) export class Custom { handle(event: Paid) {} }'),
+      configured: run('@Subscribe(Paid) export class Custom { handle(event: Paid) {} }', ['Subscribe']),
     }).toEqual({ defaults: [], configured: ['Paid -> Custom.handle (Paid)'] });
+  });
+
+  it('reads a HandleEvent method decorator keyed by name without configuration', () => {
+    expect(run('export class PaidHandler { @HandleEvent(Paid.name) async handle(event: Paid) {} }')).toEqual(['Paid -> PaidHandler.handle (Paid)']);
   });
 
   it('cannot read the payload of a class without exactly one handle method', () => {

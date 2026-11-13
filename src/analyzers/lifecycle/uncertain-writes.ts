@@ -1,7 +1,7 @@
 import { BinaryExpression, ClassDeclaration, ClassExpression, Node, SyntaxKind } from 'ts-morph';
 import { isAssignmentTarget, setsOf } from './assigned';
-import { escapesStateHolder, fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
-import { instanceAccessors, instanceMethods, projectAncestry } from './members';
+import { AggregateScope, escapesStateHolder, fieldNameOf, isComputedStateAccess, memberName } from './field-ref';
+import { allInstanceMethods, instanceAccessors, projectAncestry } from './members';
 import { AssignedValues, StateField } from './model';
 import { outsideAssignments } from './outside';
 import { hasUnknownWrite } from './values';
@@ -55,11 +55,8 @@ const isScopeBoundary = (node: Node): boolean =>
   Node.isClassStaticBlockDeclaration(node) ||
   Node.isPropertyDeclaration(node);
 
-const certainWriters = (cls: ClassDeclaration, aggregateBaseClasses: readonly string[]): ReadonlySet<Node> =>
-  new Set<Node>([
-    ...instanceMethods(cls, aggregateBaseClasses),
-    ...projectAncestry(cls).flatMap((candidate) => candidate.getConstructors()),
-  ]);
+const certainWriters = (cls: ClassDeclaration, methods: ReadonlySet<Node>): ReadonlySet<Node> =>
+  new Set<Node>([...methods, ...projectAncestry(cls).flatMap((candidate) => candidate.getConstructors())]);
 
 const isCertain = ({ binary, target }: Assignment, writers: ReadonlySet<Node>): boolean => {
   const scope = target.getFirstAncestor(isScopeBoundary);
@@ -128,34 +125,40 @@ const subclassExpressions = (
   return sources.ofKind(SyntaxKind.ClassExpression).filter((expression) => extendsFamily(expression, cls, names));
 };
 
+const methodImplementations = (scope: AggregateScope, aggregateBaseClasses: readonly string[]): ReadonlySet<Node> =>
+  new Set(allInstanceMethods(scope.cls, aggregateBaseClasses, scope.arrowMethods).map((method) => method.implementation));
+
 const uncertainInClass = (
-  cls: ClassDeclaration,
+  scope: AggregateScope,
   aggregateBaseClasses: readonly string[],
   sources: SourceIndex,
 ): ((field: StateField) => boolean) => {
+  const { cls } = scope;
   const subclasses = cls.getDerivedClasses();
   const classes = [...projectAncestry(cls), ...subclasses, ...subclassExpressions(sources, cls, subclasses)];
-  if (escapesOutsideMethods(classes, new Set(instanceMethods(cls, aggregateBaseClasses)))) return () => true;
+  const methods = methodImplementations(scope, aggregateBaseClasses);
+  if (escapesOutsideMethods(classes, methods)) return () => true;
   const assignments = assignmentsIn(classes);
   const otherTargets = [...loopTargets(classes), ...deletedTargets(classes)].filter(isMemberAccess);
   const targets = [...assignments.map(({ target }) => target), ...otherTargets];
   if (targets.some(isComputedStateAccess)) return () => true;
   const names = new Set([
-    ...uncertainlyAssigned(assignments, certainWriters(cls, aggregateBaseClasses)),
+    ...uncertainlyAssigned(assignments, certainWriters(cls, methods)),
     ...otherTargets.flatMap((target) => memberName(target) ?? []),
   ]);
   return (field) => names.has(field.name);
 };
 
 export const fieldsWrittenUncertainly = (
-  cls: ClassDeclaration,
+  scope: AggregateScope,
   aggregateBaseClasses: readonly string[],
   sources: SourceIndex,
   fields: readonly StateField[],
   root: string,
 ): ReadonlySet<string> => {
+  const { cls } = scope;
   const accessors = instanceAccessors(cls, aggregateBaseClasses);
-  const assignedUncertainly = uncertainInClass(cls, aggregateBaseClasses, sources);
+  const assignedUncertainly = uncertainInClass(scope, aggregateBaseClasses, sources);
   return new Set(
     fields
       .filter(

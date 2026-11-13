@@ -1,8 +1,9 @@
-import { Expression, IfStatement, MethodDeclaration, Node, Statement, SwitchStatement, Symbol as MorphSymbol } from 'ts-morph';
+import { Expression, IfStatement, Node, Statement, SwitchStatement, Symbol as MorphSymbol } from 'ts-morph';
 import { scanHelperStep } from './assertion-helper';
 import { ExitKind, branchStatements, exitsEarly, containsReturnOrThrow } from './early-exit';
 import { AggregateScope } from './field-ref';
 import { evaluateCondition } from './guard-condition';
+import { MethodImplementation } from './instance-method';
 import { GuardRules, GuardScan, exitFieldReads, isFieldAssignment, mayAssignField, readsFieldOutside } from './guard-scan';
 import { collapseGuardTokens, guardUniverse } from './guard-tokens';
 import { Sources, StateField } from './model';
@@ -181,13 +182,24 @@ const scanStatements = (statements: readonly Statement[], field: StateField, sco
   return fieldSwitch ? scanSwitchWrapper(fieldSwitch, field, scope) : scanEarlyExits(statements, field, scope, METHOD_RULES);
 };
 
-export const methodSources = (method: MethodDeclaration, field: StateField, scope: AggregateScope): Sources => {
-  const body = method.getBody();
-  if (!Node.isBlock(body)) return { kind: 'unknown' };
-  const considered = statementsUntilOverwrite(body.getStatements(), field);
+const statementSources = (statements: readonly Statement[], field: StateField, scope: AggregateScope): Sources => {
+  const considered = statementsUntilOverwrite(statements, field);
   const scan = scanStatements(considered, field, scope);
   if (scan === 'unknown') return { kind: 'unknown' };
   return considered.some((statement) => readsFieldOutside(statement, field, scope, scan.recognised))
     ? { kind: 'unknown' }
     : collapseGuardTokens(field, scan.allowed);
+};
+
+const expressionSources = (expression: Node, field: StateField, scope: AggregateScope): Sources =>
+  readsFieldOutside(expression, field, scope, new Set())
+    ? { kind: 'unknown' }
+    : collapseGuardTokens(field, guardUniverse(field));
+
+export const methodSources = (implementation: MethodImplementation, field: StateField, scope: AggregateScope): Sources => {
+  const body = implementation.getBody();
+  if (Node.isBlock(body)) return statementSources(body.getStatements(), field, scope);
+  return Node.isArrowFunction(implementation) && body !== undefined
+    ? expressionSources(body, field, scope)
+    : { kind: 'unknown' };
 };

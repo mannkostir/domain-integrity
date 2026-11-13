@@ -57,7 +57,7 @@ export const DEFAULT_DECLARATION: DomainDeclaration = {
   inertMembers: [],
   lifecycles: [],
   reportTestFileMutations: false,
-  events: { handlerDecorators: ['EventsHandler', 'OnEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
+  events: { handlerDecorators: ['EventsHandler', 'OnEvent', 'HandleEvent'], registerMethods: ['register'], inProcess: [], sagas: [] },
   rules: new Map(),
   suppressions: [],
 };

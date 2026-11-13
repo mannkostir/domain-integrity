@@ -1,4 +1,4 @@
-import { ClassDeclaration, MethodDeclaration, Node, Scope } from 'ts-morph';
+import { ClassDeclaration, MethodDeclaration, Node, PropertyDeclaration, Scope } from 'ts-morph';
 import { AnalysisInput } from '../../analyzer';
 import { Problem } from '../../finding';
 import { DeclaredField, DeclaredLifecycle, DomainDeclaration } from '../../engine/declaration';
@@ -10,9 +10,10 @@ import { AggregateScope } from './field-ref';
 import { hasCyclicInheritance } from '../shared/cyclic-heritage';
 import { methodSources } from './guards';
 import { initialValues } from './initial';
+import { InstanceMethod } from './instance-method';
 import { transitionMethodMissing, unknownStateValue } from './problems';
 import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
-import { instanceMethods } from './members';
+import { allInstanceMethods, declaredMethodNames, instanceMethods } from './members';
 import { Bookkeeping } from './bookkeeping';
 import { mutatingMethods } from './mutation';
 import { mentionedTokens } from './mentions';
@@ -66,9 +67,8 @@ const resolveDeclaredField = (
 const resolveDeclared = (
   cls: ClassDeclaration,
   declared: DeclaredLifecycle,
-  methods: readonly MethodDeclaration[],
+  methodNames: ReadonlySet<string>,
 ): ResolvedFields => {
-  const methodNames = new Set(methods.map((method) => method.getName()));
   const outcomes = declared.fields.map((field) => resolveDeclaredField(cls, field, methodNames));
   const ok = outcomes.flatMap((outcome) => (outcome.kind === 'ok' ? [outcome] : []));
   return {
@@ -83,26 +83,26 @@ const unknownFields: ResolvedFields = { fields: [], declarations: new Map(), pro
 const resolveFields = (
   cls: ClassDeclaration,
   declared: DeclaredLifecycle | undefined,
-  methods: readonly MethodDeclaration[],
+  methodNames: ReadonlySet<string>,
   scope: AggregateScope,
   auditFields: readonly string[],
 ): ResolvedFields => {
   if (hasCyclicInheritance(cls)) return unknownFields;
   return declared
-    ? resolveDeclared(cls, declared, methods)
+    ? resolveDeclared(cls, declared, methodNames)
     : { fields: candidateFields(scope, auditFields), declarations: new Map(), problems: [] };
 };
 
-const visibilityOf = (method: MethodDeclaration): Visibility => {
-  if (Node.isPrivateIdentifier(method.getNameNode())) return 'private';
-  const scope = method.getScope();
+const visibilityOf = (member: MethodDeclaration | PropertyDeclaration): Visibility => {
+  if (Node.isPrivateIdentifier(member.getNameNode())) return 'private';
+  const scope = member.getScope();
   if (scope === Scope.Private) return 'private';
   return scope === Scope.Protected ? 'protected' : 'public';
 };
 
 const methodModels = (
   scope: AggregateScope,
-  methods: readonly MethodDeclaration[],
+  methods: readonly InstanceMethod[],
   fields: readonly StateField[],
   declared: boolean,
   auditFields: readonly string[],
@@ -113,16 +113,19 @@ const methodModels = (
     eventBuffers: scope.eventBuffers,
   };
   const mutating = mutatingMethods(methods, [...scope.eventMethods], bookkeeping);
-  return methods.map((method) => ({
-    name: method.getName(),
-    file: method.getSourceFile().getFilePath(),
-    line: method.getStartLineNumber(),
-    visibility: visibilityOf(method),
-    mutates: mutating.has(method.getName()),
+  return methods.map(({ name, member, implementation }) => ({
+    name,
+    file: member.getSourceFile().getFilePath(),
+    line: member.getStartLineNumber(),
+    visibility: visibilityOf(member),
+    mutates: mutating.has(name),
     fields: new Map(
-      fields.map((field) => [field.name, { sources: methodSources(method, field, scope), sets: setsOf(method, field) }]),
+      fields.map((field) => [
+        field.name,
+        { sources: methodSources(implementation, field, scope), sets: setsOf(implementation, field) },
+      ]),
     ),
-    writtenAlongside: declared ? new Map() : writtenAlongside(method, fields),
+    writtenAlongside: declared ? new Map() : writtenAlongside(implementation, fields),
   }));
 };
 
@@ -132,6 +135,14 @@ const identityOf = (identities: ReadonlyMap<ClassDeclaration, ClassIdentity>, cl
   return identity;
 };
 
+const modelledMethods = (
+  cls: ClassDeclaration,
+  declared: DeclaredLifecycle | undefined,
+  aggregateBaseClasses: readonly string[],
+  scope: AggregateScope,
+): readonly InstanceMethod[] =>
+  declared ? instanceMethods(cls, aggregateBaseClasses, scope) : allInstanceMethods(cls, aggregateBaseClasses, scope.arrowMethods);
+
 const extractAggregate = (
   cls: ClassDeclaration,
   identity: ClassIdentity,
@@ -140,9 +151,10 @@ const extractAggregate = (
   projectRoot: string,
 ): { readonly aggregate: AggregateModel; readonly problems: readonly Problem[] } => {
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
-  const methods = instanceMethods(cls, declaration.aggregateBaseClasses);
   const scope = aggregateScope(cls, declaration, project);
-  const resolved = resolveFields(cls, declared, methods, scope, declaration.auditFields);
+  const methods = modelledMethods(cls, declared, declaration.aggregateBaseClasses, scope);
+  const methodNames = declaredMethodNames(cls, declaration.aggregateBaseClasses);
+  const resolved = resolveFields(cls, declared, methodNames, scope, declaration.auditFields);
   return {
     problems: resolved.problems,
     aggregate: {
@@ -161,7 +173,7 @@ const extractAggregate = (
       outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, projectRoot)) : [],
       uncertainlyWritten: declared
         ? new Set()
-        : fieldsWrittenUncertainly(cls, declaration.aggregateBaseClasses, project.sources, resolved.fields, projectRoot),
+        : fieldsWrittenUncertainly(scope, declaration.aggregateBaseClasses, project.sources, resolved.fields, projectRoot),
     },
   };
 };
