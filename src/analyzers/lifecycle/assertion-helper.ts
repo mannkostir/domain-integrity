@@ -71,5 +71,5 @@ export const scanHelperStep = (
 ): GuardScan | undefined => {
   const callee = thisCallee(statement);
   const helper = callee === undefined ? undefined : scanHelperCall(callee, field, scope, rules, scanGuards);
-  return helper !== undefined && mayAssignField(statement, field) ? 'unknown' : helper;
+  return helper !== undefined && mayAssignField(statement, field, scope) ? 'unknown' : helper;
 };

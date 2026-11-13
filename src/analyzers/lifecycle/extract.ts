@@ -122,7 +122,7 @@ const methodModels = (
     fields: new Map(
       fields.map((field) => [
         field.name,
-        { sources: methodSources(implementation, field, scope), sets: setsOf(implementation, field) },
+        { sources: methodSources(implementation, field, scope), sets: setsOf(implementation, field, scope.cls) },
       ]),
     ),
     writtenAlongside: declared ? new Map() : writtenAlongside(implementation, fields),
