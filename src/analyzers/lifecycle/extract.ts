@@ -170,7 +170,7 @@ const extractAggregate = (
       fields: resolved.fields,
       declarations: resolved.declarations,
       allowAfterTerminal: new Set(declared?.allowAfterTerminal ?? []),
-      methods: methodModels(scope, methods, resolved.fields, declared !== undefined, declaration.auditFields, replayAppliers(scope, project.sources, project.nameUses)),
+      methods: methodModels(scope, methods, resolved.fields, declared !== undefined, declaration.auditFields, replayAppliers(scope, project.sources, project.nameUses, project.memberMutations)),
       initial: new Map(resolved.fields.map((field) => [field.name, initialValues(cls, field)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(project, field)]) : []),
       outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, projectRoot)) : [],

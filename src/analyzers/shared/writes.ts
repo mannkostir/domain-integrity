@@ -74,35 +74,72 @@ const isAssignProperty = (name: Node): boolean =>
   Node.isIdentifier(name) ? name.getText() === 'assign' :
     isAssignKey(Node.isComputedPropertyName(name) ? name.getExpression() : name);
 
-const invocationTarget = (node: Node): Node | undefined => {
-  const access = Node.isCallExpression(node) ? unwrap(node.getExpression()) : node;
+type ArgumentPrefix = { readonly values: readonly Node[]; readonly uncertain: boolean };
+type AssignmentReference = { readonly bound: ArgumentPrefix };
+export type MemberAssignment = { readonly target: Node | undefined; readonly sources: readonly Node[] };
+
+const invocationOf = (node: Node): { readonly receiver: Node; readonly name: string } | undefined => {
+  const access = unwrap(node);
   const names = Node.isPropertyAccessExpression(access) ? [access.getName()] :
     Node.isElementAccessExpression(access) ? keyNames(access.getArgumentExpression()) : [];
-  return names.some((name) => name === 'call' || name === 'apply' || name === 'bind') &&
-    (Node.isPropertyAccessExpression(access) || Node.isElementAccessExpression(access)) ? access.getExpression() : undefined;
+  const name = names.length === 1 ? names[0] : undefined;
+  return (name === 'call' || name === 'apply' || name === 'bind') &&
+    (Node.isPropertyAccessExpression(access) || Node.isElementAccessExpression(access)) ? { receiver: access.getExpression(), name } : undefined;
 };
 
-const isAssignReference = (node: Node, seen: ReadonlySet<Node>): boolean => {
+const expandedArguments = (args: readonly Node[]): ArgumentPrefix => {
+  const values: Node[] = [];
+  for (const argument of args) {
+    if (!Node.isSpreadElement(argument)) { values.push(argument); continue; }
+    const spread = unwrap(argument.getExpression());
+    if (!Node.isArrayLiteralExpression(spread)) return { values, uncertain: true };
+    const expanded = expandedArguments(spread.getElements());
+    values.push(...expanded.values);
+    if (expanded.uncertain) return { values, uncertain: true };
+  }
+  return { values, uncertain: false };
+};
+
+const assignmentReference = (node: Node, seen: ReadonlySet<Node>): AssignmentReference | undefined => {
   const target = unwrap(node);
-  if (isAssignAccess(target)) return true;
-  const invocation = invocationTarget(target);
-  if (invocation !== undefined) return isAssignReference(invocation, seen);
-  if (!Node.isIdentifier(target) && !Node.isPropertyAccessExpression(target) && !Node.isElementAccessExpression(target)) return false;
+  if (isAssignAccess(target)) return { bound: { values: [], uncertain: false } };
+  if (Node.isCallExpression(target)) {
+    const invocation = invocationOf(target.getExpression());
+    if (invocation?.name !== 'bind') return undefined;
+    const reference = assignmentReference(invocation.receiver, seen);
+    if (reference === undefined) return undefined;
+    const bound = expandedArguments(target.getArguments().slice(1));
+    return { bound: reference.bound.uncertain ? reference.bound :
+      { values: [...reference.bound.values, ...bound.values], uncertain: bound.uncertain } };
+  }
   const symbol = target.getSymbol();
   const resolved = symbol?.isAlias() ? symbol.getAliasedSymbol() : symbol;
-  return (resolved?.getDeclarations() ?? []).some((declaration) => {
-    if (seen.has(declaration)) return false;
-    if (Node.isBindingElement(declaration)) return isAssignProperty(declaration.getPropertyNameNode() ?? declaration.getNameNode());
+  for (const declaration of resolved?.getDeclarations() ?? []) {
+    if (seen.has(declaration)) continue;
+    if (Node.isBindingElement(declaration) && isAssignProperty(declaration.getPropertyNameNode() ?? declaration.getNameNode())) return { bound: { values: [], uncertain: false } };
     const initializer = Node.isVariableDeclaration(declaration) || Node.isPropertyAssignment(declaration) ||
       Node.isPropertyDeclaration(declaration) || Node.isParameterDeclaration(declaration) ? declaration.getInitializer() : undefined;
-    return initializer !== undefined && isAssignReference(initializer, new Set([...seen, declaration]));
-  });
+    if (initializer === undefined) continue;
+    const reference = assignmentReference(initializer, new Set([...seen, declaration]));
+    if (reference !== undefined) return reference;
+  }
+  return undefined;
 };
 
-export const assignedSources = (call: CallExpression): readonly Node[] => {
-  if (!isAssignReference(call.getExpression(), new Set())) return [];
+export const memberAssignments = (call: CallExpression): readonly MemberAssignment[] => {
+  const invocation = invocationOf(call.getExpression());
+  if (invocation?.name === 'bind') return [];
+  const reference = assignmentReference(invocation?.receiver ?? call.getExpression(), new Set());
+  if (reference === undefined) return [];
   const args = call.getArguments();
-  return args.some(Node.isSpreadElement) ? args.filter(Node.isSpreadElement) : args.slice(1);
+  const list = invocation?.name === 'apply' ? args[1] : undefined;
+  const supplied = invocation?.name === 'apply'
+    ? Node.isArrayLiteralExpression(list) ? expandedArguments(list.getElements()) : { values: [], uncertain: true }
+    : expandedArguments(invocation?.name === 'call' ? args.slice(1) : args);
+  const argsPrefix = reference.bound.uncertain ? reference.bound :
+    { values: [...reference.bound.values, ...supplied.values], uncertain: supplied.uncertain };
+  const sources = [...argsPrefix.values.slice(1), ...(argsPrefix.uncertain ? [call] : [])];
+  return argsPrefix.values.length === 0 && !argsPrefix.uncertain ? [] : [{ target: argsPrefix.values[0], sources }];
 };
 
 export const isAssignOntoThis = (node: Node): boolean => {

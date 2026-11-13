@@ -41,12 +41,12 @@ export class Account extends AggregateRoot {
 }
 `;
 
-const extract = (source = account, root = base, extra = '', transitions?: ReadonlyMap<string, readonly string[]>, mappedBase = false) => {
-  const project = inMemoryProject(mappedBase ? {
+const extract = (source = account, root = base, extra = '', transitions?: ReadonlyMap<string, readonly string[]>, mappedBase = false, otherFiles: Readonly<Record<string, string>> = {}) => {
+  const project = inMemoryProject({ ...(mappedBase ? {
     '/src/account.ts': "import { AggregateRoot } from '../dist/base';\n" + events + source + extra,
     '/src/base.ts': root.replace('class AggregateRoot', 'export class AggregateRoot'),
     '/dist/base.d.ts': 'export declare class AggregateRoot { protected applyChange(event: unknown): void; private applyEvent; loadFromHistory(events: unknown[]): void; }\n//# sourceMappingURL=base.d.ts.map',
-  } : { '/src/account.ts': root + events + source + extra });
+  } : { '/src/account.ts': root + events + source + extra }), ...otherFiles });
   if (mappedBase) project.getFileSystem().writeFileSync('/dist/base.d.ts.map', JSON.stringify({ version: 3, sources: ['../src/base.ts'] }));
   const target = project.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('Account');
   const model = lifecycleAnalyzer.extract({
@@ -61,8 +61,8 @@ const extract = (source = account, root = base, extra = '', transitions?: Readon
   return model;
 };
 
-const leaks = (source = account, root = base, extra = '') =>
-  lifecycleAnalyzer.check(extract(source, root, extra)).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort();
+const leaks = (source = account, root = base, extra = '', otherFiles: Readonly<Record<string, string>> = {}) =>
+  lifecycleAnalyzer.check(extract(source, root, extra, undefined, false, otherFiles)).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort();
 
 describe('public replay appliers', () => {
   it('do not report appliers reached by event dispatch and history replay', () => {
@@ -174,7 +174,7 @@ describe('public replay appliers', () => {
     const source = account.replace('event: Archived', 'event: Reassigned');
     const extra = "class Reassigned { eventName = 'Archived'; constructor() { this.eventName = 'Other'; } }";
 
-    expect(leaks(source, base, extra)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+    expect(leaks(source, base, extra)).toEqual(['applyArchived']);
   });
 
   it('does not treat an overridden class name as the event key', () => {
@@ -235,12 +235,12 @@ describe('public replay appliers', () => {
     const source = account.replace('event: Archived', 'event: Reassigned');
     const extra = "class Reassigned { eventName = 'Archived'; constructor() { Object.assign(this, { eventName: 'Other' }); } }";
 
-    expect(leaks(source, base, extra)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+    expect(leaks(source, base, extra)).toEqual(['applyArchived']);
   });
 
   it('rejects an externally bulk-replaced event discriminator', () => {
     expect(leaks(account, base, "Object.assign(new Archived(), { eventName: 'Other' });"))
-      .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+      .toEqual(['applyArchived']);
   });
 
   it('keeps ordinary commands judged beside a replaced dispatcher', () => {
@@ -293,7 +293,7 @@ describe('public replay appliers', () => {
     const source = account.replace('event: Archived', 'event: Reassigned');
     const extra = "class Reassigned { eventName = 'Archived'; constructor(key: string) { this[key] = 'Other'; } }";
 
-    expect(leaks(source, base, extra)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+    expect(leaks(source, base, extra)).toEqual(['applyArchived']);
   });
 
   it('preserves replay evidence beside known unrelated bulk writes', () => {
@@ -335,7 +335,7 @@ describe('public replay appliers', () => {
   it('rejects an aliased bulk replacement of an event discriminator', () => {
     const extra = "const replace = Object.assign; replace(new Archived(), { eventName: 'Other' });";
 
-    expect(leaks(account, base, extra)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+    expect(leaks(account, base, extra)).toEqual(['applyArchived']);
   });
 
   it('rejects an aliased bulk replacement in mapped source', () => {
@@ -382,11 +382,167 @@ function serialize(event: Archived, key: string) {
   });
 
   it.each([
-    "const event = new Archived(); event[key] = 'Other';",
-    "const erased: Record<string, unknown> = new Archived(); delete erased[key];",
-    "function replace(event: any) { event[key] = 'Other'; }",
-  ])('rejects uncertain writes on related receivers: %s', (write) => {
-    expect(leaks(account, base, `declare const key: string; ${write}`)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+    ["const event = new Archived(); event[key] = 'Other';", ['applyArchived']],
+    ["const erased: Record<string, unknown> = new Archived(); delete erased[key];", ['applyArchived']],
+    ["function replace(event: any) { event[key] = 'Other'; }", ['applyArchived', 'applyCreated', 'applyUpdated']],
+  ] as const)('rejects uncertain writes on related receivers: %s', (write, expected) => {
+    expect(leaks(account, base, `declare const key: string; ${write}`)).toEqual(expected);
+  });
+
+  it.each([
+    "const label = { text: 'hello' }; export const clone = Object.assign({}, label);",
+    "export const clone = Object.assign({}, { applyEvent: 42 });",
+    "export const clone = Object.assign({}, { eventName: 'Other' });",
+    "export const clone = Object.assign([], { applyEvent: () => {} });",
+    "const copy = Object.assign.bind(null, {}); export const clone = copy({ applyEvent: 42 });",
+  ])('preserves replay evidence beside a fresh bulk target: %s', (other) => {
+    expect(leaks(account, base, '', { '/src/unrelated.ts': other })).toEqual([]);
+  });
+
+  it.each([
+    "const labels: Record<string, string> = {}; export function set(key: string) { labels[key] = 'x'; }",
+    "export function set(key: string) { const labels: Record<string, string> = {}; labels[key] = 'x'; }",
+    "const array: string[] = []; export function set(index: number) { array[index] = 'x'; }",
+    "export class Labels { [key: string]: unknown; set(key: string, value: string) { this[key] = value; } }",
+    "class Labels { applyEvent() {} loadFromHistory() {} eventName = ''; [key: string]: unknown; set(key: string) { this[key] = 'x'; } }",
+    "class Labels { applyEvent() {} } export const labels = Object.assign(new Labels(), { applyEvent: () => {} });",
+  ])('preserves replay evidence beside an unrelated receiver: %s', (other) => {
+    expect(leaks(account, base, '', { '/src/unrelated.ts': other })).toEqual([]);
+  });
+
+  it.each([false, true])('rejects a reassigned receiver alias in direct or mapped source: %s', (mapped) => {
+    const root = base.replace('  protected applyChange', '  constructor(key: string) { let alias: object = {}; alias = this; (alias as Record<string, unknown>)[key] = () => {}; }\n  protected applyChange');
+    const model = extract(account, root, '', undefined, mapped);
+
+    expect(lifecycleAnalyzer.check(model).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort())
+      .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it.each([false, true])('rejects a bulk write through a reassigned receiver alias: %s', (mapped) => {
+    const root = base.replace('  protected applyChange', '  constructor() { let alias: object = {}; alias = this; Object.assign(alias, { applyEvent: () => {} }); }\n  protected applyChange');
+    const model = extract(account, root, '', undefined, mapped);
+
+    expect(lifecycleAnalyzer.check(model).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort())
+      .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('preserves unrelated aliases reassigned only to fresh objects', () => {
+    const other = "let labels: Record<string, unknown> = {}; labels = {}; declare const key: string; labels[key] = 'x'; Object.assign(labels, { applyEvent: 42 });";
+
+    expect(leaks(account, base, '', { '/src/unrelated.ts': other })).toEqual([]);
+  });
+
+  it.each([
+    "declare const sources: object[]; export const clone = Object.assign({}, ...sources);",
+    "declare const sources: object[]; const copy = Object.assign.bind(null, {}, ...sources); export const clone = copy({ applyEvent: 42 });",
+    "declare const sources: object[]; export const clone = Object.assign.call(null, {}, ...sources);",
+  ])('preserves a known fresh target before an unknown spread: %s', (other) => {
+    expect(leaks(account, base, '', { '/src/unrelated.ts': other })).toEqual([]);
+  });
+
+  it('does not trust a receiver parameter default as permanent freshness', () => {
+    const root = base.replace('  protected applyChange', '  constructor(key: string, alias: object = {}) { (alias as Record<string, unknown>)[key] = () => {}; }\n  protected applyChange');
+
+    expect(leaks(account, root)).toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('does not confuse constructor fields with instance protocol members', () => {
+    const extra = "Object.assign(Account, { applyEvent: 42 }); Object.assign(Archived, { eventName: 'Other' });";
+
+    expect(leaks(account, base, extra)).toEqual([]);
+  });
+
+  it('does not confuse static this with an instance protocol receiver', () => {
+    const root = base.replace('  protected applyChange', '  static setup() { Object.assign(this, { applyEvent: 42 }); }\n  protected applyChange');
+
+    expect(leaks(account, root)).toEqual([]);
+  });
+
+  it.each([
+    "label.eventName = 'Other';",
+    "Object.assign(label, { eventName: 'Other' });",
+  ])('keeps a command judged after a compatible class parameter mutation: %s', (write) => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+    const extra = `class Label { eventName = 'Label'; }
+function replace(label: Label) { ${write} }
+class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
+
+    expect(leaks(source, base, extra)).toContain('applyArchived');
+  });
+
+  it('accepts the structurally compatible parameter reproduction as valid TypeScript', () => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+    const extra = "class Label { eventName = 'Label'; } function replace(label: Label) { label.eventName = 'Other'; } class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }";
+    const project = inMemoryProject({ '/src/account.ts': base + events + source + extra });
+
+    expect(project.getPreEmitDiagnostics()).toEqual([]);
+  });
+
+  it.each(['private', 'protected'])('keeps unrelated %s brands nominal for class parameters', (access) => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+    const extra = `class Label { ${access} brand = 'label'; eventName = 'Label'; }
+function replace(label: Label) { label.eventName = 'Other'; }
+class Reassigned { ${access} brand = 'event'; eventName = 'Archived'; }`;
+
+    expect(leaks(source, base, extra)).toEqual([]);
+  });
+
+  it.each([
+    "class Label { eventName = 'Label'; } Object.assign(new Label(), { eventName: 'Other' });",
+    "class Label { eventName = 'Label'; change() { this.eventName = 'Other'; } }",
+  ])('keeps known concrete receivers isolated despite a compatible public shape: %s', (extra) => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+
+    expect(leaks(source, base, "class Reassigned { eventName = 'Archived'; change() {} }" + extra)).toEqual([]);
+  });
+
+  it.each([false, true])('rejects compatible public replay parameter mutations in direct or mapped source: %s', (mapped) => {
+    const helper = 'class Label { loadFromHistory(events: Event[]) {} } function replace(label: Label) { Object.assign(label, { loadFromHistory: () => {} }); } ';
+    const root = base.replace('class AggregateRoot', helper + 'class AggregateRoot').replace('class AggregateRoot {', 'class AggregateRoot { constructor() { replace(this); }');
+    const model = extract(account, root, '', undefined, mapped);
+
+    expect(lifecycleAnalyzer.check(model).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort())
+      .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it.each(['{}', 'EmptyLabel', 'object', 'unknown'])('keeps a command judged after a broad %s parameter mutation', (type) => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+    const target = type === 'unknown' ? 'label as object' : 'label';
+    const extra = `interface EmptyLabel {}
+function replace(label: ${type}) { Object.assign(${target}, { eventName: 'Other' }); }
+class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
+
+    expect(leaks(source, base, extra)).toContain('applyArchived');
+  });
+
+  it('accepts the broad object parameter reproduction as valid TypeScript', () => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+    const extra = "function replace(label: {}) { Object.assign(label, { eventName: 'Other' }); } class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }";
+    const project = inMemoryProject({ '/src/account.ts': base + events + source + extra });
+
+    expect(project.getPreEmitDiagnostics()).toEqual([]);
+  });
+
+  it.each([false, true])('rejects broad object replay parameter mutations in direct or mapped source: %s', (mapped) => {
+    const helper = 'function replace(label: {}) { Object.assign(label, { loadFromHistory: () => {} }); } ';
+    const root = base.replace('class AggregateRoot', helper + 'class AggregateRoot').replace('class AggregateRoot {', 'class AggregateRoot { constructor() { replace(this); }');
+    const model = extract(account, root, '', undefined, mapped);
+
+    expect(lifecycleAnalyzer.check(model).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort())
+      .toEqual(['applyArchived', 'applyCreated', 'applyUpdated']);
+  });
+
+  it('keeps structurally incompatible interface parameters unrelated', () => {
+    const extra = "interface Label { label: string } function replace(label: Label) { Object.assign(label, { eventName: 'Other', applyEvent: () => {} }); }";
+
+    expect(leaks(account, base, extra)).toEqual([]);
+  });
+
+  it('does not trust a broad receiver parameter default as permanent freshness', () => {
+    const source = account.replace('event: Archived', 'event: Reassigned');
+    const extra = "function replace(label: {} = {}) { Object.assign(label, { eventName: 'Other' }); } class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }";
+
+    expect(leaks(source, base, extra)).toContain('applyArchived');
   });
 
   it('recognises literal event discriminators', () => {

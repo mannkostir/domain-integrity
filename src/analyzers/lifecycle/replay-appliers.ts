@@ -1,5 +1,6 @@
 import { ClassDeclaration, Node, ParameterDeclaration, SyntaxKind, VariableDeclarationKind } from 'ts-morph';
 import { sourceDeclaration } from '../../engine/source-declaration';
+import { MemberMutations } from '../shared/member-mutations';
 import { NameUses } from '../shared/name-uses';
 import { SourceIndex } from '../shared/source-index';
 import { isWritten } from '../shared/writes';
@@ -106,14 +107,14 @@ const replays = (method: InstanceMethod, dispatch: Dispatch): boolean =>
     });
   });
 
-const discriminatorValue = (method: InstanceMethod, name: string): string | undefined => {
+const discriminatorValue = (method: InstanceMethod, name: string, mutations: MemberMutations): string | undefined => {
   const parameters = method.implementation.getParameters();
   if (parameters.length !== 1) return undefined;
   const parameter = parameters[0]!;
   const declarations = parameter.getType().getProperty(name)?.getDeclarations() ?? [];
   if (declarations.length !== 1) return undefined;
   const property = declarations[0]!;
-  if (!Node.isPropertyDeclaration(property)) return undefined;
+  if (!Node.isPropertyDeclaration(property) || mutations.mayWrite(property)) return undefined;
   const initializer = property.getInitializer();
   if (Node.isStringLiteral(initializer)) return initializer.getLiteralText();
   if (!Node.isPropertyAccessExpression(initializer) || initializer.getName() !== 'name') return undefined;
@@ -122,15 +123,16 @@ const discriminatorValue = (method: InstanceMethod, name: string): string | unde
     initializer.getExpression().getSymbol() === owner.getSymbol() ? owner.getName() : undefined;
 };
 
-export const replayAppliers = (scope: AggregateScope, sources: SourceIndex, uses: NameUses): ReadonlySet<string> => {
+export const replayAppliers = (scope: AggregateScope, sources: SourceIndex, uses: NameUses, mutations: MemberMutations): ReadonlySet<string> => {
   const chain = sourceChain(scope.cls, sources);
   const names = [...new Set(chain.flatMap((cls) => cls.getInstanceMethods().map((method) => method.getName())))];
   const methods = names.flatMap((name) => resolveInstanceMethod(chain, name, scope) ?? []);
-  const evidence = methods.filter((method) => !uses.mayBeWritten(method.name));
-  const dispatch = evidence.flatMap(dispatches).filter((candidate) => evidence.some((method) => replays(method, candidate)));
+  const candidates = methods.flatMap(dispatches);
+  if (candidates.length === 0) return new Set();
+  const evidence = methods.filter((method) => !mutations.mayWrite(method.member));
+  const dispatch = candidates.filter((candidate) => evidence.includes(candidate.method) && evidence.some((method) => replays(method, candidate)));
   return new Set(methods.filter((method) => !uses.isReferenced(method.name) && dispatch.some((candidate) => {
-    if (uses.mayBeWritten(candidate.discriminator)) return false;
-    const value = discriminatorValue(method, candidate.discriminator);
+    const value = discriminatorValue(method, candidate.discriminator, mutations);
     return value !== undefined && method.name === candidate.prefix + value + candidate.suffix;
   })).map((method) => method.name));
 };
