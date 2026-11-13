@@ -50,6 +50,15 @@ describe('referenceFacts', () => {
     ]).toEqual(Array(5).fill({ ...QUIET, typedHandling: true }));
   });
 
+  it('recognises an external topic beside a longer event declaration', () => {
+    const facts = factsOf({
+      '/app/src/events.ts': "export class Paid { readonly payload = 'a sufficiently long payload to overlap the external topic position'; }",
+      '/app/src/topic.ts': "export const topic = 'Paid';",
+    });
+
+    expect(facts.namedInString).toBe(true);
+  });
+
   it('records any other value use as an escape', () => {
     expect([
       factsOf({ '/app/src/map.ts': "import { Paid } from './events';\nexport const factories = { Paid };" }).escaped,
