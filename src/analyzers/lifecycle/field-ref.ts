@@ -88,8 +88,18 @@ const superChain = (access: Node): readonly ClassDeclaration[] => {
   return declaring === undefined ? [] : inheritanceChain(declaring).slice(1);
 };
 
+const isPrivateAccess = (access: Node): boolean =>
+  Node.isPropertyAccessExpression(access) && Node.isPrivateIdentifier(access.getNameNode());
+
+const privateMemberChain = (access: Node): readonly ClassDeclaration[] | undefined => {
+  if (!Node.isPropertyAccessExpression(access) || !isPrivateAccess(access)) return undefined;
+  const declarations = access.getNameNode().getSymbol()?.getDeclarations() ?? [];
+  const owner = declarations[0]?.getParent();
+  return Node.isClassDeclaration(owner) && declarations.every((declaration) => declaration.getParent() === owner) ? [owner] : [];
+};
+
 const lookupChain = (cls: ClassDeclaration, access: Node): readonly ClassDeclaration[] =>
-  isSuperAccess(access) ? superChain(access) : inheritanceChain(cls);
+  privateMemberChain(access) ?? (isSuperAccess(access) ? superChain(access) : inheritanceChain(cls));
 
 const isDataDeclaration = (node: Node): boolean =>
   (Node.isPropertyDeclaration(node) && node.getInitializer() === undefined) ||
@@ -108,12 +118,16 @@ const bodyOf = (member: Node): MemberLookup => {
   return { kind: 'untraceable' };
 };
 
-const instanceMembersOf = (cls: ClassDeclaration, name: string) =>
-  cls.getInstanceMembers().filter((member) => member.getName() === name);
+const instanceMembersOf = (cls: ClassDeclaration, name: string, access: Node) =>
+  cls.getInstanceMembers().filter((member) => {
+    const key = member.getNameNode();
+    const literal = Node.isComputedPropertyName(key) ? stringKey(unwrap(key.getExpression())) : stringKey(key);
+    return Node.isPrivateIdentifier(key) === isPrivateAccess(access) && (literal ?? member.getName()) === name;
+  });
 
-const declaredMember = (chain: readonly ClassDeclaration[], name: string): Node | undefined =>
+const declaredMember = (chain: readonly ClassDeclaration[], name: string, access: Node): Node | undefined =>
   chain.map((candidate) => {
-    const members = instanceMembersOf(candidate, name);
+    const members = instanceMembersOf(candidate, name, access);
     return members.find(Node.isGetAccessorDeclaration) ?? members.find(Node.isMethodDeclaration) ?? members.find(Node.isPropertyDeclaration);
   }).find((member) => member !== undefined);
 
@@ -139,15 +153,26 @@ export const hasForeignThis = (access: Node): boolean => {
 const absentMember = (cls: ClassDeclaration, access: Node, name: string): MemberLookup =>
   hasForeignThis(access) ? { kind: 'inert' } : typedMember(cls, name);
 
-const thisInstanceMethod = (scope: AggregateScope, access: Node, name: string) =>
-  isSuperAccess(access) ? undefined : resolveInstanceMethod(inheritanceChain(scope.cls), name, scope);
+const thisInstanceMethod = (scope: AggregateScope, access: Node, name: string) => {
+  if (isSuperAccess(access)) return undefined;
+  const method = resolveInstanceMethod(lookupChain(scope.cls, access), name, scope);
+  return method !== undefined && Node.isPrivateIdentifier(method.member.getNameNode()) === isPrivateAccess(access) ? method : undefined;
+};
 
 const isReplacedMethod = (scope: AggregateScope, member: Node, name: string): boolean =>
   Node.isMethodDeclaration(member) && scope.writtenMethods.isWritten(name);
 
+const isCalledMember = (access: Node): boolean => {
+  const target = outermostWrapper(access);
+  const parent = target.getParent();
+  return Node.isCallExpression(parent) && parent.getExpression() === target;
+};
+
 const tracedMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
-  const member = thisInstanceMethod(scope, access, name)?.member ?? declaredMember(lookupChain(scope.cls, access), name);
-  if (member === undefined) return absentMember(scope.cls, access, name);
+  const method = thisInstanceMethod(scope, access, name);
+  if (isPrivateAccess(access) && isCalledMember(access) && method === undefined) return { kind: 'untraceable' };
+  const member = method?.member ?? declaredMember(lookupChain(scope.cls, access), name, access);
+  if (member === undefined) return isPrivateAccess(access) ? { kind: 'untraceable' } : absentMember(scope.cls, access, name);
   return isReplacedMethod(scope, member, name) ? { kind: 'untraceable' } : bodyOf(member);
 };
 
@@ -287,7 +312,7 @@ const dataReadsField = (access: Node, declarations: readonly Node[], field: stri
 };
 
 const findGetter = (cls: ClassDeclaration, access: Node, name: string) => {
-  const member = declaredMember(lookupChain(cls, access), name);
+  const member = declaredMember(lookupChain(cls, access), name, access);
   return Node.isGetAccessorDeclaration(member) ? member : undefined;
 };
 
@@ -300,7 +325,7 @@ type SetterLookup =
 const resolveSetter = (cls: ClassDeclaration, access: Node, name: string): SetterLookup => {
   const chain = lookupChain(cls, access);
   const declarations = chain
-    .map((candidate) => instanceMembersOf(candidate, name));
+    .map((candidate) => instanceMembersOf(candidate, name, access));
   const members = declarations.find((group) => group.length > 0);
   const setters = members?.filter(Node.isSetAccessorDeclaration) ?? [];
   const [setter] = setters;
@@ -321,7 +346,7 @@ const resolveSetter = (cls: ClassDeclaration, access: Node, name: string): Sette
 };
 
 const superMethod = (access: PropertyAccessExpression): MethodImplementation | undefined => {
-  const member = declaredMember(superChain(access), access.getName());
+  const member = declaredMember(superChain(access), access.getName(), access);
   return Node.isMethodDeclaration(member) ? member : undefined;
 };
 
@@ -430,6 +455,11 @@ const setterReferencesField = (setter: SetAccessorDeclaration, field: string, sc
   );
 };
 
+const hasAmbiguousPrivateField = (cls: ClassDeclaration, field: string): boolean =>
+  inheritanceChain(cls).filter((candidate) => candidate.getInstanceMembers().some((member) =>
+    Node.isPrivateIdentifier(member.getNameNode()) && member.getName() === field
+  )).length > 1;
+
 const readsThroughMember = (node: Node, field: string, scope: AggregateScope, depth: number): boolean => {
   const name = thisMemberName(node);
   if (name === undefined || name === STATE_HOLDER || name === field) return false;
@@ -439,7 +469,7 @@ const readsThroughMember = (node: Node, field: string, scope: AggregateScope, de
   if (setter.kind === 'untraceable') return true;
   if (setter.kind === 'resolved' || setter.kind === 'shadowed') {
     if (setterReferencesField(setter.declaration, field, scope, depth)) return true;
-    if (setter.kind === 'resolved' && isOverwritten(node)) return false;
+    if (setter.kind === 'resolved' && isOverwritten(node) && !hasAmbiguousPrivateField(scope.cls, field)) return false;
   }
   if (member.kind === 'data') {
     return (
