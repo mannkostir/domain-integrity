@@ -37,6 +37,11 @@ export class NameUses {
 
   constructor(private readonly sources: SourceIndex) {}
 
+  isReferenced(name: string): boolean {
+    return this.sources.propertyAccessesNamed(name).length > 0 ||
+      this.elementAccessesKeyedFor(name).length > 0 || this.destructuredNames().has(name);
+  }
+
   isOnlyCalled(name: string): boolean {
     return (
       this.sources.propertyAccessesNamed(name).every(isCallee) &&

@@ -3,6 +3,7 @@ import { AnalysisInput } from '../../analyzer';
 import { Problem } from '../../finding';
 import { DeclaredField, DeclaredLifecycle, DomainDeclaration } from '../../engine/declaration';
 import { ClassIdentity, classIdentities } from '../../engine/class-identity';
+import { replayAppliers } from './replay-appliers';
 import { setsOf } from './assigned';
 import { candidateFields } from './candidates';
 import { aggregateName, discoverAggregates } from './discover';
@@ -106,6 +107,7 @@ const methodModels = (
   fields: readonly StateField[],
   declared: boolean,
   auditFields: readonly string[],
+  appliers: ReadonlySet<string>,
 ): MethodModel[] => {
   const stateFieldNames = new Set(fields.map((field) => field.name));
   const bookkeeping: Bookkeeping = {
@@ -118,6 +120,7 @@ const methodModels = (
     file: member.getSourceFile().getFilePath(),
     line: member.getStartLineNumber(),
     visibility: visibilityOf(member),
+    entryPoint: visibilityOf(member) === 'public' && !appliers.has(name),
     mutates: mutating.has(name),
     fields: new Map(
       fields.map((field) => [
@@ -167,7 +170,7 @@ const extractAggregate = (
       fields: resolved.fields,
       declarations: resolved.declarations,
       allowAfterTerminal: new Set(declared?.allowAfterTerminal ?? []),
-      methods: methodModels(scope, methods, resolved.fields, declared !== undefined, declaration.auditFields),
+      methods: methodModels(scope, methods, resolved.fields, declared !== undefined, declaration.auditFields, replayAppliers(scope, project.sources, project.nameUses)),
       initial: new Map(resolved.fields.map((field) => [field.name, initialValues(cls, field)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(project, field)]) : []),
       outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, projectRoot)) : [],
