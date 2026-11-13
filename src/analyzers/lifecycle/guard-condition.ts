@@ -25,21 +25,30 @@ const unsettableTruthiness = (field: StateField): Evaluation => {
 };
 
 const truthiness = (field: StateField): Evaluation => {
-  if (field.kind === 'boolean') return { whenTrue: new Set(['true']), whenFalse: new Set(['false']) };
+  if (field.kind === 'boolean') {
+    const whenTrue = intersect(guardUniverse(field), new Set(['true']));
+    return { whenTrue, whenFalse: difference(guardUniverse(field), whenTrue) };
+  }
   if (field.kind === 'nullable') return { whenTrue: new Set([SET]), whenFalse: falsyGuardTokens(field) };
   return field.unsetForms.length > 0 ? unsettableTruthiness(field) : 'unknown';
 };
 
 const unsetFormOf = (node: Expression): UnsetForm | undefined => {
   if (Node.isNullLiteral(node)) return 'null';
-  return node.getText() === 'undefined' ? 'undefined' : undefined;
+  return node.getText() === 'undefined' && node.getType().isUndefined() ? 'undefined' : undefined;
 };
 
 const comparedTokens = (node: Expression, field: StateField, strict: boolean): ReadonlySet<string> | undefined => {
   const form = unsetFormOf(node);
   if (form !== undefined && field.unsetForms.length > 0) return comparedUnsetTokens(field, form, strict);
   if (field.kind === 'nullable') return undefined;
-  const token = literalToken(node.getType());
+  const type = node.getType();
+  const token = literalToken(type);
+  if (field.kind === 'boolean') {
+    if (type.isBooleanLiteral() && token !== undefined) return intersect(allTokens(field), new Set([token]));
+    return strict && type.isStringLiteral() ? new Set() : undefined;
+  }
+  if (type.isBooleanLiteral()) return strict ? new Set() : undefined;
   return token !== undefined && allTokens(field).has(token) ? new Set([token]) : undefined;
 };
 
@@ -49,8 +58,9 @@ const comparedSide = (left: Expression, right: Expression, field: StateField): E
   return undefined;
 };
 
-const compare = (left: Expression, right: Expression, field: StateField, strict: boolean): Evaluation => {
+const compare = (left: Expression, right: Expression, field: StateField, strict: boolean, scope: AggregateScope): Evaluation => {
   const other = comparedSide(left, right, field);
+  if (other !== undefined && referencesField(other, field.name, scope)) return 'unknown';
   const matching = other === undefined ? undefined : comparedTokens(other, field, strict);
   if (matching === undefined) return 'unknown';
   return { whenTrue: matching, whenFalse: difference(guardUniverse(field), matching) };
@@ -112,8 +122,8 @@ const evaluateBinary = (node: BinaryExpression, field: StateField, scope: Aggreg
       : { whenTrue: union(left.whenTrue, right.whenTrue), whenFalse: intersect(left.whenFalse, right.whenFalse) };
   }
   const strict = STRICT.has(operator);
-  if (EQUALITY.has(operator)) return compare(node.getLeft(), node.getRight(), field, strict);
-  if (INEQUALITY.has(operator)) return negate(compare(node.getLeft(), node.getRight(), field, strict));
+  if (EQUALITY.has(operator)) return compare(node.getLeft(), node.getRight(), field, strict, scope);
+  if (INEQUALITY.has(operator)) return negate(compare(node.getLeft(), node.getRight(), field, strict, scope));
   return 'unknown';
 };
 
