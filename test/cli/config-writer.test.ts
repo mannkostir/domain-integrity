@@ -140,6 +140,26 @@ const writtenConfig = (config: string, fields: readonly FieldSuggestion[]): stri
 
 const linesOf = (...lines: readonly string[]): string => `${lines.join('\n')}\n`;
 
+describe('addLifecycles with private state fields', () => {
+  it('quotes the name of a field with seeded transitions', () => {
+    const config = writtenConfig(EMPTY_CONFIG, [{ ...SEEDED_STATE, field: { ...unionState, name: '#state' } }]);
+
+    expect(config).toContain("        '#state': {\n");
+  });
+
+  it('quotes the name of a field without seeded transitions', () => {
+    const config = writtenConfig(EMPTY_CONFIG, [{ ...SEEDED_STATE, field: { ...unionState, name: '#state' }, transitions: { kind: 'none' } }]);
+
+    expect(config).toContain("        '#state': { terminal: 'closed' },\n");
+  });
+
+  it('uses the existing double quotes for a private field name', () => {
+    const config = writtenConfig(EMPTY_CONFIG.replace(/'/g, '"'), [{ ...SEEDED_STATE, field: { ...unionState, name: '#state' } }]);
+
+    expect(config).toContain('        "#state": {\n');
+  });
+});
+
 describe('addLifecycles with seeded transitions', () => {
   it('writes a seeded field over several lines with its transitions', () => {
     const config = writtenConfig(EMPTY_CONFIG, [SEEDED_STATUS]);
