@@ -38,7 +38,7 @@ const isExtendsClause = (reference: Node): boolean => {
 };
 
 const within = (reference: Node, container: Node | undefined): boolean =>
-  container !== undefined && container.getPos() <= reference.getPos() && reference.getEnd() <= container.getEnd();
+  container !== undefined && reference.getSourceFile() === container.getSourceFile() && container.getPos() <= reference.getPos() && reference.getEnd() <= container.getEnd();
 
 const inParameterType = (reference: Node): boolean => within(reference, reference.getFirstAncestorByKind(SyntaxKind.Parameter)?.getTypeNode());
 
@@ -62,16 +62,17 @@ const inTypePosition = (reference: Node): boolean => {
   return !Node.isExpressionWithTypeArguments(typeNode) || (reference.getParent() === typeNode && Node.isHeritageClause(typeNode.getParent()));
 };
 
-const isImportOrExportSpecifier = (reference: Node): boolean =>
-  reference.getFirstAncestor((ancestor) => Node.isImportDeclaration(ancestor) || Node.isExportSpecifier(ancestor)) !== undefined;
+const inImportOrExportDeclaration = (reference: Node): boolean =>
+  reference.getFirstAncestor((ancestor) => Node.isImportDeclaration(ancestor) || Node.isExportDeclaration(ancestor)) !== undefined;
 
 const useOf = (reference: Node, context: ReferenceContext): Use => {
+  if (inImportOrExportDeclaration(reference)) return 'quiet';
   if (!Node.isIdentifier(reference)) return 'escape';
   const parent = reference.getParent();
   if (Node.isNewExpression(parent) && parent.getExpression() === reference) {
     return context.isTest(reference.getSourceFile()) ? 'test-construction' : 'construction';
   }
-  if (isKey(reference, context.keys) || isImportOrExportSpecifier(reference)) return 'quiet';
+  if (isKey(reference, context.keys)) return 'quiet';
   if (Node.isBinaryExpression(parent) && parent.getOperatorToken().getKind() === SyntaxKind.InstanceOfKeyword && parent.getRight() === reference) {
     return 'instanceof';
   }
@@ -89,7 +90,7 @@ const constructsItself = (cls: ClassDeclaration): boolean =>
 
 const namedInString = (cls: ClassDeclaration, index: SourceIndex): boolean => {
   const name = cls.getName();
-  return name !== undefined && index.literalsWithText(name).length > 0;
+  return name !== undefined && index.literalsWithText(name).some((literal) => !within(literal, cls));
 };
 
 export const referenceFacts = (cls: ClassDeclaration, context: ReferenceContext): ReferenceFacts => {
@@ -105,7 +106,7 @@ export const referenceFacts = (cls: ClassDeclaration, context: ReferenceContext)
     subclassed: has('extends'),
     escaped: has('escape') || constructsItself(cls),
     instanceofChecked: has('instanceof'),
-    typedHandling: has('typed-handling'),
+    typedHandling: uses.some(({ reference, use }) => use === 'typed-handling' && !within(reference, cls)),
     namedInString: namedInString(cls, context.index),
   };
 };
