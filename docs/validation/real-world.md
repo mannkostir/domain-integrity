@@ -1,5 +1,11 @@
 # Real-world validation
 
+## Value-object projections: issue #65, integration validation pending
+
+The first integration phase statically probes the actual Booking-System checkout at `105914146ea9a1a28677e4fb03128ad577c43780`, using its real tsconfig and substituted Payment props types. The focused Payment controls resolve seven enum states, five guarded command source sets and six replacement tokens. Cancel remains unknown because it reads a scalar snapshot before replacement. Under explicit FAILED/CANCELLED/REFUNDED terminals, updateReference and updateMetadata are justified terminal-leak controls. NEED_TO_PAY initialization is merged with unresolved caller/persistence evidence; this does not establish a complete inferred terminal or transition table.
+
+These focused source/model probes and authored positive/negative probes are separate from the historical configurations and counts below. BookingStatus and InvoiceStatus were inspected individually; Payment evidence is not a claim that every repository status is supported. A separate check of the unchanged original Booking configuration returns its 13 event findings and no lifecycle findings; the extra Payment configuration returns the two lifecycle controls plus the existing event-buffer finding. Both exit 1 with no problems or stderr. These checks do not replace the full 14-repository comparison. Full-suite/coverage/package gates and final independent integration review remain pending for the next phase. No public source, harness or pinned configuration was changed. The private reference repository was not accessed; its validation remains a maintainer gate. See the batch worker report for exact commands, hashes and current phase results.
+
 ## State setter cutoff: issue #129
 
 The final comparison used all 14 pinned public repositories in Setup against accepted main `739d467` and the independently reviewed setter implementation. All 28 ordinary/declared-event comparisons retain identical finding objects, exit codes, problem arrays and stderr: **63 ordinary findings** and **83 declared-event findings**, with no additions or losses. The recorded Codely configuration failure is unchanged. Pinned commits, original configs, dependencies and the shared harness were preserved. The private reference repository was not accessed; its rerun remains a maintainer validation gate.
@@ -298,7 +304,7 @@ The first run also reported the 27 private `on<Event>` appliers: 10 on Bill, 4 e
 
 ## emadansari96/Booking-System
 
-There were no lifecycle findings. Booking, Payment and Invoice keep their status in value objects (`BookingStatus.create(...)`, `status.canTransitionTo(...)`), which are not supported state types. The project also sets `strictNullChecks: false`, so its optional timestamps are not nullable state fields. Only the `isActive` booleans on four aggregates were suggested. They have no terminal value.
+In the historical run recorded here there were no lifecycle findings. Booking, Payment and Invoice keep their status in value objects (`BookingStatus.create(...)`, `status.canTransitionTo(...)`), which are not supported state types. The project also sets `strictNullChecks: false`, so its optional timestamps are not nullable state fields. Only the `isActive` booleans on four aggregates were suggested. They have no terminal value.
 
 The original event-flow run reported nothing here either. The `CommissionStrategyUpdated`, `CommissionStrategyActivated` and `CommissionStrategyDeactivated` handlers never run, but their events are constructed and raised with `addDomainEvent` into a buffer that nothing dispatches, which `undispatched-events` now reports as `AggregateRoot._domainEvents`.
 

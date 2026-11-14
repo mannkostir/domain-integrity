@@ -21,11 +21,12 @@ type ClauseRun = { readonly tokens: ReadonlySet<string>; readonly statements: re
 
 type Classified = Omit<SwitchGroup, 'tokens'> | 'unknown';
 
-export const isFieldSwitch = (statement: Statement, field: StateField): statement is SwitchStatement =>
-  Node.isSwitchStatement(statement) && fieldNameOf(statement.getExpression()) === field.name;
+export const isFieldSwitch = (statement: Statement, field: StateField, scope?: AggregateScope): statement is SwitchStatement =>
+  Node.isSwitchStatement(statement) && (scope?.projections?.projection(field.name) !== undefined
+    ? scope.projections.scalar(statement.getExpression(), field.name) : fieldNameOf(statement.getExpression()) === field.name);
 
 const caseLabelTokens = (label: Expression, field: StateField, scope: AggregateScope): ReadonlySet<string> | undefined =>
-  referencesField(label, field.name, scope) ? undefined : strictTokens(label, field);
+  referencesField(label, field.name, scope) ? undefined : strictTokens(label, field, scope);
 
 const clauseLabelTokens = (clause: CaseOrDefaultClause, field: StateField, scope: AggregateScope): LabelTokens | undefined =>
   Node.isCaseClause(clause) ? caseLabelTokens(clause.getExpression(), field, scope) : 'default';

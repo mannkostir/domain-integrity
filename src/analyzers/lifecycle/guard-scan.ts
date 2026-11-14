@@ -25,7 +25,9 @@ export type ScanGuards = (
 export const isFieldAssignment = (node: Node, field: StateField, scope: AggregateScope): node is BinaryExpression =>
   Node.isBinaryExpression(node) &&
   node.getOperatorToken().getKind() === SyntaxKind.EqualsToken &&
-  (fieldNameOf(node.getLeft()) === field.name || setterStateAssignment(node, field.name, scope.cls) !== undefined);
+  ((fieldNameOf(node.getLeft()) === field.name &&
+    (scope.projections?.projection(field.name) === undefined || scope.projections.receiver(node.getLeft(), field.name))) ||
+    setterStateAssignment(node, field.name, scope.cls) !== undefined);
 
 export const readsFieldOutside = (
   node: Node,
@@ -46,7 +48,9 @@ export const mayAssignField = (statement: Statement, field: StateField, scope: A
 
 const isReadOnly = (node: Node): boolean => !isWritten(outermostWrapper(node));
 
-const isPlainFieldRead = (node: Node, field: StateField): boolean => fieldNameOf(node) === field.name && isReadOnly(node);
+const isPlainFieldRead = (node: Node, field: StateField, scope: AggregateScope): boolean =>
+  isReadOnly(node) && (scope.projections?.projection(field.name) !== undefined
+    ? scope.projections.scalar(node, field.name) : fieldNameOf(node) === field.name);
 
 const writesField = (node: Node, field: StateField, scope: AggregateScope): boolean =>
   [node, ...node.getDescendants()].some((candidate) =>
@@ -64,7 +68,7 @@ const isPlainGetterRead = (node: Node, field: StateField, scope: AggregateScope,
 
 const plainFieldReads = (node: Node, field: StateField, scope: AggregateScope, depth: number): readonly Node[] =>
   [node, ...node.getDescendants()].filter(
-    (candidate) => isPlainFieldRead(candidate, field) || isPlainGetterRead(candidate, field, scope, depth),
+    (candidate) => isPlainFieldRead(candidate, field, scope) || isPlainGetterRead(candidate, field, scope, depth),
   );
 
 const isExitStatement = (statement: Statement): boolean => Node.isReturnStatement(statement) || Node.isThrowStatement(statement);

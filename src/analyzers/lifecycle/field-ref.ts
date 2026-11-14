@@ -58,6 +58,7 @@ export const fieldNameOf = (node: Node): string | undefined =>
 const STATE_HOLDER = 'props';
 
 export type AggregateScope = {
+  readonly projections?: import('./value-object/context').ProjectedFields;
   readonly cls: ClassDeclaration;
   readonly eventMethods: ReadonlySet<string>;
   readonly inertEventMethods: ReadonlySet<string>;
