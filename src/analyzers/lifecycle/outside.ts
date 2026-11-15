@@ -1,5 +1,5 @@
 import { BinaryExpression, CallExpression, ClassDeclaration, Node, SourceFile, SyntaxKind, Type } from 'ts-morph';
-import { assignedValue, isAssignmentOperator } from './assigned';
+import { AssignedValueResolver, assignedValue, isAssignmentOperator } from './assigned';
 import { inheritanceChain } from './field-ref';
 import { isLibraryNode } from '../shared/library';
 import { SourceIndex } from '../shared/source-index';
@@ -114,6 +114,7 @@ const directAssignments = (
   cls: ClassDeclaration,
   field: StateField,
   root: string,
+  resolver?: AssignedValueResolver,
 ): SourcedAssignment[] =>
   assignmentsTo(sources, field.name)
     .filter(isAssignmentOperator)
@@ -124,7 +125,7 @@ const directAssignments = (
         ...located(binary, field, root),
         value:
           binary.getOperatorToken().getKind() === SyntaxKind.EqualsToken
-            ? assignedValue(binary.getRight(), field)
+            ? assignedValue(binary.getRight(), field, resolver)
             : UNRESOLVED,
         throughOwnSetter: writesThroughOwnSetter(receiverOf(binary.getLeft()), cls, field.name),
       }),
@@ -155,9 +156,10 @@ export const outsideAssignments = (
   cls: ClassDeclaration,
   field: StateField,
   root: string,
+  resolver?: AssignedValueResolver,
 ): OutsideAssignment[] =>
   inFileOrder(sources.files, [
-    ...directAssignments(sources, cls, field, root),
+    ...directAssignments(sources, cls, field, root, resolver),
     ...objectAssignments(sources, cls, field, root),
   ]).sort(
     (a, b) => a.file.localeCompare(b.file) || a.line - b.line,

@@ -34,7 +34,7 @@ export const candidateFields = (scope: AggregateScope, auditFields: readonly str
   const excluded = new Set([...auditFields, 'props']);
   return fieldNames(scope.cls)
     .filter((name) => !excluded.has(name))
-    .map((name) => resolveStateField(scope.cls, name))
+    .map((name) => resolveStateField(scope.cls, name, scope.projections))
     .flatMap((resolution) => (resolution.kind === 'resolved' ? [resolution.field] : []))
     .filter((field) => behavesLikeState(scope, field));
 };

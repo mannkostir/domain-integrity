@@ -1,3 +1,5 @@
+import { ProjectedFields, ProjectionRegistry } from './value-object/context';
+import { MAY_WRITE, UNRESOLVED, mergeAssigned } from './values';
 import { ClassDeclaration, MethodDeclaration, Node, PropertyDeclaration, Scope } from 'ts-morph';
 import { AnalysisInput } from '../../analyzer';
 import { Problem } from '../../finding';
@@ -10,9 +12,10 @@ import { AggregateScope } from './field-ref';
 import { hasCyclicInheritance } from '../shared/cyclic-heritage';
 import { methodSources } from './guards';
 import { initialValues } from './initial';
+import { MethodImplementation } from './instance-method';
 import { InstanceMethod } from './instance-method';
 import { transitionMethodMissing, unknownStateValue } from './problems';
-import { AggregateModel, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
+import { AggregateModel, FieldBehaviour, FieldDeclaration, LifecycleModel, MethodModel, StateField, Visibility } from './model';
 import { allInstanceMethods, declaredMethodNames, instanceMethods } from './members';
 import { Bookkeeping } from './bookkeeping';
 import { mutatingMethods } from './mutation';
@@ -38,8 +41,9 @@ const resolveDeclaredField = (
   cls: ClassDeclaration,
   declared: DeclaredField,
   methodNames: ReadonlySet<string>,
+  projections?: ProjectedFields,
 ): DeclaredOutcome => {
-  const resolution = resolveStateField(cls, declared.name);
+  const resolution = resolveStateField(cls, declared.name, projections);
   if (resolution.kind === 'problem') return { kind: 'problems', problems: [resolution.problem] };
   const known = resolution.field.values.map((value) => value.token);
   const transitions = [...(declared.transitions ?? new Map<string, readonly string[]>())];
@@ -68,8 +72,9 @@ const resolveDeclared = (
   cls: ClassDeclaration,
   declared: DeclaredLifecycle,
   methodNames: ReadonlySet<string>,
+  projections?: ProjectedFields,
 ): ResolvedFields => {
-  const outcomes = declared.fields.map((field) => resolveDeclaredField(cls, field, methodNames));
+  const outcomes = declared.fields.map((field) => resolveDeclaredField(cls, field, methodNames, projections));
   const ok = outcomes.flatMap((outcome) => (outcome.kind === 'ok' ? [outcome] : []));
   return {
     fields: ok.map((outcome) => outcome.field),
@@ -89,7 +94,7 @@ const resolveFields = (
 ): ResolvedFields => {
   if (hasCyclicInheritance(cls)) return unknownFields;
   return declared
-    ? resolveDeclared(cls, declared, methodNames)
+    ? resolveDeclared(cls, declared, methodNames, scope.projections)
     : { fields: candidateFields(scope, auditFields), declarations: new Map(), problems: [] };
 };
 
@@ -99,6 +104,20 @@ const visibilityOf = (member: MethodDeclaration | PropertyDeclaration): Visibili
   if (scope === Scope.Private) return 'private';
   return scope === Scope.Protected ? 'protected' : 'public';
 };
+
+const fieldBehaviour = (implementation: MethodImplementation, field: StateField, scope: AggregateScope): FieldBehaviour => {
+  const admitted = scope.projections?.admitted(field.name) !== false;
+  return {
+    sources: admitted ? methodSources(implementation, field, scope) : { kind: 'unknown' },
+    sets: mergeAssigned([
+      setsOf(implementation, field, scope.cls, scope.projections?.assigned, scope.projections?.tracksTarget),
+      ...(admitted ? [] : [MAY_WRITE]),
+    ]),
+  };
+};
+
+const initialEvidence = (cls: ClassDeclaration, field: StateField, projections: ProjectedFields) =>
+  mergeAssigned([initialValues(cls, field, projections.assigned, projections.tracksTarget), ...(projections.admitted(field.name) ? [] : [UNRESOLVED])]);
 
 const methodModels = (
   scope: AggregateScope,
@@ -122,10 +141,10 @@ const methodModels = (
     fields: new Map(
       fields.map((field) => [
         field.name,
-        { sources: methodSources(implementation, field, scope), sets: setsOf(implementation, field) },
+        fieldBehaviour(implementation, field, scope),
       ]),
     ),
-    writtenAlongside: declared ? new Map() : writtenAlongside(implementation, fields),
+    writtenAlongside: declared ? new Map() : writtenAlongside(implementation, fields, scope.projections?.assigned, scope.projections?.tracksTarget),
   }));
 };
 
@@ -149,9 +168,10 @@ const extractAggregate = (
   declaration: DomainDeclaration,
   project: ProjectIndex,
   projectRoot: string,
+  projections: ProjectionRegistry,
 ): { readonly aggregate: AggregateModel; readonly problems: readonly Problem[] } => {
   const declared = declaration.lifecycles.find((lifecycle) => lifecycle.target === cls);
-  const scope = aggregateScope(cls, declaration, project);
+  const scope = { ...aggregateScope(cls, declaration, project), projections: new ProjectedFields(cls, projections) };
   const methods = modelledMethods(cls, declared, declaration.aggregateBaseClasses, scope);
   const methodNames = declaredMethodNames(cls, declaration.aggregateBaseClasses);
   const resolved = resolveFields(cls, declared, methodNames, scope, declaration.auditFields);
@@ -168,9 +188,9 @@ const extractAggregate = (
       declarations: resolved.declarations,
       allowAfterTerminal: new Set(declared?.allowAfterTerminal ?? []),
       methods: methodModels(scope, methods, resolved.fields, declared !== undefined, declaration.auditFields),
-      initial: new Map(resolved.fields.map((field) => [field.name, initialValues(cls, field)])),
+      initial: new Map(resolved.fields.map((field) => [field.name, initialEvidence(cls, field, scope.projections)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(project, field)]) : []),
-      outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, projectRoot)) : [],
+      outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, projectRoot, scope.projections.assigned)) : [],
       uncertainlyWritten: declared
         ? new Set()
         : fieldsWrittenUncertainly(scope, declaration.aggregateBaseClasses, project.sources, resolved.fields, projectRoot),
@@ -178,15 +198,16 @@ const extractAggregate = (
   };
 };
 
-export const extractLifecycles = ({ declaration, files, projectRoot, repositoryRoot }: AnalysisInput): LifecycleModel => {
-  const project = projectIndex(files);
+export const extractLifecycles = ({ declaration, files, projectRoot, repositoryRoot, configFile }: AnalysisInput): LifecycleModel => {
+  const project = projectIndex(files.filter(file => file !== configFile));
   const classes = discoverAggregates(
     project.sources,
     declaration.aggregateBaseClasses,
     declaration.lifecycles.map((lifecycle) => lifecycle.target),
   );
+  const projections = new ProjectionRegistry(project.sources, classes);
   const identities = classIdentities(classes, repositoryRoot);
-  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(identities, cls), declaration, project, projectRoot));
+  const extracted = classes.map((cls) => extractAggregate(cls, identityOf(identities, cls), declaration, project, projectRoot, projections));
   return {
     aggregates: extracted.map((result) => result.aggregate),
     problems: extracted.flatMap((result) => result.problems),

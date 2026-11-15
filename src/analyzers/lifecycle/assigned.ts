@@ -1,9 +1,11 @@
-import { BinaryExpression, Expression, Node, SyntaxKind } from 'ts-morph';
+import { BinaryExpression, ClassDeclaration, Expression, Node, SyntaxKind } from 'ts-morph';
 import { SET, UNSET, isNullish, literalToken } from '../../engine/value-token';
 import { escapesStateHolder, fieldNameOf, isRootedAtThis } from './field-ref';
+import { assignedSetter, isTrackedDataDestination, setterStateAssignment } from './state-assignment';
 import { AssignedValues, StateField } from './model';
 import { MAY_WRITE, UNRESOLVED, allTokens, assignedToken, mergeAssigned } from './values';
-import { unwrap } from '../shared/wrappers';
+import { isWritten } from '../shared/writes';
+import { outermostWrapper, unwrap } from '../shared/wrappers';
 
 export const isAssignmentOperator = (node: BinaryExpression): boolean => {
   const kind = node.getOperatorToken().getKind();
@@ -23,7 +25,13 @@ const tokenOfAssigned = (value: Expression, field: StateField): string | undefin
   return token !== undefined && allTokens(field).has(token) ? token : undefined;
 };
 
-export const assignedValue = (value: Expression, field: StateField): AssignedValues => {
+export type TrackedAssignmentTarget = (target: Node, field: StateField) => boolean;
+
+export type AssignedValueResolver = (value: Expression, field: StateField) => AssignedValues | undefined;
+
+export const assignedValue = (value: Expression, field: StateField, resolver?: AssignedValueResolver): AssignedValues => {
+  const projected = resolver?.(value, field);
+  if (projected !== undefined) return projected;
   const token = tokenOfAssigned(value, field);
   return token === undefined ? UNRESOLVED : assignedToken(token);
 };
@@ -67,13 +75,47 @@ export const isAssignmentTarget = (node: Node): boolean => {
 const escapesIn = (scope: Node): boolean =>
   [scope, ...scope.getDescendants()].some((node) => escapesStateHolder(node) && !isAssignmentTarget(node));
 
-export const setsOf = (scope: Node, field: StateField): AssignedValues => {
+const setterAssignedValue = (binary: BinaryExpression, field: StateField, cls: ClassDeclaration, resolver?: AssignedValueResolver): AssignedValues | undefined => {
+  const assignment = setterStateAssignment(binary, field.name, cls);
+  if (assignment !== undefined) return assignedValue(assignment.value, field, resolver);
+  const setter = assignedSetter(binary.getLeft(), cls);
+  if (setter === undefined || setter.kind === 'absent') return undefined;
+  if ((setter.kind === 'resolved' || setter.kind === 'shadowed') &&
+    setter.declaration.getDescendants().some((node) =>
+      node.getFirstAncestor(Node.isFunctionLikeDeclaration) === setter.declaration &&
+      isWritten(node) && isTrackedDataDestination(node, field.name, cls))) return UNRESOLVED;
+  return MAY_WRITE;
+};
+
+const updatesSetter = (scope: Node, cls: ClassDeclaration): boolean => [
+  ...scope.getDescendantsOfKind(SyntaxKind.PrefixUnaryExpression),
+  ...scope.getDescendantsOfKind(SyntaxKind.PostfixUnaryExpression),
+].some((update) => {
+  if (![SyntaxKind.PlusPlusToken, SyntaxKind.MinusMinusToken].includes(update.getOperatorToken())) return false;
+  const setter = assignedSetter(update.getOperand(), cls);
+  return setter !== undefined && setter.kind !== 'absent';
+});
+
+export const setsOf = (
+  scope: Node,
+  field: StateField,
+  cls = scope.getFirstAncestorByKind(SyntaxKind.ClassDeclaration),
+  resolver?: AssignedValueResolver,
+  tracksTarget?: TrackedAssignmentTarget,
+): AssignedValues => {
   const assignments = scope.getDescendantsOfKind(SyntaxKind.BinaryExpression).filter(isAssignmentOperator);
-  const direct = assignments
+  const foreign = new Set(assignments.filter(binary => {
+    const targets = [binary.getLeft(), ...binary.getLeft().getDescendants()].filter(target =>
+      fieldNameOf(target) !== undefined && isWritten(outermostWrapper(target)));
+    return targets.length > 0 && targets.every(target => tracksTarget?.(target, field) === false);
+  }));
+  const considered = assignments.filter(binary => !foreign.has(binary));
+  const direct = considered
     .filter((binary) => binary.getOperatorToken().getKind() === SyntaxKind.EqualsToken)
     .filter((binary) => fieldNameOf(unwrap(binary.getLeft())) === field.name)
-    .map((binary) => assignedValue(binary.getRight(), field));
-  const unresolved = assignments.some((binary) => isUnresolvedAssignment(binary, field));
-  const mayWrite = escapesIn(scope) || assignments.some(mayWriteThroughDestructuring);
-  return mergeAssigned([...direct, ...(unresolved ? [UNRESOLVED] : []), ...(mayWrite ? [MAY_WRITE] : [])]);
+    .map((binary) => assignedValue(binary.getRight(), field, resolver));
+  const throughSetters = cls === undefined ? [] : considered.flatMap((binary) => setterAssignedValue(binary, field, cls, resolver) ?? []);
+  const unresolved = considered.some((binary) => isUnresolvedAssignment(binary, field));
+  const mayWrite = foreign.size > 0 || (cls !== undefined && updatesSetter(scope, cls)) || escapesIn(scope) || assignments.some(mayWriteThroughDestructuring);
+  return mergeAssigned([...direct, ...throughSetters, ...(unresolved ? [UNRESOLVED] : []), ...(mayWrite ? [MAY_WRITE] : [])]);
 };
