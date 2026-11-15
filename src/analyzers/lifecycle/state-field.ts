@@ -1,3 +1,4 @@
+import { ProjectedFields } from './value-object/context';
 import { ClassDeclaration, Symbol as MorphSymbol, Node, Type } from 'ts-morph';
 import { SET, UNSET, isNullish, literalToken } from '../../engine/value-token';
 import { Problem } from '../../finding';
@@ -116,12 +117,18 @@ const resolvedNullable = (name: string, members: readonly Type[], setMayBeFalsy:
   field: { name, kind: 'nullable', values: NULLABLE_VALUES, enumReference: undefined, unsetForms: unsetFormsOf(members), setMayBeFalsy },
 });
 
-export const resolveStateField = (cls: ClassDeclaration, name: string): FieldResolution => {
+export const resolveStateField = (cls: ClassDeclaration, name: string, projections?: ProjectedFields): FieldResolution => {
   if (isAccessorOnly(cls, name)) {
     return { kind: 'problem', problem: stateFieldAccessor(aggregateName(cls), name) };
   }
   const type = fieldType(cls, name);
   if (!type) return { kind: 'problem', problem: stateFieldMissing(aggregateName(cls), name) };
+  const projection = projections?.projection(name);
+  if (projection !== undefined) return resolvedLiterals(name, {
+    kind: 'enum',
+    values: projection.values.map(value => ({ token: value.token, label: value.label, source: expressionSource(`${projection.enumDeclaration.getName()}.${value.label}`) })),
+    enumReference: { name: projection.enumDeclaration.getName(), file: projection.enumDeclaration.getSourceFile().getFilePath() },
+  });
   const members = type.isUnion() ? type.getUnionTypes() : [type];
   const present = members.filter((member) => !isNullish(member));
   const nullable = present.length < members.length;

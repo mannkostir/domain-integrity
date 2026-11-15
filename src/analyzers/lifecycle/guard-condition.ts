@@ -35,23 +35,44 @@ const unsetFormOf = (node: Expression): UnsetForm | undefined => {
   return node.getText() === 'undefined' ? 'undefined' : undefined;
 };
 
-const comparedTokens = (node: Expression, field: StateField, strict: boolean): ReadonlySet<string> | undefined => {
+type ScalarComparison = 'strict' | 'loose' | 'same-value-zero';
+
+const primitiveMatches = (left: string | number, right: string | number, comparison: ScalarComparison): boolean => {
+  if (left === right) return true;
+  if (comparison === 'same-value-zero') return typeof left === 'number' && typeof right === 'number' && Number.isNaN(left) && Number.isNaN(right);
+  return comparison === 'loose' && typeof left !== typeof right && Number(left) === Number(right);
+};
+
+const comparedTokens = (node: Expression, field: StateField, comparison: ScalarComparison, scope?: AggregateScope): ReadonlySet<string> | undefined => {
+  const projection = scope?.projections?.projection(field.name);
+  if (projection !== undefined) {
+    if (scope?.projections?.literal(node, field.name) === undefined) return undefined;
+    const operand = unwrap(node).getType().getLiteralValue();
+    if (typeof operand !== 'string' && typeof operand !== 'number') return undefined;
+    const values = projection.values.map(value => ({ token: value.token, primitive: value.member.getValue() }));
+    if (!values.every((value): value is { readonly token: string; readonly primitive: string | number } =>
+      typeof value.primitive === 'string' || typeof value.primitive === 'number')) return undefined;
+    return new Set(values.filter(value => primitiveMatches(value.primitive, operand, comparison)).map(value => value.token));
+  }
   const form = unsetFormOf(node);
-  if (form !== undefined && field.unsetForms.length > 0) return comparedUnsetTokens(field, form, strict);
+  if (form !== undefined && field.unsetForms.length > 0) return comparedUnsetTokens(field, form, comparison !== 'loose');
   if (field.kind === 'nullable') return undefined;
   const token = literalToken(node.getType());
   return token !== undefined && allTokens(field).has(token) ? new Set([token]) : undefined;
 };
 
-const comparedSide = (left: Expression, right: Expression, field: StateField): Expression | undefined => {
-  if (fieldNameOf(left) === field.name) return right;
-  if (fieldNameOf(right) === field.name) return left;
+const scalarRead = (node: Node, field: StateField, scope: AggregateScope): boolean =>
+  scope.projections?.projection(field.name) !== undefined ? scope.projections.scalar(node, field.name) : fieldNameOf(node) === field.name;
+
+const comparedSide = (left: Expression, right: Expression, field: StateField, scope: AggregateScope): Expression | undefined => {
+  if (scalarRead(left, field, scope)) return right;
+  if (scalarRead(right, field, scope)) return left;
   return undefined;
 };
 
-const compare = (left: Expression, right: Expression, field: StateField, strict: boolean): Evaluation => {
-  const other = comparedSide(left, right, field);
-  const matching = other === undefined ? undefined : comparedTokens(other, field, strict);
+const compare = (left: Expression, right: Expression, field: StateField, strict: boolean, scope: AggregateScope): Evaluation => {
+  const other = comparedSide(left, right, field, scope);
+  const matching = other === undefined ? undefined : comparedTokens(other, field, strict ? 'strict' : 'loose', scope);
   if (matching === undefined) return 'unknown';
   return { whenTrue: matching, whenFalse: difference(guardUniverse(field), matching) };
 };
@@ -66,13 +87,13 @@ const isLibraryMember = (member: PropertyAccessExpression): boolean => {
   return declarations.length > 0 && declarations.every(isDefaultLibraryNode);
 };
 
-export const strictTokens = (node: Expression, field: StateField): ReadonlySet<string> | undefined =>
-  comparedTokens(node, field, true);
+export const strictTokens = (node: Expression, field: StateField, scope?: AggregateScope): ReadonlySet<string> | undefined =>
+  comparedTokens(node, field, 'strict', scope);
 
 const elementTokens = (element: Expression, field: StateField, scope: AggregateScope): ReadonlySet<string> | undefined =>
   Node.isSpreadElement(element) || Node.isOmittedExpression(element) || referencesField(element, field.name, scope)
     ? undefined
-    : strictTokens(element, field);
+    : comparedTokens(element, field, 'same-value-zero', scope);
 
 const includedTokens = (receiver: Expression, field: StateField, scope: AggregateScope): ReadonlySet<string> | undefined => {
   const array = unwrap(receiver);
@@ -83,20 +104,20 @@ const includedTokens = (receiver: Expression, field: StateField, scope: Aggregat
     : undefined;
 };
 
-const searchesField = (node: CallExpression, field: StateField): boolean => {
+const searchesField = (node: CallExpression, field: StateField, scope: AggregateScope): boolean => {
   const [searched, ...rest] = node.getArguments();
-  return searched !== undefined && rest.length === 0 && fieldNameOf(searched) === field.name;
+  return searched !== undefined && rest.length === 0 && scalarRead(searched, field, scope);
 };
 
-const isFollowedIncludes = (node: CallExpression, member: PropertyAccessExpression, field: StateField): boolean =>
+const isFollowedIncludes = (node: CallExpression, member: PropertyAccessExpression, field: StateField, scope: AggregateScope): boolean =>
   !node.hasQuestionDotToken() &&
   !member.hasQuestionDotToken() &&
   isLibraryMember(member) &&
-  searchesField(node, field);
+  searchesField(node, field, scope);
 
 const evaluateIncludes = (node: CallExpression, field: StateField, scope: AggregateScope): Evaluation => {
   const member = includesMember(node);
-  if (member === undefined || !isFollowedIncludes(node, member, field)) return 'unknown';
+  if (member === undefined || !isFollowedIncludes(node, member, field, scope)) return 'unknown';
   const included = includedTokens(member.getExpression(), field, scope);
   return included === undefined ? 'unknown' : { whenTrue: included, whenFalse: difference(guardUniverse(field), included) };
 };
@@ -112,8 +133,8 @@ const evaluateBinary = (node: BinaryExpression, field: StateField, scope: Aggreg
       : { whenTrue: union(left.whenTrue, right.whenTrue), whenFalse: intersect(left.whenFalse, right.whenFalse) };
   }
   const strict = STRICT.has(operator);
-  if (EQUALITY.has(operator)) return compare(node.getLeft(), node.getRight(), field, strict);
-  if (INEQUALITY.has(operator)) return negate(compare(node.getLeft(), node.getRight(), field, strict));
+  if (EQUALITY.has(operator)) return compare(node.getLeft(), node.getRight(), field, strict, scope);
+  if (INEQUALITY.has(operator)) return negate(compare(node.getLeft(), node.getRight(), field, strict, scope));
   return 'unknown';
 };
 
@@ -124,8 +145,14 @@ export const evaluateCondition = (node: Expression, field: StateField, scope: Ag
     return negate(evaluateCondition(node.getOperand(), field, scope, depth));
   }
   if (Node.isBinaryExpression(node)) return evaluateBinary(node, field, scope, depth);
-  if (Node.isCallExpression(node)) return evaluateIncludes(node, field, scope);
-  if (fieldNameOf(node) === field.name) return truthiness(field);
+  if (Node.isCallExpression(node)) {
+    if (scope.projections?.projection(field.name) !== undefined) {
+      const predicate = scope.projections.predicate(node, field);
+      if (predicate !== 'unknown') return predicate;
+    }
+    return evaluateIncludes(node, field, scope);
+  }
+  if (scalarRead(node, field, scope)) return truthiness(field);
   const getter = depth < MAX_GETTER_DEPTH ? thisGetterExpression(node, scope.cls) : undefined;
   return getter === undefined ? 'unknown' : evaluateCondition(getter, field, scope, depth + 1);
 };

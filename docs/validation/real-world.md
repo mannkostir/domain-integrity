@@ -1,5 +1,13 @@
 # Real-world validation
 
+## Value-object projections: issue #65
+
+The final comparison tested all 14 pinned public repositories in Setup against accepted main `f314ab3` and reviewed implementation `3db176d`. All 28 ordinary/declared-event comparisons preserve identical finding objects, exit codes, problem arrays and stderr: **63 ordinary findings** and **83 declared-event findings**, with no additions or losses. The recorded Codely configuration failure and separately tracked replay-applier false findings remain unchanged. Original configs, pinned sources, dependencies and the shared harness were preserved. The private reference repository was not accessed; its rerun remains a maintainer validation gate.
+
+Focused checks statically load Booking-System at `105914146ea9a1a28677e4fb03128ad577c43780` with its real tsconfig and substituted Payment props types. Payment resolves seven enum states, five guarded command source sets and six replacement tokens. Cancel remains unknown because it reads a scalar snapshot before replacement. With explicit FAILED/CANCELLED/REFUNDED terminals, updateReference and updateMetadata are justified terminal-leak controls. NEED_TO_PAY initialization retains unresolved caller/persistence evidence; this does not establish a complete inferred transition or terminal table. The unchanged original Booking configuration retains 13 event findings and no lifecycle findings; the separate Payment configuration produces the two lifecycle controls plus the existing event-buffer finding, with no problems or stderr. BookingStatus and InvoiceStatus were inspected individually; this is not a claim that every repository status or command is supported.
+
+Independent reviews resolved coercive comparisons, compatible sibling substitution, structural writer exposure, borrowed fresh holders, ambient-constructor freshness and export-star dependency observation. Authored positive/negative and runtime probes retain supported findings and withhold uncertain cases. All **3,256 tests**, coverage, typecheck, full lint, build and installed-package verification passed on the reviewed source. Coverage is **97.34% statements, 92.52% branches, 99.06% functions and 99.22% lines**, with unchanged thresholds.
+
 ## State setter cutoff: issue #129
 
 The final comparison used all 14 pinned public repositories in Setup against accepted main `739d467` and the independently reviewed setter implementation. All 28 ordinary/declared-event comparisons retain identical finding objects, exit codes, problem arrays and stderr: **63 ordinary findings** and **83 declared-event findings**, with no additions or losses. The recorded Codely configuration failure is unchanged. Pinned commits, original configs, dependencies and the shared harness were preserved. The private reference repository was not accessed; its rerun remains a maintainer validation gate.
@@ -298,7 +306,7 @@ The first run also reported the 27 private `on<Event>` appliers: 10 on Bill, 4 e
 
 ## emadansari96/Booking-System
 
-There were no lifecycle findings. Booking, Payment and Invoice keep their status in value objects (`BookingStatus.create(...)`, `status.canTransitionTo(...)`), which are not supported state types. The project also sets `strictNullChecks: false`, so its optional timestamps are not nullable state fields. Only the `isActive` booleans on four aggregates were suggested. They have no terminal value.
+In the historical run recorded here there were no lifecycle findings. Booking, Payment and Invoice keep their status in value objects (`BookingStatus.create(...)`, `status.canTransitionTo(...)`), which are not supported state types. The project also sets `strictNullChecks: false`, so its optional timestamps are not nullable state fields. Only the `isActive` booleans on four aggregates were suggested. They have no terminal value.
 
 The original event-flow run reported nothing here either. The `CommissionStrategyUpdated`, `CommissionStrategyActivated` and `CommissionStrategyDeactivated` handlers never run, but their events are constructed and raised with `addDomainEvent` into a buffer that nothing dispatches, which `undispatched-events` now reports as `AggregateRoot._domainEvents`.
 

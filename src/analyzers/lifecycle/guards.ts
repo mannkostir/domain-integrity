@@ -111,7 +111,7 @@ const scanExitStep = (
 ): GuardScan | undefined => {
   const guard = exitGuard(statement, rules.exits);
   if (guard !== undefined) return scanExitGuard(guard, field, scope, rules);
-  if (isFieldSwitch(statement, field)) return scanSwitchStep(statement, field, scope, rules.exits);
+  if (isFieldSwitch(statement, field, scope)) return scanSwitchStep(statement, field, scope, rules.exits);
   return scanHelperStep(statement, field, scope, rules, scanEarlyExits);
 };
 
@@ -132,9 +132,9 @@ const scanEarlyExits = (
     { allowed: guardUniverse(field), recognised: new Set<Node>() },
   );
 
-const soleFieldSwitch = (statements: readonly Statement[], field: StateField): SwitchStatement | undefined => {
+const soleFieldSwitch = (statements: readonly Statement[], field: StateField, scope: AggregateScope): SwitchStatement | undefined => {
   const [only] = statements;
-  return statements.length === 1 && only !== undefined && isFieldSwitch(only, field) ? only : undefined;
+  return statements.length === 1 && only !== undefined && isFieldSwitch(only, field, scope) ? only : undefined;
 };
 
 const scanWorkGroup = (group: SwitchGroup, field: StateField, scope: AggregateScope): GuardScan => {
@@ -160,7 +160,7 @@ const scanSwitchWrapper = (statement: SwitchStatement, field: StateField, scope:
 const scanStatements = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan => {
   const wrapper = wrappingGuard(statements);
   if (wrapper) return scanWrapper(wrapper, field, scope);
-  const fieldSwitch = soleFieldSwitch(statements, field);
+  const fieldSwitch = soleFieldSwitch(statements, field, scope);
   return fieldSwitch ? scanSwitchWrapper(fieldSwitch, field, scope) : scanEarlyExits(statements, field, scope, METHOD_RULES);
 };
 
