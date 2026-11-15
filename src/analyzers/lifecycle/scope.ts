@@ -12,12 +12,13 @@ import { writtenMethods } from './written-methods';
 export const aggregateScope = (
   cls: ClassDeclaration,
   declaration: Pick<DomainDeclaration, 'eventMethods' | 'inertDecorators' | 'inertEventMethods' | 'inertMembers'>,
-  project: Pick<ProjectIndex, 'sources' | 'bracketWrites' | 'nameUses' | 'subclasses'>,
+  project: Pick<ProjectIndex, 'sources' | 'bracketWrites' | 'nameUses' | 'subclasses' | 'javascriptData'>,
 ): AggregateScope => {
   const family = classFamily(cls, project.subclasses);
   const arrows = arrowMethods(family, project.nameUses);
   return {
     cls,
+    javascriptData: project.javascriptData,
     eventMethods: new Set(declaration.eventMethods),
     inertEventMethods: assertedInertEventMethods(declaration.inertEventMethods, cls, family, project, declaration.inertDecorators),
     inertMembers: new Set(declaration.inertMembers),

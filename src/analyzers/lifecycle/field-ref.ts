@@ -58,6 +58,7 @@ export const fieldNameOf = (node: Node): string | undefined =>
 const STATE_HOLDER = 'props';
 
 export type AggregateScope = {
+  readonly javascriptData: import('./javascript-data').JavaScriptDataProperties;
   readonly projections?: import('./value-object/context').ProjectedFields;
   readonly cls: ClassDeclaration;
   readonly eventMethods: ReadonlySet<string>;
@@ -132,9 +133,16 @@ const declaredMember = (chain: readonly ClassDeclaration[], name: string, access
     return members.find(Node.isGetAccessorDeclaration) ?? members.find(Node.isMethodDeclaration) ?? members.find(Node.isPropertyDeclaration);
   }).find((member) => member !== undefined);
 
-const typedMember = (cls: ClassDeclaration, name: string): MemberLookup => {
-  const declarations = cls.getType().getProperty(name)?.getDeclarations() ?? [];
-  return declarations.length > 0 && declarations.every(isDataDeclaration) ? { kind: 'data', declarations } : { kind: 'untraceable' };
+const typedMember = (scope: AggregateScope, access: Node, name: string): MemberLookup => {
+  const symbol = scope.cls.getType().getProperty(name);
+  const declarations = symbol?.getDeclarations() ?? [];
+  const ordinary = declarations.length > 0 && declarations.every(isDataDeclaration);
+  const parent = outermostWrapper(access).getParent();
+  const invoked = isCalledMember(access) || (Node.isTaggedTemplateExpression(parent) && parent.getTag() === outermostWrapper(access));
+  const javascript = !isSuperAccess(access) && !invoked &&
+    (isOverwritten(access) || isJavaScriptScalarValue(access.getType())) &&
+    scope.javascriptData.prove(scope.cls, symbol).kind === 'data';
+  return ordinary || javascript ? { kind: 'data', declarations } : { kind: 'untraceable' };
 };
 
 const bindsThis = (node: Node): boolean =>
@@ -151,8 +159,8 @@ export const hasForeignThis = (access: Node): boolean => {
   return Node.isFunctionExpression(binder) || Node.isFunctionDeclaration(binder);
 };
 
-const absentMember = (cls: ClassDeclaration, access: Node, name: string): MemberLookup =>
-  hasForeignThis(access) ? { kind: 'inert' } : typedMember(cls, name);
+const absentMember = (scope: AggregateScope, access: Node, name: string): MemberLookup =>
+  hasForeignThis(access) ? { kind: 'inert' } : typedMember(scope, access, name);
 
 const thisInstanceMethod = (scope: AggregateScope, access: Node, name: string) => {
   if (isSuperAccess(access)) return undefined;
@@ -173,7 +181,7 @@ const tracedMember = (scope: AggregateScope, access: Node, name: string): Member
   const method = thisInstanceMethod(scope, access, name);
   if (isPrivateAccess(access) && isCalledMember(access) && method === undefined) return { kind: 'untraceable' };
   const member = method?.member ?? declaredMember(lookupChain(scope.cls, access), name, access);
-  if (member === undefined) return isPrivateAccess(access) ? { kind: 'untraceable' } : absentMember(scope.cls, access, name);
+  if (member === undefined) return isPrivateAccess(access) ? { kind: 'untraceable' } : absentMember(scope, access, name);
   return isReplacedMethod(scope, member, name) ? { kind: 'untraceable' } : bodyOf(member);
 };
 
@@ -301,6 +309,14 @@ const isPrimitiveType = (type: Type, depth = 0): boolean =>
         [...type.getTypeArguments(), ...type.getAliasTypeArguments()].every((argument) =>
           isPrimitiveType(argument, depth + 1),
         ))));
+
+const JAVASCRIPT_SCALAR_FLAGS = PRIMITIVE_FLAGS & ~ts.TypeFlags.Void;
+const MAX_JAVASCRIPT_SCALAR_DEPTH = 3;
+
+export const isJavaScriptScalarValue = (type: Type, depth = 0): boolean =>
+  (type.getFlags() & JAVASCRIPT_SCALAR_FLAGS) !== 0 ||
+  (depth < MAX_JAVASCRIPT_SCALAR_DEPTH && type.isUnion() &&
+    type.getUnionTypes().every((member) => isJavaScriptScalarValue(member, depth + 1)));
 
 const projectDataReadsField = (access: Node, scope: AggregateScope): boolean =>
   scope.leaksThis && !isPrimitiveType(access.getType()) && !isPlainArrayPush(access, scope.plainEventArrays);

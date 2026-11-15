@@ -373,3 +373,32 @@ describe('JavaScript constructor parameter stores', () => {
     expect(proveJavaScriptDataProperty(cls, symbol).kind).toBe('unknown');
   });
 });
+
+describe('JavaScript setter backing data', () => {
+  it('proves the already constructed slot written by a transparent setter', () => {
+    const { cls, symbol } = sample(`export class Sample {
+      constructor() { this.closed = false; }
+      get state() { return this.closed; }
+      set state(value) { this.closed = value; }
+    }`);
+
+    expect(proveJavaScriptDataProperty(cls, symbol).kind).toBe('data');
+  });
+
+  it('does not treat setter stores as construction evidence', () => {
+    const { cls, symbol } = sample(`export class Sample {
+      constructor() { this.closed = false; }
+      get state() { return this.closed; }
+      set state(value) { this.closed = value; }
+    }`);
+    const proof = proveJavaScriptDataProperty(cls, symbol);
+
+    expect(proof.kind === 'data' ? proof.constructorAssignments.map(assignment => assignment.getText()) : proof.kind).toEqual(['this.closed = false']);
+  });
+
+  it('requires construction even when a setter assigns the slot', () => {
+    const { cls, symbol } = sample('export class Sample { set state(value) { this.closed = value; } }');
+
+    expect(proveJavaScriptDataProperty(cls, symbol).kind).toBe('unknown');
+  });
+});

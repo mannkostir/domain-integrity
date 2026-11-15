@@ -27,7 +27,7 @@ export const isFieldAssignment = (node: Node, field: StateField, scope: Aggregat
   node.getOperatorToken().getKind() === SyntaxKind.EqualsToken &&
   ((fieldNameOf(node.getLeft()) === field.name &&
     (scope.projections?.projection(field.name) === undefined || scope.projections.receiver(node.getLeft(), field.name))) ||
-    setterStateAssignment(node, field.name, scope.cls) !== undefined);
+    setterStateAssignment(node, field.name, scope.cls, scope.javascriptData) !== undefined);
 
 export const readsFieldOutside = (
   node: Node,

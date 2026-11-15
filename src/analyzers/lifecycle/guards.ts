@@ -42,7 +42,7 @@ const assignsField = (statement: Statement, field: StateField, scope: AggregateS
   if (!Node.isExpressionStatement(statement)) return false;
   const expression = unwrapParentheses(statement.getExpression());
   return isFieldAssignment(expression, field, scope) && (
-    isPlainDataPathFromThis(expression.getLeft()) || setterStateAssignment(expression, field.name, scope.cls) !== undefined
+    isPlainDataPathFromThis(expression.getLeft(), scope.cls, scope.javascriptData) || setterStateAssignment(expression, field.name, scope.cls, scope.javascriptData) !== undefined
   );
 };
 

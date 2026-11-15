@@ -110,14 +110,14 @@ const fieldBehaviour = (implementation: MethodImplementation, field: StateField,
   return {
     sources: admitted ? methodSources(implementation, field, scope) : { kind: 'unknown' },
     sets: mergeAssigned([
-      setsOf(implementation, field, scope.cls, scope.projections?.assigned, scope.projections?.tracksTarget),
+      setsOf(implementation, field, scope.cls, scope.projections?.assigned, scope.projections?.tracksTarget, scope.javascriptData),
       ...(admitted ? [] : [MAY_WRITE]),
     ]),
   };
 };
 
-const initialEvidence = (cls: ClassDeclaration, field: StateField, projections: ProjectedFields) =>
-  mergeAssigned([initialValues(cls, field, projections.assigned, projections.tracksTarget), ...(projections.admitted(field.name) ? [] : [UNRESOLVED])]);
+const initialEvidence = (scope: AggregateScope, field: StateField) =>
+  mergeAssigned([initialValues(scope.cls, field, scope.projections?.assigned, scope.projections?.tracksTarget, scope.javascriptData), ...(scope.projections?.admitted(field.name) === false ? [UNRESOLVED] : [])]);
 
 const methodModels = (
   scope: AggregateScope,
@@ -188,7 +188,7 @@ const extractAggregate = (
       declarations: resolved.declarations,
       allowAfterTerminal: new Set(declared?.allowAfterTerminal ?? []),
       methods: methodModels(scope, methods, resolved.fields, declared !== undefined, declaration.auditFields),
-      initial: new Map(resolved.fields.map((field) => [field.name, initialEvidence(cls, field, scope.projections)])),
+      initial: new Map(resolved.fields.map((field) => [field.name, initialEvidence(scope, field)])),
       mentioned: new Map(declared ? resolved.fields.map((field) => [field.name, mentionedTokens(project, field)]) : []),
       outside: declared ? resolved.fields.flatMap((field) => outsideAssignments(project.sources, cls, field, projectRoot, scope.projections.assigned)) : [],
       uncertainlyWritten: declared

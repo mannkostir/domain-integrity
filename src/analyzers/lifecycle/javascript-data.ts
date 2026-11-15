@@ -146,7 +146,8 @@ const isOwnedDeclaration = (node: Node, chain: readonly ClassDeclaration[], name
   const implementation = block?.getParent();
   const owner = implementation?.getParent();
   return Node.isExpressionStatement(statement) && Node.isBlock(block) &&
-    (Node.isConstructorDeclaration(implementation) || (Node.isMethodDeclaration(implementation) && !implementation.isStatic())) &&
+    (Node.isConstructorDeclaration(implementation) ||
+      ((Node.isMethodDeclaration(implementation) || Node.isSetAccessorDeclaration(implementation)) && !implementation.isStatic())) &&
     implementation.getBody() === block && Node.isClassDeclaration(owner) && chain.includes(owner);
 };
 

@@ -1,5 +1,6 @@
 import { BinaryExpression, ClassDeclaration, Expression, Node, Symbol as MorphSymbol, SyntaxKind } from 'ts-morph';
 import { fieldNameOf, hasAmbiguousInstanceShape, hasAmbiguousPrivateField, hasForeignThis, resolveSetter } from './field-ref';
+import { JavaScriptDataProperties } from './javascript-data';
 import { namedClassChain } from './named-chain';
 import { isLibraryNode } from '../shared/library';
 import { unwrap } from '../shared/wrappers';
@@ -22,16 +23,34 @@ const memberSymbol = (target: Node): MorphSymbol | undefined => {
   return undefined;
 };
 
-export const isPlainDataPathFromThis = (expression: Node): boolean => {
+const isJavaScriptDataDestination = (target: Node, cls?: ClassDeclaration, javascriptData?: JavaScriptDataProperties): boolean => {
+  if (cls === undefined || javascriptData === undefined || hasForeignThis(target) ||
+    (!Node.isPropertyAccessExpression(target) && !Node.isElementAccessExpression(target)) || target.hasQuestionDotToken() ||
+    !Node.isThisExpression(unwrap(target.getExpression())) ||
+    (Node.isPropertyAccessExpression(target) && Node.isPrivateIdentifier(target.getNameNode()))) return false;
+  const name = fieldNameOf(target);
+  const symbol = name === undefined ? undefined : target.getExpression().getType().getProperty(name);
+  const selected = name === undefined ? undefined : cls.getType().getProperty(name);
+  if (symbol === undefined || selected === undefined) return false;
+  const checker = cls.getProject().getTypeChecker().compilerObject;
+  const actualRoots = checker.getRootSymbols(symbol.compilerSymbol);
+  const selectedRoots = checker.getRootSymbols(selected.compilerSymbol);
+  return actualRoots.length === 1 && selectedRoots.length === 1 && actualRoots[0] === selectedRoots[0] &&
+    javascriptData.prove(cls, selected).kind === 'data';
+};
+
+export const isPlainDataPathFromThis = (expression: Node, cls?: ClassDeclaration, javascriptData?: JavaScriptDataProperties): boolean => {
   const target = unwrap(expression);
   if (!Node.isPropertyAccessExpression(target) && !Node.isElementAccessExpression(target)) return false;
   const holder = unwrap(target.getExpression());
+  if (isJavaScriptDataDestination(target, cls, javascriptData)) return true;
   return dataDeclarations(memberSymbol(target)) !== undefined &&
     (Node.isThisExpression(holder) || isPlainDataPathFromThis(holder));
 };
 
-export const isTrackedDataDestination = (target: Node, field: string, cls: ClassDeclaration): boolean => {
-  if (fieldNameOf(target) !== field || !isPlainDataPathFromThis(target)) return false;
+export const isTrackedDataDestination = (target: Node, field: string, cls: ClassDeclaration, javascriptData?: JavaScriptDataProperties): boolean => {
+  if (fieldNameOf(target) !== field || !isPlainDataPathFromThis(target, cls, javascriptData)) return false;
+  if (isJavaScriptDataDestination(target, cls, javascriptData)) return true;
   if (Node.isPropertyAccessExpression(target) || Node.isElementAccessExpression(target)) {
     const holder = unwrap(target.getExpression());
     if (Node.isPropertyAccessExpression(holder) || Node.isElementAccessExpression(holder)) {
@@ -80,6 +99,7 @@ export const setterStateAssignment = (
   binary: BinaryExpression,
   field: string,
   cls: ClassDeclaration,
+  javascriptData?: JavaScriptDataProperties,
 ): StateAssignment | undefined => {
   if (binary.getOperatorToken().getKind() !== SyntaxKind.EqualsToken || hasAmbiguousPrivateField(cls, field)) return undefined;
   const chain = namedClassChain(cls);
@@ -97,7 +117,7 @@ export const setterStateAssignment = (
   if (statements.length !== 1 || !Node.isExpressionStatement(statement)) return undefined;
   const assignment = unwrap(statement.getExpression());
   if (!Node.isBinaryExpression(assignment) || assignment.getOperatorToken().getKind() !== SyntaxKind.EqualsToken ||
-    !isTrackedDataDestination(unwrap(assignment.getLeft()), field, cls)) return undefined;
+    !isTrackedDataDestination(unwrap(assignment.getLeft()), field, cls, javascriptData)) return undefined;
   const value = unwrap(assignment.getRight());
   if (Node.isIdentifier(value) && value.getSymbol() === parameter.getSymbol()) return { value: binary.getRight() };
   return isConstant(value) ? { value } : undefined;
