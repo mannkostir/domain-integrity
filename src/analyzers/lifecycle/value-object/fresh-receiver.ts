@@ -21,7 +21,7 @@ export const freshClassInstance = (candidate: ClassDeclaration, sources: SourceI
   const visited = new Set<ClassDeclaration>();
   while (cls !== undefined && visited.size < MAX_PROJECTION_DEPTH && !visited.has(cls)) {
     visited.add(cls);
-    if (isLibraryNode(cls) || cls.getDecorators().length > 0 || !unmodifiedConstructor(cls, sources) ||
+    if (isLibraryNode(cls) || cls.isAmbient() || cls.getDecorators().length > 0 || !unmodifiedConstructor(cls, sources) ||
         cls.getMembers().some(member => Node.isClassStaticBlockDeclaration(member) ||
           ('getDecorators' in member && member.getDecorators().length > 0) ||
           ('getParameters' in member && member.getParameters().some(parameter => parameter.getDecorators().length > 0)))) return false;

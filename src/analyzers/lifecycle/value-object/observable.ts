@@ -141,7 +141,7 @@ const changesDispatch = (node: Node, projection: ScalarProjection, ancestry: rea
     const constructor = [receiver, unwrap(receiver), ...receiver.getDescendants()].filter(candidate => !isNameOrType(candidate)).some(candidate =>
       ((Node.isIdentifier(candidate) || Node.isPropertyAccessExpression(candidate)) && ancestry.some(cls => refersTo(candidate, cls))) ||
       (candidate.getType().getConstructSignatures().length > 0 &&
-        (candidate.getType().getSymbol()?.getDeclarations() ?? []).some(declaration => ancestry.includes(declaration)))); 
+        (candidate.getType().getSymbol()?.getDeclarations() ?? []).some(declaration => ancestry.includes(declaration))));
     const name = Node.isPropertyAccessExpression(node) ? node.getName() : undefined;
     return constructor || (isInstance(receiver, projection) && name !== projection.storage.holder.getName());
   }

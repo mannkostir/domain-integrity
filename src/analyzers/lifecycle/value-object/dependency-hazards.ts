@@ -17,7 +17,7 @@ const namespaceContains = (symbol: MorphSymbol | undefined, projection: ScalarPr
   if (declarations.length === 0 || declarations.some(isLibraryNode) ||
       !declarations.every(node => Node.isSourceFile(node) || Node.isModuleDeclaration(node))) return false;
   if (seen.size >= MAX_PROJECTION_DEPTH) return true;
-  return symbol.getExports().some(exported => namespaceContains(exported.getAliasedSymbol() ?? exported, projection, new Set([...seen, symbol])));
+  return declarations[0]!.getProject().getTypeChecker().getExportsOfModule(symbol).some(exported => namespaceContains(exported.getAliasedSymbol() ?? exported, projection, new Set([...seen, symbol])));
 };
 
 const libraryMember = (node: Node): boolean => {
