@@ -3,6 +3,7 @@ import { ExitKind } from './early-exit';
 import { AggregateScope, MAX_GETTER_DEPTH, fieldNameOf, referencesFieldDirectly, thisGetterExpression } from './field-ref';
 import { MethodImplementation } from './instance-method';
 import { setterStateAssignment } from './state-assignment';
+import { ScalarReturnProof } from './scalar-callable';
 import { StateField } from './model';
 import { isWritten } from '../shared/writes';
 import { outermostWrapper } from '../shared/wrappers';
@@ -66,10 +67,12 @@ const isPlainGetterRead = (node: Node, field: StateField, scope: AggregateScope,
   );
 };
 
-const plainFieldReads = (node: Node, field: StateField, scope: AggregateScope, depth: number): readonly Node[] =>
-  [node, ...node.getDescendants()].filter(
-    (candidate) => isPlainFieldRead(candidate, field, scope) || isPlainGetterRead(candidate, field, scope, depth),
-  );
+const plainFieldReads = (node: Node, field: StateField, scope: AggregateScope, depth: number): readonly Node[] => {
+  const proof = new ScalarReturnProof(field, scope);
+  return [node, ...node.getDescendants()].filter(candidate =>
+    isPlainFieldRead(candidate, field, scope) || isPlainGetterRead(candidate, field, scope, depth) ||
+    (Node.isCallExpression(candidate) && proof.expand(candidate) !== undefined));
+};
 
 const isExitStatement = (statement: Statement): boolean => Node.isReturnStatement(statement) || Node.isThrowStatement(statement);
 

@@ -53,7 +53,7 @@ export class Sample${index} {
   constructor() { this.state = ${type.includes('null') ? 'null' : 'undefined'}; }
   predicate(): boolean { return !!this.state; }
   get effectful(): true { this.state = ${type.includes('null') ? 'null' : 'undefined'}; return true; }
-  unknown(): void { if (this.predicate()) return; this.title = 'x'; }
+  viaPredicate(): void { if (this.predicate()) return; this.title = 'x'; }
   effect(): void { if (this.state === this.effectful) return; this.title = 'x'; }
   ${shapes[index]![1].map((value) => `assign${value[0]!.toUpperCase()}${value.slice(1)}(): void { this.state = ${value}; }`).join('\n')}
   assignUnion(value: ${type}): void { this.state = value; }
@@ -114,8 +114,16 @@ for (const [index, [type, states]] of shapes.entries()) {
       expect(describeSources(sources)).toEqual([...new Set(states.filter((state) => state !== 'true').map((state) => state === 'false' ? state : 'unset'))].sort());
     });
 
-    it.each(['unknown', 'effect'])('leaves %s guard sources unknown', (method) => {
-      expect(describeSources(methodSources(cls.getMethodOrThrow(method), resolvedField(cls, 'state'), scope))).toBe('unknown');
+    it('follows the pure scalar truthiness predicate', () => {
+      const sources = methodSources(cls.getMethodOrThrow('viaPredicate'), resolvedField(cls, 'state'), scope);
+
+      expect(describeSources(sources)).toEqual([...new Set(states.filter(state => state !== 'true').map(state => state === 'false' ? state : 'unset'))].sort());
+    });
+
+    it('leaves the effectful comparison unknown', () => {
+      const sources = methodSources(cls.getMethodOrThrow('effect'), resolvedField(cls, 'state'), scope);
+
+      expect(describeSources(sources)).toBe('unknown');
     });
 
     it('keeps unset forms distinguishable for a strict null guard', () => {

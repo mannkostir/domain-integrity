@@ -4,6 +4,7 @@ import { isDefaultLibraryNode } from '../shared/library';
 import { unwrap } from '../shared/wrappers';
 import { AggregateScope, MAX_GETTER_DEPTH, fieldNameOf, referencesField, thisGetterExpression } from './field-ref';
 import { comparedUnsetTokens, guardUniverse, unsetGuardTokens } from './guard-tokens';
+import { ScalarReturnProof } from './scalar-callable';
 import { StateField, UnsetForm } from './model';
 import { allTokens, difference, intersect, union } from './values';
 
@@ -132,15 +133,19 @@ const evaluateIncludes = (node: CallExpression, field: StateField, scope: Aggreg
   return included === undefined ? 'unknown' : { whenTrue: included, whenFalse: difference(guardUniverse(field), included) };
 };
 
-const evaluateBinary = (node: BinaryExpression, field: StateField, scope: AggregateScope, depth: number): Evaluation => {
+const evaluateBinary = (node: BinaryExpression, field: StateField, scope: AggregateScope, proof: ScalarReturnProof, expanded: boolean, depth: number): Evaluation => {
   const operator = node.getOperatorToken().getKind();
   if (operator === SyntaxKind.AmpersandAmpersandToken || operator === SyntaxKind.BarBarToken) {
-    const left = evaluateCondition(node.getLeft(), field, scope, depth);
-    const right = evaluateCondition(node.getRight(), field, scope, depth);
+    const left = evaluate(node.getLeft(), field, scope, proof, expanded, depth);
+    const right = evaluate(node.getRight(), field, scope, proof, expanded, depth);
     if (left === 'unknown' || right === 'unknown') return 'unknown';
     return operator === SyntaxKind.AmpersandAmpersandToken
       ? { whenTrue: intersect(left.whenTrue, right.whenTrue), whenFalse: union(left.whenFalse, right.whenFalse) }
       : { whenTrue: union(left.whenTrue, right.whenTrue), whenFalse: intersect(left.whenFalse, right.whenFalse) };
+  }
+  if (!referencesField(node, field.name, scope)) {
+    return (expanded ? !proof.hasDataRead(node) : node.getDescendants().some(Node.isCallExpression))
+      ? 'unknown' : { whenTrue: guardUniverse(field), whenFalse: guardUniverse(field) };
   }
   const strict = STRICT.has(operator);
   if (EQUALITY.has(operator)) return compare(node.getLeft(), node.getRight(), field, strict, scope);
@@ -148,21 +153,46 @@ const evaluateBinary = (node: BinaryExpression, field: StateField, scope: Aggreg
   return 'unknown';
 };
 
-export const evaluateCondition = (node: Expression, field: StateField, scope: AggregateScope, depth = 0): Evaluation => {
-  if (!referencesField(node, field.name, scope)) return { whenTrue: guardUniverse(field), whenFalse: guardUniverse(field) };
-  if (Node.isParenthesizedExpression(node)) return evaluateCondition(node.getExpression(), field, scope, depth);
-  if (Node.isPrefixUnaryExpression(node) && node.getOperatorToken() === SyntaxKind.ExclamationToken) {
-    return negate(evaluateCondition(node.getOperand(), field, scope, depth));
+const evaluate = (node: Expression, field: StateField, scope: AggregateScope, proof: ScalarReturnProof, expanded = false, depth = 0): Evaluation => {
+  if (!proof.take()) return 'unknown';
+  if (Node.isTrueLiteral(node) || Node.isFalseLiteral(node)) {
+    const universe = guardUniverse(field);
+    return Node.isTrueLiteral(node) ? { whenTrue: universe, whenFalse: new Set() } : { whenTrue: new Set(), whenFalse: universe };
   }
-  if (Node.isBinaryExpression(node)) return evaluateBinary(node, field, scope, depth);
+  if (Node.isParenthesizedExpression(node)) return evaluate(node.getExpression(), field, scope, proof, expanded, depth);
+  if (Node.isPrefixUnaryExpression(node) && node.getOperatorToken() === SyntaxKind.ExclamationToken) {
+    return negate(evaluate(node.getOperand(), field, scope, proof, expanded, depth));
+  }
+  if (Node.isBinaryExpression(node)) return evaluateBinary(node, field, scope, proof, expanded, depth);
   if (Node.isCallExpression(node)) {
     if (scope.projections?.projection(field.name) !== undefined) {
       const predicate = scope.projections.predicate(node, field);
       if (predicate !== 'unknown') return predicate;
     }
-    return evaluateIncludes(node, field, scope);
+    const callee = node.getExpression();
+    if (Node.isPropertyAccessExpression(callee) && (Node.isThisExpression(callee.getExpression()) || Node.isSuperExpression(callee.getExpression()))) {
+      const expression = proof.expression(node) ?? proof.expand(node);
+      return expression === undefined ? 'unknown' : evaluate(expression, field, scope, proof, true, depth);
+    }
+    const member = includesMember(node);
+    const receiver = Node.isPropertyAccessExpression(callee) ? fieldNameOf(callee.getExpression()) : undefined;
+    if (receiver !== undefined && receiver !== field.name && scope.projections?.projection(receiver) !== undefined &&
+      scope.projections.predicate(node, { ...field, name: receiver }) !== 'unknown' && !referencesField(node, field.name, scope)) {
+      return { whenTrue: guardUniverse(field), whenFalse: guardUniverse(field) };
+    }
+    return member === undefined ? 'unknown' : evaluateIncludes(node, field, scope);
   }
   if (scalarRead(node, field, scope)) return truthiness(field);
-  const getter = depth < MAX_GETTER_DEPTH ? thisGetterExpression(node, scope.cls) : undefined;
-  return getter === undefined ? 'unknown' : evaluateCondition(getter, field, scope, depth + 1);
+  if (!expanded) {
+    if (!referencesField(node, field.name, scope)) return { whenTrue: guardUniverse(field), whenFalse: guardUniverse(field) };
+    const getter = depth < MAX_GETTER_DEPTH ? thisGetterExpression(node, scope.cls) : undefined;
+    return getter === undefined ? 'unknown' : evaluate(getter, field, scope, proof, false, depth + 1);
+  }
+  const expression = proof.expression(node);
+  if (expression !== undefined) return evaluate(expression, field, scope, proof, true, depth);
+  return !referencesField(node, field.name, scope) && proof.hasDataRead(node)
+    ? { whenTrue: guardUniverse(field), whenFalse: guardUniverse(field) } : 'unknown';
 };
+
+export const evaluateCondition = (node: Expression, field: StateField, scope: AggregateScope): Evaluation =>
+  evaluate(node, field, scope, new ScalarReturnProof(field, scope));

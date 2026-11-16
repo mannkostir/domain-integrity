@@ -7,6 +7,7 @@ import { eventBuffers } from './event-buffer';
 import { assertedInertEventMethods } from './inert-event-method';
 import { ProjectIndex } from './project-index';
 import { classFamily, leaksThis } from './this-leak';
+import { ScalarCallableFacts } from './scalar-callable';
 import { writtenMethods } from './written-methods';
 
 export const aggregateScope = (
@@ -18,6 +19,7 @@ export const aggregateScope = (
   const arrows = arrowMethods(family, project.nameUses);
   return {
     cls,
+    scalarCallables: new ScalarCallableFacts(project.sources, project.subclasses),
     javascriptData: project.javascriptData,
     eventMethods: new Set(declaration.eventMethods),
     inertEventMethods: assertedInertEventMethods(declaration.inertEventMethods, cls, family, project, declaration.inertDecorators),

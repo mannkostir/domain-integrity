@@ -58,6 +58,7 @@ export const fieldNameOf = (node: Node): string | undefined =>
 const STATE_HOLDER = 'props';
 
 export type AggregateScope = {
+  readonly scalarCallables: import('./scalar-callable').ScalarCallableFacts;
   readonly javascriptData: import('./javascript-data').JavaScriptDataProperties;
   readonly projections?: import('./value-object/context').ProjectedFields;
   readonly cls: ClassDeclaration;
@@ -374,6 +375,31 @@ export const thisMethodImplementation = (
   scope: AggregateScope,
 ): MethodImplementation | undefined =>
   isSuperAccess(access) ? superMethod(access) : thisInstanceMethod(scope, access, access.getName())?.implementation;
+
+export const scalarCallable = (node: Node, scope: AggregateScope): { readonly identity: Node; readonly expression: Expression } | undefined => {
+  const access = Node.isCallExpression(node) ? node.getExpression() : node;
+  if (!Node.isPropertyAccessExpression(access) || access.hasQuestionDotToken() || !isThis(access.getExpression()) || hasForeignThis(access)) return undefined;
+  const binder = access.getFirstAncestor(ancestor => bindsThis(ancestor) || Node.isClassStaticBlockDeclaration(ancestor));
+  if (Node.isClassStaticBlockDeclaration(binder) ||
+    ((Node.isMethodDeclaration(binder) || Node.isPropertyDeclaration(binder) || Node.isGetAccessorDeclaration(binder) || Node.isSetAccessorDeclaration(binder)) && binder.isStatic())) return undefined;
+  const name = access.getName();
+  const chain = lookupChain(scope.cls, access);
+  if (chain.length === 0 || chain.some(hasAmbiguousInstanceShape) || scope.writtenMethods.isWritten(name)) return undefined;
+  const callable = Node.isCallExpression(node) ? thisMethodImplementation(access, scope) : findGetter(scope.cls, access, name);
+  if (callable === undefined || isLibraryNode(callable) || callable.getParameters().length > 0 || callable.getTypeParameters().length > 0) return undefined;
+  if (Node.isCallExpression(node) && (node.hasQuestionDotToken() || node.getArguments().length > 0 || node.getTypeArguments().length > 0)) return undefined;
+  if ((Node.isMethodDeclaration(callable) && (callable.isAsync() || callable.isGenerator() || callable.isAbstract() || callable.isStatic() ||
+    callable.isOverload() || callable.getOverloads().length > 0 || callable.getDecorators().length > 0)) ||
+    (Node.isArrowFunction(callable) && callable.isAsync()) ||
+    (Node.isGetAccessorDeclaration(callable) && (callable.isStatic() || callable.getDecorators().length > 0))) return undefined;
+  const body = callable.getBody();
+  if (Node.isArrowFunction(callable) && Node.isExpression(body)) return { identity: callable, expression: body };
+  if (!Node.isBlock(body)) return undefined;
+  const statements = body.getStatements();
+  const [only] = statements;
+  const expression = statements.length === 1 && Node.isReturnStatement(only) ? only.getExpression() : undefined;
+  return expression === undefined ? undefined : { identity: callable, expression };
+};
 
 const thisMemberName = (node: Node): string | undefined =>
   (Node.isPropertyAccessExpression(node) || Node.isElementAccessExpression(node)) && isThis(node.getExpression())
