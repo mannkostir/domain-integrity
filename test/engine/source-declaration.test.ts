@@ -1,15 +1,18 @@
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sourceDeclaration } from '../../src/engine/source-declaration';
 import { inMemoryProject } from '../helpers/in-memory';
 
+const fixturePath = (path: string): string => resolve(path).replace(/\\/g, '/');
+
 const mapped = (map: unknown = { version: 3, sources: ['../src/base.ts'] }, source = 'export class Base {}') => {
   const project = inMemoryProject({
-    '/src/base.ts': source,
-    '/dist/base.d.ts': 'export declare class Base {}\n//# sourceMappingURL=base.d.ts.map',
+    [fixturePath('/src/base.ts')]: source,
+    [fixturePath('/dist/base.d.ts')]: 'export declare class Base {}\n//# sourceMappingURL=base.d.ts.map',
   });
-  project.getFileSystem().writeFileSync('/dist/base.d.ts.map', JSON.stringify(map));
-  const declaration = project.getSourceFileOrThrow('/dist/base.d.ts').getClassOrThrow('Base');
-  const file = project.getSourceFileOrThrow('/src/base.ts');
+  project.getFileSystem().writeFileSync(fixturePath('/dist/base.d.ts.map'), JSON.stringify(map));
+  const declaration = project.getSourceFileOrThrow(fixturePath('/dist/base.d.ts')).getClassOrThrow('Base');
+  const file = project.getSourceFileOrThrow(fixturePath('/src/base.ts'));
   return { project, declaration, file };
 };
 
@@ -60,14 +63,14 @@ describe('project source declarations', () => {
 
   it('leaves a missing map unresolved', () => {
     const { project, declaration, file } = mapped();
-    project.getFileSystem().deleteSync('/dist/base.d.ts.map');
+    project.getFileSystem().deleteSync(fixturePath('/dist/base.d.ts.map'));
 
     expect(sourceDeclaration(declaration, [file])).toBeUndefined();
   });
 
   it('leaves malformed JSON unresolved', () => {
     const { project, declaration, file } = mapped();
-    project.getFileSystem().writeFileSync('/dist/base.d.ts.map', '{');
+    project.getFileSystem().writeFileSync(fixturePath('/dist/base.d.ts.map'), '{');
 
     expect(sourceDeclaration(declaration, [file])).toBeUndefined();
   });
