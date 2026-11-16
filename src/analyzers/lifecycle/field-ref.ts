@@ -450,16 +450,6 @@ const thisMemberName = (node: Node): string | undefined =>
     ? memberName(node)
     : undefined;
 
-export const thisGetterExpression = (node: Node, cls: ClassDeclaration): Expression | undefined => {
-  const name = thisMemberName(node);
-  if (name === undefined) return undefined;
-  const body = findGetter(cls, node, name)?.getBody();
-  if (!Node.isBlock(body)) return undefined;
-  const statements = body.getStatements();
-  const [only] = statements;
-  return statements.length === 1 && Node.isReturnStatement(only) ? only.getExpression() : undefined;
-};
-
 export const isReceiverOfAccess = (node: Node): boolean => {
   const parent = node.getParent();
   return (
