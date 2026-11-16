@@ -2,7 +2,7 @@ import { BinaryExpression, CallExpression, Expression, Node, PropertyAccessExpre
 import { SET, literalToken } from '../../engine/value-token';
 import { isDefaultLibraryNode } from '../shared/library';
 import { unwrap } from '../shared/wrappers';
-import { AggregateScope, fieldNameOf, referencesField, scalarCallable } from './field-ref';
+import { AggregateScope, fieldNameOf, isAssertedInertLibraryMember, referencesField, scalarCallable } from './field-ref';
 import { comparedUnsetTokens, guardUniverse, unsetGuardTokens } from './guard-tokens';
 import { ScalarReturnProof } from './scalar-callable';
 import { StateField, UnsetForm } from './model';
@@ -133,6 +133,14 @@ const evaluateIncludes = (node: CallExpression, field: StateField, scope: Aggreg
 const changedOperand = (original: Expression, normalized: Expression): boolean =>
   Node.isParenthesizedExpression(original) ? changedOperand(original.getExpression(), normalized) : original !== normalized;
 
+const independentLibraryOperand = (node: Expression, field: StateField, scope: AggregateScope, proof: ScalarReturnProof): 'asserted' | 'literal' | 'unknown' => {
+  if (!proof.take()) return 'unknown';
+  if (Node.isParenthesizedExpression(node)) return independentLibraryOperand(node.getExpression(), field, scope, proof);
+  if (isAssertedInertLibraryMember(node, field.name, scope) && proof.inertArguments(node)) return 'asserted';
+  return Node.isTrueLiteral(node) || Node.isFalseLiteral(node) || Node.isNullLiteral(node) || Node.isStringLiteral(node) ||
+    Node.isNumericLiteral(node) || Node.isBigIntLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node) ? 'literal' : 'unknown';
+};
+
 const evaluateBinary = (node: BinaryExpression, field: StateField, scope: AggregateScope, proof: ScalarReturnProof, expanded: boolean): Evaluation => {
   const operator = node.getOperatorToken().getKind();
   if (operator === SyntaxKind.AmpersandAmpersandToken || operator === SyntaxKind.BarBarToken) {
@@ -142,6 +150,13 @@ const evaluateBinary = (node: BinaryExpression, field: StateField, scope: Aggreg
     return operator === SyntaxKind.AmpersandAmpersandToken
       ? { whenTrue: intersect(left.whenTrue, right.whenTrue), whenFalse: union(left.whenFalse, right.whenFalse) }
       : { whenTrue: union(left.whenTrue, right.whenTrue), whenFalse: intersect(left.whenFalse, right.whenFalse) };
+  }
+  if (!expanded && STRICT.has(operator)) {
+    const left = independentLibraryOperand(node.getLeft(), field, scope, proof);
+    const right = independentLibraryOperand(node.getRight(), field, scope, proof);
+    if (left !== 'unknown' && right !== 'unknown' && (left === 'asserted' || right === 'asserted')) {
+      return { whenTrue: guardUniverse(field), whenFalse: guardUniverse(field) };
+    }
   }
   if (EQUALITY.has(operator) || INEQUALITY.has(operator)) {
     const left = proof.normalize(node.getLeft(), 'nullish');
@@ -170,6 +185,9 @@ const evaluate = (node: Expression, field: StateField, scope: AggregateScope, pr
   if (Node.isParenthesizedExpression(node)) return evaluate(node.getExpression(), field, scope, proof, expanded);
   if (Node.isPrefixUnaryExpression(node) && node.getOperatorToken() === SyntaxKind.ExclamationToken) {
     return negate(evaluate(node.getOperand(), field, scope, proof, expanded));
+  }
+  if (!expanded && isAssertedInertLibraryMember(node, field.name, scope) && proof.inertArguments(node)) {
+    return { whenTrue: guardUniverse(field), whenFalse: guardUniverse(field) };
   }
   if (Node.isBinaryExpression(node)) return evaluateBinary(node, field, scope, proof, expanded);
   if (Node.isCallExpression(node)) {

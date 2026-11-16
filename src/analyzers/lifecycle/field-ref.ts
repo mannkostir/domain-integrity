@@ -264,6 +264,19 @@ const lookupMember = (scope: AggregateScope, access: Node, name: string): Member
   return isAssumedInert(scope, access, name, member) ? { kind: 'inert' } : member;
 };
 
+export const isAssertedInertLibraryMember = (node: Node, field: string, scope: AggregateScope): boolean => {
+  const access = Node.isCallExpression(node) ? node.getExpression() : node;
+  const name = thisMemberName(access);
+  if (name === undefined || name === field || name === STATE_HOLDER || hasForeignThis(access) ||
+    (!Node.isPropertyAccessExpression(access) && !Node.isElementAccessExpression(access)) ||
+    access.hasQuestionDotToken() || isWritten(outermostWrapper(access))) return false;
+  const binder = access.getFirstAncestor(ancestor => bindsThis(ancestor) || Node.isClassStaticBlockDeclaration(ancestor));
+  if (Node.isClassStaticBlockDeclaration(binder) ||
+    ((Node.isMethodDeclaration(binder) || Node.isPropertyDeclaration(binder) || Node.isGetAccessorDeclaration(binder) || Node.isSetAccessorDeclaration(binder)) && binder.isStatic())) return false;
+  return isListedLibraryMember(scope, access, name) && lookupMember(scope, access, name).kind === 'inert' &&
+    !referencesField(node, field, scope);
+};
+
 const exposesField = (type: Type, field: string, location: Node): boolean =>
   type.getProperty(field) !== undefined ||
   type.getProperty(STATE_HOLDER)?.getTypeAtLocation(location).getProperty(field) !== undefined;

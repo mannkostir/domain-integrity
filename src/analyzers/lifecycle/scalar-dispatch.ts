@@ -6,6 +6,7 @@ import { outermostWrapper, unwrap } from '../shared/wrappers';
 import { MAX_GETTER_DEPTH, hasAmbiguousInstanceShape } from './field-ref';
 import { namedClassChain } from './named-chain';
 import { defaultLibraryOperations, isRuntimeReference, moduleMayExpose } from './runtime-dependencies';
+import { UnrelatedParameterOrigins } from './scalar-argument-origin';
 import { Subclasses } from './subclasses';
 import { originalExpressionType } from './value-object/original-type';
 import { resolvedSymbol } from './value-object/identity';
@@ -16,7 +17,7 @@ type CapabilityDepth = { readonly returns: number; readonly members: number; rea
 
 export class ScalarDispatchFacts {
   private readonly dispatch = new Map<ClassDeclaration, boolean>();
-  constructor(private readonly sources: SourceIndex, private readonly subclasses: Subclasses) {}
+  constructor(private readonly sources: SourceIndex, private readonly subclasses: Subclasses, private readonly origins: UnrelatedParameterOrigins, private readonly arrays: ReadonlySet<Node>) {}
   private escapesClass(reference: Node, chain: readonly ClassDeclaration[]): boolean {
     if (!isRuntimeReference(reference)) return false;
     if (Node.isIdentifier(reference) && ['eval', 'Function'].includes(reference.getText()) &&
@@ -278,8 +279,8 @@ export class ScalarDispatchFacts {
         return call.getArguments().some(argument => {
           if (this.unrelatedPrototype(argument, dependencies)) return false;
           const type = argument.getType();
-          return cls.getType().isAssignableTo(type) ||
-            (type.getSymbol()?.getDeclarations() ?? []).some(declaration => Node.isClassDeclaration(declaration) && dependencies.includes(declaration));
+          return (type.getSymbol()?.getDeclarations() ?? []).some(declaration => Node.isClassDeclaration(declaration) && dependencies.includes(declaration)) ||
+            (cls.getType().isAssignableTo(type) && !this.origins.proves(argument, dependencies, this.arrays));
         });
       });
     this.dispatch.set(cls, stable);

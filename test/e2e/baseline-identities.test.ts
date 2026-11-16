@@ -75,7 +75,6 @@ describe('baseline identities', () => {
     const todo = at('boolean-rule', 'todo.ts', 'Todo');
 
     expect(await baselineEntriesOf(fixture('boolean-rule'))).toEqual([
-      { rule: 'terminal-state-leak', aggregate: todo, method: 'complete', field: 'deleted', values: ['true'], count: 1 },
       { rule: 'terminal-state-leak', aggregate: todo, method: 'delete', field: 'deleted', values: ['true'], count: 1 },
       { rule: 'undispatched-events', owner: at('boolean-rule', 'aggregate-root.ts', 'AggregateRoot'), buffer: 'events', count: 1 },
     ]);

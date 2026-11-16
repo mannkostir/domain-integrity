@@ -9,13 +9,14 @@ import { resolveStateField } from './state-field';
 import { StateField } from './model';
 import { ScalarDependencyFacts } from './scalar-dependencies';
 import { ScalarDispatchFacts } from './scalar-dispatch';
+import { UnrelatedParameterOrigins } from './scalar-argument-origin';
 import { Subclasses } from './subclasses';
 
 export class ScalarCallableFacts {
   private readonly dispatch: ScalarDispatchFacts;
   private readonly dependencies: ScalarDependencyFacts;
-  constructor(sources: SourceIndex, subclasses: Subclasses) {
-    this.dispatch = new ScalarDispatchFacts(sources, subclasses);
+  constructor(sources: SourceIndex, subclasses: Subclasses, origins: UnrelatedParameterOrigins, arrays: ReadonlySet<Node>) {
+    this.dispatch = new ScalarDispatchFacts(sources, subclasses, origins, arrays);
     this.dependencies = new ScalarDependencyFacts(sources);
   }
   enumMember(node: Node): boolean { return this.dependencies.enumMember(node); }
@@ -61,6 +62,19 @@ export class ScalarReturnProof {
       return undefined;
     }
     return this.expression(node, use);
+  }
+  inertArguments(node: Node): boolean {
+    const literal = (argument: Node, depth: number): boolean => {
+      if (!this.take() || depth >= MAX_GETTER_DEPTH) return false;
+      if (Node.isParenthesizedExpression(argument)) return literal(argument.getExpression(), depth + 1);
+      return primitiveLiteral(argument) || (Node.isPrefixUnaryExpression(argument) &&
+        argument.getOperatorToken() === SyntaxKind.MinusToken && Node.isNumericLiteral(argument.getOperand()));
+    };
+    if (!Node.isCallExpression(node)) return this.valid();
+    const proven = this.take() && !node.hasQuestionDotToken() && node.getTypeArguments().length === 0 &&
+      node.getArguments().every(argument => literal(argument, 0));
+    if (!proven) this.failed = true;
+    return proven;
   }
   normalize(node: Expression, use: ScalarUse = 'scalar'): Expression | undefined {
     if (!this.take()) return undefined;

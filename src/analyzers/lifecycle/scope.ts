@@ -13,19 +13,20 @@ import { writtenMethods } from './written-methods';
 export const aggregateScope = (
   cls: ClassDeclaration,
   declaration: Pick<DomainDeclaration, 'eventMethods' | 'inertDecorators' | 'inertEventMethods' | 'inertMembers'>,
-  project: Pick<ProjectIndex, 'sources' | 'bracketWrites' | 'nameUses' | 'subclasses' | 'javascriptData'>,
+  project: Pick<ProjectIndex, 'sources' | 'bracketWrites' | 'nameUses' | 'subclasses' | 'javascriptData' | 'parameterOrigins'>,
 ): AggregateScope => {
   const family = classFamily(cls, project.subclasses);
   const arrows = arrowMethods(family, project.nameUses);
+  const arrays = plainEventArrays(family, project.bracketWrites, declaration.inertDecorators);
   return {
     cls,
-    scalarCallables: new ScalarCallableFacts(project.sources, project.subclasses),
+    scalarCallables: new ScalarCallableFacts(project.sources, project.subclasses, project.parameterOrigins, arrays),
     javascriptData: project.javascriptData,
     eventMethods: new Set(declaration.eventMethods),
     inertEventMethods: assertedInertEventMethods(declaration.inertEventMethods, cls, family, project, declaration.inertDecorators),
     inertMembers: new Set(declaration.inertMembers),
     leaksThis: leaksThis(family, arrows),
-    plainEventArrays: plainEventArrays(family, project.bracketWrites, declaration.inertDecorators),
+    plainEventArrays: arrays,
     eventBuffers: eventBuffers(family, project.bracketWrites, declaration.inertDecorators, new Set(declaration.eventMethods)),
     arrowMethods: arrows,
     writtenMethods: writtenMethods(cls, family, project.nameUses),
