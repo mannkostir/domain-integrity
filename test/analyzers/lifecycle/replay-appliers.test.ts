@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SyntaxKind } from 'ts-morph';
 import { SourceIndex } from '../../../src/analyzers/shared/source-index';
@@ -7,6 +8,10 @@ import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
 import { suggestLifecycles } from '../../../src/analyzers/lifecycle/suggest';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
 import { inMemoryProject } from '../../helpers/in-memory';
+
+const fixturePath = (path: string): string => resolve(path).replace(/\\/g, '/');
+const fixtureProject = (files: Readonly<Record<string, string>>) =>
+  inMemoryProject(Object.fromEntries(Object.entries(files).map(([path, text]) => [fixturePath(path), text])));
 
 const base = `
 interface Event { eventName: string }
@@ -46,21 +51,21 @@ export class Account extends AggregateRoot {
 `;
 
 const extract = (source = account, root = base, extra = '', transitions?: ReadonlyMap<string, readonly string[]>, mappedBase = false, otherFiles: Readonly<Record<string, string>> = {}) => {
-  const project = inMemoryProject({ ...(mappedBase ? {
+  const project = fixtureProject({ ...(mappedBase ? {
     '/src/account.ts': "import { AggregateRoot } from '../dist/base';\n" + events + source + extra,
     '/src/base.ts': root.replace('class AggregateRoot', 'export class AggregateRoot'),
     '/dist/base.d.ts': 'export declare class AggregateRoot { protected applyChange(event: unknown): void; private applyEvent; loadFromHistory(events: unknown[]): void; }\n//# sourceMappingURL=base.d.ts.map',
   } : { '/src/account.ts': root + events + source + extra }), ...otherFiles });
-  if (mappedBase) project.getFileSystem().writeFileSync('/dist/base.d.ts.map', JSON.stringify({ version: 3, sources: ['../src/base.ts'] }));
-  const target = project.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('Account');
+  if (mappedBase) project.getFileSystem().writeFileSync(fixturePath('/dist/base.d.ts.map'), JSON.stringify({ version: 3, sources: ['../src/base.ts'] }));
+  const target = project.getSourceFileOrThrow(fixturePath('/src/account.ts')).getClassOrThrow('Account');
   const model = lifecycleAnalyzer.extract({
     declaration: {
       ...DEFAULT_DECLARATION,
       lifecycles: [{ target, fields: [{ name: 'status', terminal: ['archived'], transitions, allowAfterTerminal: [] }], allowAfterTerminal: [] }],
     },
     files: project.getSourceFiles().filter((file) => !file.isDeclarationFile()),
-    projectRoot: '/',
-    repositoryRoot: '/',
+    projectRoot: fixturePath('/'),
+    repositoryRoot: fixturePath('/'),
   });
   return model;
 };
@@ -488,7 +493,7 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
   it('accepts the structurally compatible parameter reproduction as valid TypeScript', () => {
     const source = account.replace('event: Archived', 'event: Reassigned');
     const extra = "class Label { eventName = 'Label'; } function replace(label: Label) { label.eventName = 'Other'; } class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }";
-    const project = inMemoryProject({ '/src/account.ts': base + events + source + extra });
+    const project = fixtureProject({ '/src/account.ts': base + events + source + extra });
 
     expect(project.getPreEmitDiagnostics()).toEqual([]);
   });
@@ -533,7 +538,7 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
   it('accepts the broad object parameter reproduction as valid TypeScript', () => {
     const source = account.replace('event: Archived', 'event: Reassigned');
     const extra = "function replace(label: {}) { Object.assign(label, { eventName: 'Other' }); } class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }";
-    const project = inMemoryProject({ '/src/account.ts': base + events + source + extra });
+    const project = fixtureProject({ '/src/account.ts': base + events + source + extra });
 
     expect(project.getPreEmitDiagnostics()).toEqual([]);
   });
@@ -582,10 +587,10 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
   });
 
   it('keeps mayWrite conservative beside a conditional-copy reason', () => {
-    const project = inMemoryProject({ '/src/account.ts': base + events + serializedAccount + serializedExtra, ...transformerFiles() });
+    const project = fixtureProject({ '/src/account.ts': base + events + serializedAccount + serializedExtra, ...transformerFiles() });
     const sources = new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile()));
     const mutation = new MemberMutations(sources);
-    const property = project.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('Archived').getPropertyOrThrow('eventName');
+    const property = project.getSourceFileOrThrow(fixturePath('/src/account.ts')).getClassOrThrow('Archived').getPropertyOrThrow('eventName');
 
     expect([mutation.mayWrite(property), mutation.evidenceOf(property)]).toEqual([true, 'conditional-copy']);
   });
@@ -662,8 +667,8 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
     'const moduleName = "class-transformer"; const module = require(moduleName); unknownConsumer(module);',
     'const load = require; const module = load("class-transformer"); unknownConsumer(module);',
     'declare const moduleName: string; const module = import(moduleName);',
-    'import { ClassTransformer as Delegated } from "/node_modules/class-transformer/types/index"; Delegated.prototype.instanceToPlain = value => value;',
-    'const module = require("/node_modules/class-transformer/cjs/ClassTransformer"); unknownConsumer(module);',
+    `import { ClassTransformer as Delegated } from ${JSON.stringify(fixturePath('/node_modules/class-transformer/types/index'))}; Delegated.prototype.instanceToPlain = value => value;`,
+    `const module = require(${JSON.stringify(fixturePath('/node_modules/class-transformer/cjs/ClassTransformer'))}); unknownConsumer(module);`,
     'const module = require("../node_modules/class-transformer/cjs/ClassTransformer"); unknownConsumer(module);',
   ])('withholds conditional semantics after delegated exposure: %s', (exposure) => {
     expect(roles(extract(serializedAccount, base, serializedExtra + exposure, undefined, false, transformerFiles())))
@@ -835,10 +840,10 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
     const wide = Array.from({ length: 70 }, (_, i) => `p${i}: Wide${i}`).join(';');
     const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': `${Array.from({ length: 70 }, (_, i) => `interface Wide${i} { label: string }`).join(";")} export declare const metadata: { ${wide} };` };
     const extra = 'import { metadata } from "bridge"; unknownConsumer(metadata); ' + serializedExtra;
-    const project = inMemoryProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
+    const project = fixtureProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
     const sources = new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile()));
     const copies = new ConditionalCopies(sources);
-    const call = project.getSourceFileOrThrow('/src/account.ts').getFunctionOrThrow('serialize').getDescendantsOfKind(SyntaxKind.CallExpression)[0]!;
+    const call = project.getSourceFileOrThrow(fixturePath('/src/account.ts')).getFunctionOrThrow('serialize').getDescendantsOfKind(SyntaxKind.CallExpression)[0]!;
 
     expect([copies.isConditionalRoot(call), copies.authorityOf(call)]).toEqual([false, 'unresolved-delegate']);
   });
@@ -847,9 +852,9 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
     const wide = Array.from({ length: 70 }, (_, i) => `p${i}: Wide${i}`).join(';');
     const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': `${Array.from({ length: 70 }, (_, i) => `interface Wide${i} { label: string }`).join(";")} export declare const metadata: { ${wide} };` };
     const extra = 'import { metadata } from "bridge"; unknownConsumer(metadata); ' + serializedExtra;
-    const project = inMemoryProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
+    const project = fixtureProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
     const mutations = new MemberMutations(new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile())));
-    const property = project.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('Archived').getPropertyOrThrow('eventName');
+    const property = project.getSourceFileOrThrow(fixturePath('/src/account.ts')).getClassOrThrow('Archived').getPropertyOrThrow('eventName');
 
     expect([mutations.mayWrite(property), mutations.evidenceOf(property)]).toEqual([true, 'unresolved-delegate']);
   });
@@ -891,10 +896,10 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
   it('withholds conditional authority for an unresolved written surface', () => {
     const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': 'export declare const metadata: MissingType;' };
     const extra = 'import { metadata } from "bridge"; unknownConsumer(metadata); ' + serializedExtra;
-    const project = inMemoryProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
+    const project = fixtureProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
     const sources = new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile()));
     const copies = new ConditionalCopies(sources);
-    const call = project.getSourceFileOrThrow('/src/account.ts').getFunctionOrThrow('serialize').getDescendantsOfKind(SyntaxKind.CallExpression)[0]!;
+    const call = project.getSourceFileOrThrow(fixturePath('/src/account.ts')).getFunctionOrThrow('serialize').getDescendantsOfKind(SyntaxKind.CallExpression)[0]!;
 
     expect([copies.isConditionalRoot(call), copies.authorityOf(call)]).toEqual([false, 'unresolved-delegate']);
   });
@@ -997,9 +1002,9 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
     const root = base.replace('private applyEvent(event: Event, isNew = false) {', 'private applyEvent = (event: Event, isNew = false) => {');
     const extra = 'Object.defineProperty(AggregateRoot.prototype, "applyEvent", { value: (event: Event) => {} });';
 
-    const project = inMemoryProject({ '/src/account.ts': root + events + account + extra });
+    const project = fixtureProject({ '/src/account.ts': root + events + account + extra });
     const mutations = new MemberMutations(new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile())));
-    const member = project.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('AggregateRoot').getPropertyOrThrow('applyEvent');
+    const member = project.getSourceFileOrThrow(fixturePath('/src/account.ts')).getClassOrThrow('AggregateRoot').getPropertyOrThrow('applyEvent');
 
     expect(mutations.evidenceOf(member)).toBe('none');
   });
@@ -1137,4 +1142,45 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
   it('recognises literal event discriminators', () => {
     expect(leaks(account.replace('event: Updated', 'event: LiteralUpdated'), base, "class LiteralUpdated { eventName = 'Updated'; }")).toEqual([]);
   });
+
+  it.each([
+    ['multiple dispatch substitutions', base.replace('`apply${event.eventName}`', '`apply${event.eventName}${""}`')],
+    ['a whole-event substitution', base.replace('`apply${event.eventName}`', '`apply${event}`')],
+    ['an aliased discriminator receiver', base.replace('const handlerMethod', 'const source = event; const handlerMethod').replace('`apply${event.eventName}`', '`apply${source.eventName}`')],
+    ['an omitted forwarded event', base.replace('[handlerMethod](event)', '[handlerMethod]()')],
+    ['a non-array history collection', base.replace('loadFromHistory(events: Event[])', 'loadFromHistory(events: Set<Event>)')],
+    ['a mutable replay binding', base.replace('for (const event of events)', 'for (let event of events)')],
+    ['a nested replay loop', base.replace('for (const event of events) { this.applyEvent(event); }', 'const replay = () => { for (const event of events) { this.applyEvent(event); } }; replay();')],
+    ['a nested forwarding callback', base.replace('for (const event of events) { this.applyEvent(event); }', 'for (const event of events) { const apply = () => this.applyEvent(event); apply(); }')],
+  ])('withholds replay authority for %s', (_, root) => {
+    const project = fixtureProject({ '/src/account.ts': root + events + account });
+    expect(project.getPreEmitDiagnostics()).toEqual([]);
+
+    const result = roles(extract(account, root));
+
+    expect(result).toEqual(['command', 'command', 'command']);
+  });
+
+  it('does not infer an event identity from an interface discriminator', () => {
+    const source = account.replace('event: Archived', 'event: ArchivedInput');
+    const extra = 'interface ArchivedInput { eventName: string }';
+    const project = fixtureProject({ '/src/account.ts': base + events + source + extra });
+    expect(project.getPreEmitDiagnostics()).toEqual([]);
+
+    const result = roles(extract(source, base, extra));
+
+    expect(result).toEqual(['replay', 'replay', 'command']);
+  });
+
+  it('does not infer an event identity from an arbitrary discriminator initializer', () => {
+    const source = account.replace('event: Archived', 'event: ComputedArchived');
+    const extra = 'class ComputedArchived { eventName = String("Archived"); }';
+    const project = fixtureProject({ '/src/account.ts': base + events + source + extra });
+    expect(project.getPreEmitDiagnostics()).toEqual([]);
+
+    const result = roles(extract(source, base, extra));
+
+    expect(result).toEqual(['replay', 'replay', 'command']);
+  });
+
 });
