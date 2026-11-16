@@ -1,4 +1,4 @@
-import { Expression, IfStatement, Node, Statement, SwitchStatement, Symbol as MorphSymbol } from 'ts-morph';
+import { Expression, IfStatement, Node, Statement, SwitchStatement } from 'ts-morph';
 import { scanHelperStep } from './assertion-helper';
 import { ExitKind, branchStatements, exitsEarly, containsReturnOrThrow } from './early-exit';
 import { AggregateScope } from './field-ref';
@@ -7,9 +7,8 @@ import { MethodImplementation } from './instance-method';
 import { GuardRules, GuardScan, exitFieldReads, isFieldAssignment, mayAssignField, readsFieldOutside } from './guard-scan';
 import { collapseGuardTokens, guardUniverse } from './guard-tokens';
 import { Sources, StateField } from './model';
-import { isLibraryNode } from '../shared/library';
-import { isAccessor } from './state-field';
-import { FieldSwitch, SwitchGroup, isFieldSwitch, readFieldSwitch } from './switch-guard';
+import { isPlainDataPathFromThis, setterStateAssignment } from './state-assignment';
+import { FieldSwitch, SwitchGroup, readFieldSwitch } from './switch-guard';
 import { difference, intersect, union } from './values';
 
 type ExitGuard = {
@@ -39,37 +38,20 @@ const exitGuard = (statement: Statement, exits: ExitKind): ExitGuard | undefined
 const unwrapParentheses = (node: Expression): Expression =>
   Node.isParenthesizedExpression(node) ? unwrapParentheses(node.getExpression()) : node;
 
-const assignedMember = (target: Expression): MorphSymbol | undefined => {
-  if (Node.isPropertyAccessExpression(target)) return target.getNameNode().getSymbol();
-  if (Node.isElementAccessExpression(target)) return target.getArgumentExpression()?.getSymbol();
-  return undefined;
-};
-
-const isPlainDataMember = (symbol: MorphSymbol | undefined): boolean => {
-  const declarations = symbol?.getDeclarations() ?? [];
-  return declarations.length > 0 && !declarations.some(isAccessor) && !declarations.some(isLibraryNode);
-};
-
-const isPlainDataPathFromThis = (target: Expression): boolean => {
-  if (!Node.isPropertyAccessExpression(target) && !Node.isElementAccessExpression(target)) return false;
-  const holder = target.getExpression();
-  return (
-    isPlainDataMember(assignedMember(target)) && (Node.isThisExpression(holder) || isPlainDataPathFromThis(holder))
+const assignsField = (statement: Statement, field: StateField, scope: AggregateScope): boolean => {
+  if (!Node.isExpressionStatement(statement)) return false;
+  const expression = unwrapParentheses(statement.getExpression());
+  return isFieldAssignment(expression, field, scope) && (
+    isPlainDataPathFromThis(expression.getLeft(), scope.cls, scope.javascriptData) || setterStateAssignment(expression, field.name, scope.cls, scope.javascriptData) !== undefined
   );
 };
 
-const assignsField = (statement: Statement, field: StateField): boolean => {
-  if (!Node.isExpressionStatement(statement)) return false;
-  const expression = unwrapParentheses(statement.getExpression());
-  return isFieldAssignment(expression, field) && isPlainDataPathFromThis(expression.getLeft());
-};
+const overwritesField = (statement: Statement, field: StateField, scope: AggregateScope): boolean =>
+  assignsField(statement, field, scope) ||
+  (exitGuard(statement, 'any')?.continuation.some((inner) => overwritesField(inner, field, scope)) ?? false);
 
-const overwritesField = (statement: Statement, field: StateField): boolean =>
-  assignsField(statement, field) ||
-  (exitGuard(statement, 'any')?.continuation.some((inner) => overwritesField(inner, field)) ?? false);
-
-const statementsUntilOverwrite = (statements: readonly Statement[], field: StateField): readonly Statement[] => {
-  const overwrite = statements.findIndex((statement) => overwritesField(statement, field));
+const statementsUntilOverwrite = (statements: readonly Statement[], field: StateField, scope: AggregateScope): readonly Statement[] => {
+  const overwrite = statements.findIndex((statement) => overwritesField(statement, field, scope));
   return overwrite === -1 ? statements : statements.slice(0, overwrite + 1);
 };
 
@@ -86,7 +68,7 @@ const wrappingGuard = (statements: readonly Statement[]): IfStatement | undefine
 const scanWrapper = (wrapper: IfStatement, field: StateField, scope: AggregateScope): GuardScan => {
   const evaluation = evaluateCondition(wrapper.getExpression(), field, scope);
   const body = branchStatements(wrapper.getThenStatement());
-  const considered = statementsUntilOverwrite(body, field);
+  const considered = statementsUntilOverwrite(body, field, scope);
   const inner = scanStatements(considered, field, scope);
   if (evaluation === 'unknown' || inner === 'unknown') return 'unknown';
   return {
@@ -103,7 +85,7 @@ const narrow = (scan: GuardScan, step: GuardScan): GuardScan =>
 const scanExitGuard = (guard: ExitGuard, field: StateField, scope: AggregateScope, rules: GuardRules): GuardScan => {
   const evaluation = evaluateCondition(guard.condition, field, scope);
   if (evaluation === 'unknown') return 'unknown';
-  const continuation = scanEarlyExits(statementsUntilOverwrite(guard.continuation, field), field, scope, rules);
+  const continuation = scanEarlyExits(statementsUntilOverwrite(guard.continuation, field, scope), field, scope, rules);
   const recognised = new Set<Node>([guard.condition, ...exitFieldReads(guard.exit, field, scope)]);
   return narrow({ allowed: evaluation[guard.passesWhen], recognised }, continuation);
 };
@@ -116,9 +98,9 @@ const switchExcludingExits = (read: FieldSwitch, field: StateField): GuardScan =
   return { allowed: difference(guardUniverse(field), exits), recognised: new Set(read.recognised) };
 };
 
-const scanSwitchStep = (statement: SwitchStatement, field: StateField, scope: AggregateScope, exits: ExitKind): GuardScan => {
+const scanSwitchStep = (statement: SwitchStatement, field: StateField, scope: AggregateScope, exits: ExitKind): GuardScan | undefined => {
   const read = readFieldSwitch(statement, field, scope, exits);
-  return read === 'unknown' ? read : switchExcludingExits(read, field);
+  return read === 'non-field' ? undefined : read === 'unknown' ? read : switchExcludingExits(read, field);
 };
 
 const scanExitStep = (
@@ -129,7 +111,10 @@ const scanExitStep = (
 ): GuardScan | undefined => {
   const guard = exitGuard(statement, rules.exits);
   if (guard !== undefined) return scanExitGuard(guard, field, scope, rules);
-  if (isFieldSwitch(statement, field)) return scanSwitchStep(statement, field, scope, rules.exits);
+  if (Node.isSwitchStatement(statement)) {
+    const step = scanSwitchStep(statement, field, scope, rules.exits);
+    if (step !== undefined) return step;
+  }
   return scanHelperStep(statement, field, scope, rules, scanEarlyExits);
 };
 
@@ -144,19 +129,19 @@ const scanEarlyExits = (
       if (scan === 'unknown') return scan;
       const step = scanExitStep(statement, field, scope, rules);
       if (step === undefined) return rules.strict ? 'unknown' : scan;
-      const followsWrite = statements.slice(0, index).some((earlier) => mayAssignField(earlier, field));
+      const followsWrite = statements.slice(0, index).some((earlier) => mayAssignField(earlier, field, scope));
       return followsWrite ? 'unknown' : narrow(scan, step);
     },
     { allowed: guardUniverse(field), recognised: new Set<Node>() },
   );
 
-const soleFieldSwitch = (statements: readonly Statement[], field: StateField): SwitchStatement | undefined => {
+const soleSwitch = (statements: readonly Statement[]): SwitchStatement | undefined => {
   const [only] = statements;
-  return statements.length === 1 && only !== undefined && isFieldSwitch(only, field) ? only : undefined;
+  return statements.length === 1 && only !== undefined && Node.isSwitchStatement(only) ? only : undefined;
 };
 
 const scanWorkGroup = (group: SwitchGroup, field: StateField, scope: AggregateScope): GuardScan => {
-  const inner = scanStatements(statementsUntilOverwrite(group.work, field), field, scope);
+  const inner = scanStatements(statementsUntilOverwrite(group.work, field, scope), field, scope);
   return inner === 'unknown' ? inner : { allowed: intersect(group.tokens, inner.allowed), recognised: inner.recognised };
 };
 
@@ -168,6 +153,7 @@ const joinWorkGroups = (scan: GuardScan, inner: GuardScan): GuardScan =>
 const scanSwitchWrapper = (statement: SwitchStatement, field: StateField, scope: AggregateScope): GuardScan => {
   const read = readFieldSwitch(statement, field, scope, METHOD_RULES.exits);
   if (read === 'unknown') return read;
+  if (read === 'non-field') return { allowed: guardUniverse(field), recognised: new Set() };
   const workGroups = read.groups.filter((group) => group.kind === 'work');
   if (workGroups.length === 0) return switchExcludingExits(read, field);
   return workGroups
@@ -178,12 +164,12 @@ const scanSwitchWrapper = (statement: SwitchStatement, field: StateField, scope:
 const scanStatements = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan => {
   const wrapper = wrappingGuard(statements);
   if (wrapper) return scanWrapper(wrapper, field, scope);
-  const fieldSwitch = soleFieldSwitch(statements, field);
+  const fieldSwitch = soleSwitch(statements);
   return fieldSwitch ? scanSwitchWrapper(fieldSwitch, field, scope) : scanEarlyExits(statements, field, scope, METHOD_RULES);
 };
 
 const statementSources = (statements: readonly Statement[], field: StateField, scope: AggregateScope): Sources => {
-  const considered = statementsUntilOverwrite(statements, field);
+  const considered = statementsUntilOverwrite(statements, field, scope);
   const scan = scanStatements(considered, field, scope);
   if (scan === 'unknown') return { kind: 'unknown' };
   return considered.some((statement) => readsFieldOutside(statement, field, scope, scan.recognised))

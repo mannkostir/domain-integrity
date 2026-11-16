@@ -1,5 +1,19 @@
 # Real-world validation
 
+## Value-object projections: issue #65
+
+The final comparison tested all 14 pinned public repositories in Setup against accepted main `f314ab3` and reviewed implementation `3db176d`. All 28 ordinary/declared-event comparisons preserve identical finding objects, exit codes, problem arrays and stderr: **63 ordinary findings** and **83 declared-event findings**, with no additions or losses. The recorded Codely configuration failure and separately tracked replay-applier false findings remain unchanged. Original configs, pinned sources, dependencies and the shared harness were preserved. The private reference repository was not accessed; its rerun remains a maintainer validation gate.
+
+Focused checks statically load Booking-System at `105914146ea9a1a28677e4fb03128ad577c43780` with its real tsconfig and substituted Payment props types. Payment resolves seven enum states, five guarded command source sets and six replacement tokens. Cancel remains unknown because it reads a scalar snapshot before replacement. With explicit FAILED/CANCELLED/REFUNDED terminals, updateReference and updateMetadata are justified terminal-leak controls. NEED_TO_PAY initialization retains unresolved caller/persistence evidence; this does not establish a complete inferred transition or terminal table. The unchanged original Booking configuration retains 13 event findings and no lifecycle findings; the separate Payment configuration produces the two lifecycle controls plus the existing event-buffer finding, with no problems or stderr. BookingStatus and InvoiceStatus were inspected individually; this is not a claim that every repository status or command is supported.
+
+Independent reviews resolved coercive comparisons, compatible sibling substitution, structural writer exposure, borrowed fresh holders, ambient-constructor freshness and export-star dependency observation. Authored positive/negative and runtime probes retain supported findings and withhold uncertain cases. All **3,256 tests**, coverage, typecheck, full lint, build and installed-package verification passed on the reviewed source. Coverage is **97.34% statements, 92.52% branches, 99.06% functions and 99.22% lines**, with unchanged thresholds.
+
+## State setter cutoff: issue #129
+
+The final comparison used all 14 pinned public repositories in Setup against accepted main `739d467` and the independently reviewed setter implementation. All 28 ordinary/declared-event comparisons retain identical finding objects, exit codes, problem arrays and stderr: **63 ordinary findings** and **83 declared-event findings**, with no additions or losses. The recorded Codely configuration failure is unchanged. Pinned commits, original configs, dependencies and the shared harness were preserved. The private reference repository was not accessed; its rerun remains a maintainer validation gate.
+
+Focused regressions and external positive/negative CLI probes cover guard order, outer RHS reads, assigned-value substitution, inferred props data, conditional writes, exact instance/private/super lookup and conservative rejection of guarded or effectful setters. Independent final review resolved the private-brand and inferred-props regressions and passed 22 additional zero-diagnostic probes. All **2,579 tests**, coverage, typecheck, lint, build and installed-package checks passed on the reviewed source. Coverage is **98.18% statements, 93.31% branches, 99.14% functions and 99.34% lines**.
+
 ## Plain setter writes: issue #130
 
 The final comparison used all 14 pinned public repositories in Setup against accepted main `4f2be2a` and reviewed implementation `7ba41d4`. Ordinary configurations retain **63 findings**, and the explicitly declared event sets retain **83 findings**. All 28 base/branch comparisons have identical finding objects, exit codes, problem arrays and stderr; no finding was added or lost. The existing Codely configuration failure remains identical. Original configs and pinned source commits were preserved. No private reference repository was accessed; its rerun remains a maintainer validation gate.
@@ -148,9 +162,75 @@ The declared comparisons used the original configs. The ordinary comparison copi
 
 Seventeen out-of-repository CLI probes cover both directions: plain construction, own generic parameter, own matching string, first/second/aliased/type imports, named re-export, external generic and union parameters, external string topics, external and self value escapes, `new this()`, self construction, `instanceof` and subclasses with handlers. All branch expectations pass. Behavioral tests also exercise `dead-handler`, both saga consumers, local and type re-exports, default-export escapes and self factories; the final 29-case regression spec has seven failures on accepted main and passes on the branch. A separate reference test preserves matching strings in another source file even when their text positions overlap the event declaration.
 
+### Historical receiver recovery checkpoint
+
 The focused receiver/target recovery re-run uses accepted main `4f2be2a` (PR137), after its event-reference fixes, and the same fourteen public commit pins and recorded declared configs. The freshly rebuilt main reports **83** findings and the receiver-scoped issue #126 branch reports **80**. Only the three Job applier leaks disappear, exit1 to0. Every other full JSON report and exit code, and every stderr, is unchanged. These accepted-base totals supersede the earlier issue #126 comparisons for current integration; ordinary-config counts were not rerun.
 
 The recovery checks 44 independent probe projects against both builds. Fresh bulk-copy targets, unrelated fresh records/arrays and unrelated class receivers (including classes with same-named protocol members) preserve quiet appliers. Actual constructor, external and declaration-mapped replacements remain judged. Receiver aliases include subsequent binding writes, so an initializer `{}` followed by `alias = this` cannot supply a freshness proof in direct or mapped bases. The write query carries the expected method/discriminator declaration and canonical class identity, and bulk targets survive aliases, native invocation wrappers and unknown source spreads. Event discriminator mutations affect only the corresponding event owner; unrelated event appliers stay quiet. Ordinary/direct commands and all unrelated-analysis findings remain present. All non-terminal-leak probe findings match between builds. Private validation, root independent re-review and final frozen-source full gates remain coordinator/maintainer work; this recovery ran focused verification only.
+
+The receiver-recovery totals above belong to that historical checkpoint. They do not verify the current integrated issue #126 candidate, whose actual pinned sample must be rechecked against the accepted post-#128 base.
+
+## Guard and constructor-data re-run — 2026-11-16
+
+### Historical intermediate checkpoint
+
+The initial issue [#128](https://github.com/mannkostir/domain-integrity/issues/128) comparison ran fourteen public repositories in both ordinary and declared-event modes: 28 baseline/candidate CLI comparisons. The baseline is main `309df1ed11e20455dfaa0d1ad06963c450f6eaf7`; the then-accepted implementation checkpoint was `2399b6fa4551b95fc529f8fd00e7777047fac866`. The CLI snapshot was built from the reviewed 411-file source/test manifest (SHA-256 `1e81fa991a18c38a424fcbf8afa15b38af7a4509f49a9455477566444c73ae9b`). The subsequent checkpoint `d764054894f7038dca3b90845c94e0b5751d9d2d` only removes one trailing blank line in `src/analyzers/lifecycle/scalar-dependencies.ts`; it changes no runtime logic. Candidate `dist/cli.js` SHA-256 is `d3372a3da4238b95d0e3474976001ed05484713e009d6a65f725413240eb06de`; baseline CLI SHA-256 is `f129080d8fe35f9df885a01db5fac5fc84a1c6c6d418a36e36ce1d8b8e8dece4`.
+
+The Setup pins, installed dependencies, shared harness, application sources and original configs were preserved. Each invocation used `check --format json` with the recorded project and config. Declared mode used the original configs, including the three existing `events.inProcess` lists. Ordinary mode omitted only those lists in copied configs for domain-driven-hexagon, ddd-forum and Booking-System, with absolute imports and copied tsconfigs retaining the original root files and references while excluding the original config, as in the #125 comparison. Other ordinary runs used their original configs. Configs were read statically; no public application or config was executed. The private reference repository was not accessed and still requires the maintainer's check.
+
+| Repository (Setup pin) | Ordinary baseline → candidate | Declared baseline → candidate | Exit codes in both builds (ordinary / declared) |
+|---|---:|---:|---|
+| kyhsa93/nestjs-rest-cqrs-example (`03408fe`) | 11 → 11 | 11 → 11 | 1 / 1 |
+| bitloops/ddd-hexagonal-cqrs-es-eda (`daa3f22`) | 5 → 5 | 5 → 5 | 1 / 1 |
+| undb-io/undb (`3d2e93b`) | 2 → 2 | 2 → 2 | 1 / 1 |
+| Sairyss/domain-driven-hexagon (`5c2d15a`) | 0 → 0 | 4 → 4 | 0 / 1 |
+| stemmlerjs/ddd-forum (`24df03e`) | 1 → 1 | 5 → 5 | 1 / 1 |
+| CodelyTV/typescript-ddd-example (`94717b0`) | 0 → 0 | 0 → 0 | 2 / 2 |
+| AdrianLopezGue/daruma-backend (`bc610c0`) | 13 → 4 | 13 → 4 | 1 / 1 |
+| emadansari96/Booking-System (`1059141`) | 1 → 1 | 13 → 13 | 1 / 1 |
+| illyanaAvelar/mba-full-cycle-ddd-ticket-sale (`843effa`) | 6 → 6 | 6 → 6 | 1 / 1 |
+| hpi-schul-cloud/schulcloud-server (`a8b06c1`) | 18 → 16 | 18 → 16 | 1 / 1 |
+| Giveth/SiweAuthMicroservice (`b7d787d`) | 3 → 3 | 3 → 3 | 1 / 1 |
+| yerinadler/typescript-event-sourcing-sample-app (`354ab3c`) | 3 → 3 | 3 → 3 | 1 / 1 |
+| adonisjs/application (`46f746c`) | 0 → 0 | 0 → 0 | 0 / 0 |
+| openlayers/openlayers (`d4851af`) | 0 → 0 | 0 → 0 | 0 / 0 |
+| **Public total** | **63 → 52** | **83 → 72** | |
+
+There are no additions. Full finding objects, rather than counts alone, were compared: the same eleven `terminal-state-leak` errors disappear in both modes and every retained finding is unchanged. Exit codes and stderr are unchanged across all 28 comparisons. Codely retains exit 2, empty stdout and its missing-`domain.config.ts` diagnostic on stderr; it produces no report, so its zero count is not a clean analysis. Kyhsa93 and bitloops retain their existing deprecated-option warnings on stderr (`aggregateBaseClasses` and `inertMembers`, respectively). All other public runs have empty stderr; every run that produces a report has no problems.
+
+These are **conservative detection losses**, not confirmed fixes for application false positives. An unproved foreign call, including one nested in an otherwise unrelated comparison, now makes the guard unknown even when field-reference tracing sees no state. In all eleven triaged method/field pairs, both builds find no field reference in the condition and no `this` leak, but those facts do not establish runtime dispatch or dependency noninterference. The earlier predicate checkpoint had the same delta; this intermediate comparison confirmed it after getter-operand integration. It does not certify the later dispatch and argument-origin repairs.
+
+Daruma (`bc610c0463aa7d7ea888be0f19734a60478ee4a6`) loses nine reports, all for `_isRemoved` at `true`. These are the complete lost method identities and triggering conditions; paths are relative to that public repository:
+
+| Method | Location | Unproved condition |
+|---|---|---|
+| `Member.setUserId` | `src/member/domain/model/member.ts:66` | `userId.equals(this._userId)` |
+| `Member.rename` | `src/member/domain/model/member.ts:76` | `name.equals(this._membername)` |
+| `Group.rename` | `src/group/domain/model/group.ts:76` | `name.equals(this._name)` |
+| `Group.changeCurrencyCode` | `src/group/domain/model/group.ts:84` | `currencyCode.equals(this._currencyCode)` |
+| `Bill.rename` | `src/bill/domain/model/bill.ts:127` | `name.equals(this._name)` |
+| `Bill.changeMoney` | `src/bill/domain/model/bill.ts:159` | `money.equals(this._amount.money)` |
+| `Bill.changeCurrencyCode` | `src/bill/domain/model/bill.ts:167` | `currencyCode.equals(this._amount.currencyCode)` |
+| `Bill.changeDate` | `src/bill/domain/model/bill.ts:177` | `date.equals(this._date)` |
+| `RecurringBill.changePeriod` | `src/recurringBill/domain/model/recurring-bill.ts:82` | `period.equals(this._recurringBillPeriod)` |
+
+Each condition returns early on equality before emitting a change event; none tests `_isRemoved` in the written method. The inherited `equals` compares runtime constructors and invokes external `shallowEqual` on props. The supplied receiver can have an overridden or replaced method, and argument getters add obligations in the money/currency cases. A nominal implementation and frozen props do not prove stable dispatch or dependency purity. Ordinary values can still allow changes after removal; the record does not establish that these applications actually replace methods.
+
+Schulcloud (`a8b06c1fb1fdb8114a9a20e928f501e3a0a01688`) loses two reports from `FileEntity.removeCreatorId`, at `apps/server/src/modules/files/entity/file.entity.ts:149`: `deletedAt` at `set` and `deleted` at `true`. The condition is `creatorId === this._creatorId?.toHexString()`, followed by `_creatorId = undefined`. The stored `ObjectId` is public, mutable and decorated. BSON's ordinary formatting implementation alone does not prove that the selected runtime method is unchanged or cannot observe deletion state through a replacement closure. No deletion-state test appears in the written method, and matching IDs can ordinarily still reach the write. The new same-receiver getter normalization does not recover either these optional foreign calls or Daruma's parameter-receiver calls with arguments.
+
+Separate authored model, CLI and isolated runtime probes cover proven JavaScript constructor storage, safe scalar reads and plain writes, actual nullable Boolean identity, bounded predicates and getter comparisons/switch/includes. Negative controls retain effects, replacement and dependency exposure as unknown. Authored runtime analogues demonstrate how replaced foreign methods can guard on terminal state; they are not executions of the pinned applications or evidence that those applications exhibit replacement. Nullable-object getter truthiness/nullish identity is operation-specific and does not establish general object/library purity. Existing scalar value-object projection belongs to #65; this re-run does not claim new projection or serializer support. At this checkpoint, generic `init` suggestions of `unset` as terminal were unchanged; the later owner decision below preserves that behavior.
+
+The historical sections and totals below retain their original run contexts. The intermediate totals above explicitly account for the eleven losses; they do not reset earlier expected findings. The native 2,764-test covering run belongs to this earlier checkpoint. Public validation and focused probes do not replace the six independent local gates: full tests, coverage, typecheck, full lint, build and installed-package verification. Direct emitted-declaration CLI probes simulate declaration resolution; they do not verify an installed package.
+
+### Reviewed dispatch and argument-origin checkpoint
+
+The later reviewed code commit is `4f4d5bdd035303dad110303fa4ec086ac06305ef`, with 417 source/test files matching manifest SHA-256 `e0847be47af2d5c44d92839a35444a05515092705e6c952b6cc2c3f5ede639ff`. Its immutable CLI SHA-256 is `52e5c4dae86034af747d5a0487dba7e5d5497b011e41527a051f1e3e4d8e2c43`. Earlier public comparisons, including the 411-file comparison above and subsequent intermediate candidates, are historical. A separate completed comparison against main `309df1ed11e20455dfaa0d1ad06963c450f6eaf7` and reconciliation of all 28 raw results establish the public results for this exact checkpoint. The baseline CLI remains `f129080d8fe35f9df885a01db5fac5fc84a1c6c6d418a36e36ce1d8b8e8dece4`.
+
+All fourteen Setup pins and original configs are unchanged, and every count and exit-code column in the table above also applies to this latest comparison: ordinary **63 → 52**, declared **83 → 72**. There are zero additions; all retained finding objects and all eleven removed objects per mode are identical to the intermediate comparison. The nine Daruma identities and two Schulcloud identities and their rationale above therefore remain current. These are conservative detection losses, not proven application false-positive corrections. Exits, problems and stderr are unchanged in all 28 comparisons: Codely retains exit 2 and empty stdout with its missing-config diagnostic, kyhsa93 and bitloops retain their deprecated-option warnings, other stderr is empty, and every emitted report has no problems. The unchanged setup reads configs statically and executes neither public applications nor configs.
+
+The optional helper-argument-origin proof requires complete dispatch, use and capability evidence throughout the actual runtime source set. Unproved opaque callable or container effects can withhold it, including in an explicitly loaded generic config implementation; there is no first-party or library-name exemption. The original three ordinary-mode copied configs retain their source imports of the config implementation; this setup produced no new finding delta and does not exempt that implementation from runtime-source proof requirements. Configured inert library member lookup remains separate from argument noninterference: no-argument and proven safe literal-argument calls are supported, while effectful or unproved aliased or wrapped arguments remain unknown. This does not expand nullable-object operations, scalar value-object projection or serializer support. The owner confirmed keeping the existing generic `unset` suggestion: when clearing a nullable state leaves no visible outgoing transition from `unset`, `init` can suggest it as terminal. This is an inference to review against the intended lifecycle.
+
+Public validation does not establish the six local gates or installed-package verification. The private reference remains a maintainer validation gap.
 
 ## Summary
 
@@ -325,7 +405,7 @@ The first run also reported the 27 private `on<Event>` appliers: 10 on Bill, 4 e
 
 ## emadansari96/Booking-System
 
-There were no lifecycle findings. Booking, Payment and Invoice keep their status in value objects (`BookingStatus.create(...)`, `status.canTransitionTo(...)`), which are not supported state types. The project also sets `strictNullChecks: false`, so its optional timestamps are not nullable state fields. Only the `isActive` booleans on four aggregates were suggested. They have no terminal value.
+In the historical run recorded here there were no lifecycle findings. Booking, Payment and Invoice keep their status in value objects (`BookingStatus.create(...)`, `status.canTransitionTo(...)`), which are not supported state types. The project also sets `strictNullChecks: false`, so its optional timestamps are not nullable state fields. Only the `isActive` booleans on four aggregates were suggested. They have no terminal value.
 
 The original event-flow run reported nothing here either. The `CommissionStrategyUpdated`, `CommissionStrategyActivated` and `CommissionStrategyDeactivated` handlers never run, but their events are constructed and raised with `addDomainEvent` into a buffer that nothing dispatches, which `undispatched-events` now reports as `AggregateRoot._domainEvents`.
 

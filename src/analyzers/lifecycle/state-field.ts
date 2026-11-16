@@ -1,3 +1,4 @@
+import { ProjectedFields } from './value-object/context';
 import { ClassDeclaration, Symbol as MorphSymbol, Node, Type } from 'ts-morph';
 import { SET, UNSET, isNullish, literalToken } from '../../engine/value-token';
 import { Problem } from '../../finding';
@@ -79,6 +80,10 @@ type LiteralStates = { readonly kind: StateFieldKind; readonly values: readonly 
 const literalStates = (present: readonly Type[]): LiteralStates | undefined => {
   const [first] = present;
   if (first === undefined) return undefined;
+  if (present.every((member) => member.isBooleanLiteral())) {
+    const tokens = new Set(present.map(literalToken));
+    return { kind: 'boolean', values: BOOLEAN_VALUES.filter((value) => tokens.has(value.token)), enumReference: undefined };
+  }
   if (present.every((member) => member.isEnumLiteral())) {
     return { kind: 'enum', values: present.map(enumValue), enumReference: enumReferenceOf(first) };
   }
@@ -90,7 +95,7 @@ const literalStates = (present: readonly Type[]): LiteralStates | undefined => {
 
 const isFalsyLiteral = (member: Type): boolean => {
   const value = member.getLiteralValue();
-  return value === '' || value === 0;
+  return value === '' || value === 0 || (member.isBooleanLiteral() && literalToken(member) === 'false');
 };
 
 const resolvedLiterals = (name: string, states: LiteralStates): FieldResolution => ({
@@ -116,18 +121,21 @@ const resolvedNullable = (name: string, members: readonly Type[], setMayBeFalsy:
   field: { name, kind: 'nullable', values: NULLABLE_VALUES, enumReference: undefined, unsetForms: unsetFormsOf(members), setMayBeFalsy },
 });
 
-export const resolveStateField = (cls: ClassDeclaration, name: string): FieldResolution => {
+export const resolveStateField = (cls: ClassDeclaration, name: string, projections?: ProjectedFields): FieldResolution => {
   if (isAccessorOnly(cls, name)) {
     return { kind: 'problem', problem: stateFieldAccessor(aggregateName(cls), name) };
   }
   const type = fieldType(cls, name);
   if (!type) return { kind: 'problem', problem: stateFieldMissing(aggregateName(cls), name) };
+  const projection = projections?.projection(name);
+  if (projection !== undefined) return resolvedLiterals(name, {
+    kind: 'enum',
+    values: projection.values.map(value => ({ token: value.token, label: value.label, source: expressionSource(`${projection.enumDeclaration.getName()}.${value.label}`) })),
+    enumReference: { name: projection.enumDeclaration.getName(), file: projection.enumDeclaration.getSourceFile().getFilePath() },
+  });
   const members = type.isUnion() ? type.getUnionTypes() : [type];
   const present = members.filter((member) => !isNullish(member));
   const nullable = present.length < members.length;
-  if (!nullable && present.length > 0 && present.every((member) => member.isBooleanLiteral())) {
-    return resolvedLiterals(name, { kind: 'boolean', values: BOOLEAN_VALUES, enumReference: undefined });
-  }
   const states = literalStates(present);
   if (!nullable && states !== undefined) return resolvedLiterals(name, states);
   if (nullable && states !== undefined && !namesUnset(states)) return resolvedUnsettableLiterals(name, states, members, present);

@@ -392,22 +392,27 @@ export class Plain {
   private tags: string[] = [];
   constructor() { this._name = Name.create('plain'); }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
   retag(n: string): void { this.tags = this.tags.filter((tag) => tag !== n && this.status !== 'closed'); }
+}
+export class ForeignGuard {
+  status: Status = 'open';
+  private _name = Name.create('');
+  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
 }
 export class Built {
   status: Status = 'open';
   private _name!: Name;
   static create(): Built { const o = new Built(); o._name = Name.create('a'); return o; }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
 }
 export class Cloned {
   status: Status = 'open';
   private _name!: Name;
   clone(): Cloned { const o = new Cloned(); o._name = this._name; return o; }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
 }
 const compare = (other: Compared): boolean => other.status === 'open';
 export class Compared {
@@ -415,14 +420,14 @@ export class Compared {
   private _name!: Name;
   same(other: Compared): boolean { return compare(other); }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
 }
 export class AnyBuilt {
   status: Status = 'open';
   private _name!: Name;
   static create(): AnyBuilt { const o: any = new AnyBuilt(); o._name = Name.create('a'); return o; }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
 }
 export class Listed {
   status: Status = 'open';
@@ -431,7 +436,7 @@ export class Listed {
   private items: Array<{ id: string }> = [];
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
   own(): number { return this.items.filter((i) => i.id === this.id).length; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
 }
 export class Recorder {
   status: Status = 'open';
@@ -445,7 +450,7 @@ export class AssignedIn {
   private _name!: Name;
   constructor(props: object) { Object.assign(this, props); }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
 }
 export class AssignedAlias {
   status: Status = 'open';
@@ -453,14 +458,14 @@ export class AssignedAlias {
   private owner: object;
   constructor(props: object) { const self = Object.assign(this, props); this.owner = self; }
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
 }
 export class CopiedOut {
   status: Status = 'open';
   private _name!: Name;
   protected props: { note: string } = { note: '' };
   close(): void { if (this.status === 'closed') throw new Error('x'); this.status = 'closed'; }
-  rename(n: string): void { if (this._name.equals(Name.create(n))) return; this._name = Name.create(n); }
+  rename(n: string): void { this._name; this._name = Name.create(n); }
   snapshot(): { note: string } { return { ...this.props }; }
 }
 `,
@@ -575,5 +580,11 @@ describe('aggregates that do not leak this', () => {
 
   it('still report an unguarded mutator that reads a value-object field, even with this inside a filter callback', () => {
     expect(leaks(classNamed('/plain/name.ts', 'Plain'))).toContain('rename');
+  });
+});
+
+describe('foreign value-object conditions', () => {
+  it('leaves an original equality guard unknown without a this escape', () => {
+    expect(leaks(classNamed('/plain/name.ts', 'ForeignGuard'))).not.toContain('rename');
   });
 });
