@@ -1,6 +1,6 @@
 import { BinaryExpression, Node, Statement, SyntaxKind } from 'ts-morph';
 import { ExitKind } from './early-exit';
-import { AggregateScope, MAX_GETTER_DEPTH, fieldNameOf, referencesFieldDirectly, thisGetterExpression } from './field-ref';
+import { AggregateScope, fieldNameOf, referencesFieldDirectly, scalarCallable } from './field-ref';
 import { MethodImplementation } from './instance-method';
 import { setterStateAssignment } from './state-assignment';
 import { ScalarReturnProof } from './scalar-callable';
@@ -57,21 +57,12 @@ const writesField = (node: Node, field: StateField, scope: AggregateScope): bool
   [node, ...node.getDescendants()].some((candidate) =>
     (fieldNameOf(candidate) === field.name && !isReadOnly(candidate)) || isFieldAssignment(candidate, field, scope));
 
-const isPlainGetterRead = (node: Node, field: StateField, scope: AggregateScope, depth: number): boolean => {
-  const expression = depth < MAX_GETTER_DEPTH ? thisGetterExpression(node, scope.cls) : undefined;
-  return (
-    expression !== undefined &&
-    isReadOnly(node) &&
-    !writesField(expression, field, scope) &&
-    !readsFieldOutside(expression, field, scope, new Set(plainFieldReads(expression, field, scope, depth + 1)))
-  );
-};
-
-const plainFieldReads = (node: Node, field: StateField, scope: AggregateScope, depth: number): readonly Node[] => {
+const plainFieldReads = (node: Node, field: StateField, scope: AggregateScope): readonly Node[] => {
   const proof = new ScalarReturnProof(field, scope);
-  return [node, ...node.getDescendants()].filter(candidate =>
-    isPlainFieldRead(candidate, field, scope) || isPlainGetterRead(candidate, field, scope, depth) ||
-    (Node.isCallExpression(candidate) && proof.expand(candidate) !== undefined));
+  const recognised = [node, ...node.getDescendants()].filter(candidate =>
+    isPlainFieldRead(candidate, field, scope) ||
+    (isReadOnly(candidate) && scalarCallable(candidate, scope) !== undefined && proof.expand(candidate) !== undefined));
+  return proof.valid() ? recognised : [];
 };
 
 const isExitStatement = (statement: Statement): boolean => Node.isReturnStatement(statement) || Node.isThrowStatement(statement);
@@ -79,4 +70,4 @@ const isExitStatement = (statement: Statement): boolean => Node.isReturnStatemen
 export const exitFieldReads = (statements: readonly Statement[], field: StateField, scope: AggregateScope): readonly Node[] =>
   statements
     .filter((statement) => isExitStatement(statement) && !writesField(statement, field, scope))
-    .flatMap((statement) => plainFieldReads(statement, field, scope, 0));
+    .flatMap((statement) => plainFieldReads(statement, field, scope));

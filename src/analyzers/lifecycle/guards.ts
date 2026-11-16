@@ -8,7 +8,7 @@ import { GuardRules, GuardScan, exitFieldReads, isFieldAssignment, mayAssignFiel
 import { collapseGuardTokens, guardUniverse } from './guard-tokens';
 import { Sources, StateField } from './model';
 import { isPlainDataPathFromThis, setterStateAssignment } from './state-assignment';
-import { FieldSwitch, SwitchGroup, isFieldSwitch, readFieldSwitch } from './switch-guard';
+import { FieldSwitch, SwitchGroup, readFieldSwitch } from './switch-guard';
 import { difference, intersect, union } from './values';
 
 type ExitGuard = {
@@ -98,9 +98,9 @@ const switchExcludingExits = (read: FieldSwitch, field: StateField): GuardScan =
   return { allowed: difference(guardUniverse(field), exits), recognised: new Set(read.recognised) };
 };
 
-const scanSwitchStep = (statement: SwitchStatement, field: StateField, scope: AggregateScope, exits: ExitKind): GuardScan => {
+const scanSwitchStep = (statement: SwitchStatement, field: StateField, scope: AggregateScope, exits: ExitKind): GuardScan | undefined => {
   const read = readFieldSwitch(statement, field, scope, exits);
-  return read === 'unknown' ? read : switchExcludingExits(read, field);
+  return read === 'non-field' ? undefined : read === 'unknown' ? read : switchExcludingExits(read, field);
 };
 
 const scanExitStep = (
@@ -111,7 +111,10 @@ const scanExitStep = (
 ): GuardScan | undefined => {
   const guard = exitGuard(statement, rules.exits);
   if (guard !== undefined) return scanExitGuard(guard, field, scope, rules);
-  if (isFieldSwitch(statement, field, scope)) return scanSwitchStep(statement, field, scope, rules.exits);
+  if (Node.isSwitchStatement(statement)) {
+    const step = scanSwitchStep(statement, field, scope, rules.exits);
+    if (step !== undefined) return step;
+  }
   return scanHelperStep(statement, field, scope, rules, scanEarlyExits);
 };
 
@@ -132,9 +135,9 @@ const scanEarlyExits = (
     { allowed: guardUniverse(field), recognised: new Set<Node>() },
   );
 
-const soleFieldSwitch = (statements: readonly Statement[], field: StateField, scope: AggregateScope): SwitchStatement | undefined => {
+const soleSwitch = (statements: readonly Statement[]): SwitchStatement | undefined => {
   const [only] = statements;
-  return statements.length === 1 && only !== undefined && isFieldSwitch(only, field, scope) ? only : undefined;
+  return statements.length === 1 && only !== undefined && Node.isSwitchStatement(only) ? only : undefined;
 };
 
 const scanWorkGroup = (group: SwitchGroup, field: StateField, scope: AggregateScope): GuardScan => {
@@ -150,6 +153,7 @@ const joinWorkGroups = (scan: GuardScan, inner: GuardScan): GuardScan =>
 const scanSwitchWrapper = (statement: SwitchStatement, field: StateField, scope: AggregateScope): GuardScan => {
   const read = readFieldSwitch(statement, field, scope, METHOD_RULES.exits);
   if (read === 'unknown') return read;
+  if (read === 'non-field') return { allowed: guardUniverse(field), recognised: new Set() };
   const workGroups = read.groups.filter((group) => group.kind === 'work');
   if (workGroups.length === 0) return switchExcludingExits(read, field);
   return workGroups
@@ -160,7 +164,7 @@ const scanSwitchWrapper = (statement: SwitchStatement, field: StateField, scope:
 const scanStatements = (statements: readonly Statement[], field: StateField, scope: AggregateScope): GuardScan => {
   const wrapper = wrappingGuard(statements);
   if (wrapper) return scanWrapper(wrapper, field, scope);
-  const fieldSwitch = soleFieldSwitch(statements, field, scope);
+  const fieldSwitch = soleSwitch(statements);
   return fieldSwitch ? scanSwitchWrapper(fieldSwitch, field, scope) : scanEarlyExits(statements, field, scope, METHOD_RULES);
 };
 

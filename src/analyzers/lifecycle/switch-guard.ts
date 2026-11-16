@@ -1,10 +1,13 @@
 import { CaseOrDefaultClause, Expression, Node, Statement, SwitchStatement } from 'ts-morph';
 import { ExitKind, branchStatements, isEarlyExit, containsReturnOrThrow } from './early-exit';
-import { AggregateScope, fieldNameOf, referencesField } from './field-ref';
-import { strictTokens } from './guard-condition';
+import { AggregateScope, referencesField } from './field-ref';
+import { scalarRead, strictTokens } from './guard-condition';
 import { exitFieldReads } from './guard-scan';
 import { guardUniverse } from './guard-tokens';
 import { StateField } from './model';
+import { ScalarReturnProof } from './scalar-callable';
+import { isWritten } from '../shared/writes';
+import { outermostWrapper } from '../shared/wrappers';
 import { difference, union } from './values';
 
 export type SwitchGroup = {
@@ -21,23 +24,20 @@ type ClauseRun = { readonly tokens: ReadonlySet<string>; readonly statements: re
 
 type Classified = Omit<SwitchGroup, 'tokens'> | 'unknown';
 
-export const isFieldSwitch = (statement: Statement, field: StateField, scope?: AggregateScope): statement is SwitchStatement =>
-  Node.isSwitchStatement(statement) && (scope?.projections?.projection(field.name) !== undefined
-    ? scope.projections.scalar(statement.getExpression(), field.name) : fieldNameOf(statement.getExpression()) === field.name);
+const caseLabelTokens = (label: Expression, field: StateField, scope: AggregateScope, proof: ScalarReturnProof): ReadonlySet<string> | undefined =>
+  referencesField(label, field.name, scope) ? undefined : strictTokens(label, field, scope, proof);
 
-const caseLabelTokens = (label: Expression, field: StateField, scope: AggregateScope): ReadonlySet<string> | undefined =>
-  referencesField(label, field.name, scope) ? undefined : strictTokens(label, field, scope);
-
-const clauseLabelTokens = (clause: CaseOrDefaultClause, field: StateField, scope: AggregateScope): LabelTokens | undefined =>
-  Node.isCaseClause(clause) ? caseLabelTokens(clause.getExpression(), field, scope) : 'default';
+const clauseLabelTokens = (clause: CaseOrDefaultClause, field: StateField, scope: AggregateScope, proof: ScalarReturnProof): LabelTokens | undefined =>
+  Node.isCaseClause(clause) ? caseLabelTokens(clause.getExpression(), field, scope, proof) : 'default';
 
 const resolveLabels = (
   clauses: readonly CaseOrDefaultClause[],
   field: StateField,
   scope: AggregateScope,
+  proof: ScalarReturnProof,
 ): readonly ClauseRun[] | 'unknown' => {
   const labelled = clauses.flatMap((clause) => {
-    const label = clauseLabelTokens(clause, field, scope);
+    const label = clauseLabelTokens(clause, field, scope, proof);
     return label === undefined ? [] : [{ label, statements: clause.getStatements() }];
   });
   if (labelled.length !== clauses.length) return 'unknown';
@@ -103,14 +103,33 @@ const classifyRuns = (runs: readonly ClauseRun[], exits: ExitKind): readonly Swi
   return groups.every((group): group is SwitchGroup => group !== 'unknown') ? groups : 'unknown';
 };
 
+const unrelatedStringLength = (node: Expression, field: StateField, scope: AggregateScope, proof: ScalarReturnProof): boolean => {
+  if (!Node.isPropertyAccessExpression(node) || node.hasQuestionDotToken() || node.getName() !== 'length' ||
+    referencesField(node, field.name, scope)) return false;
+  const receiver = node.getExpression();
+  if (!Node.isIdentifier(receiver)) return false;
+  const declarations = receiver.getSymbol()?.getDeclarations() ?? [];
+  return declarations.length > 0 && declarations.every(declaration => Node.isParameterDeclaration(declaration) &&
+    Node.isIdentifier(declaration.getNameNode()) && declaration.getInitializer() === undefined && !declaration.isRestParameter() &&
+    (declaration.getType().isString() || declaration.getType().isStringLiteral()) &&
+    declaration.getParent().getDescendants().every(candidate => proof.take() &&
+      (!Node.isIdentifier(candidate) || candidate.getSymbol() !== receiver.getSymbol() || !isWritten(outermostWrapper(candidate)))));
+};
+
 export const readFieldSwitch = (
   statement: SwitchStatement,
   field: StateField,
   scope: AggregateScope,
   exits: ExitKind,
-): FieldSwitch | 'unknown' => {
+): FieldSwitch | 'unknown' | 'non-field' => {
+  const proof = new ScalarReturnProof(field, scope);
+  const original = statement.getExpression();
+  if (unrelatedStringLength(original, field, scope, proof)) return 'non-field';
+  const discriminant = proof.normalize(original);
+  if (discriminant === undefined) return 'unknown';
+  if (!scalarRead(discriminant, field, scope)) return referencesField(original, field.name, scope) || referencesField(discriminant, field.name, scope) ? 'unknown' : 'non-field';
   const clauses = statement.getCaseBlock().getClauses();
-  const labelled = resolveLabels(clauses, field, scope);
+  const labelled = resolveLabels(clauses, field, scope, proof);
   if (labelled === 'unknown') return 'unknown';
   const groups = classifyRuns(firstMatchWins(mergeFallthrough(labelled)), exits);
   if (groups === 'unknown') return 'unknown';

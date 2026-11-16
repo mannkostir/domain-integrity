@@ -72,6 +72,37 @@ export type AggregateScope = {
   readonly writtenMethods: WrittenMethods;
 };
 
+const isOriginalDataDeclaration = (node: Node): boolean =>
+  !isLibraryNode(node) && (
+    (Node.isPropertyDeclaration(node) && !node.isStatic() && node.getDecorators().length === 0) ||
+    Node.isPropertySignature(node) || Node.isPropertyAssignment(node) || Node.isShorthandPropertyAssignment(node) ||
+    Node.isParameterDeclaration(node)
+  );
+
+const hasOriginalDataDeclarations = (symbol: import('ts-morph').Symbol | undefined): boolean => {
+  const declarations = symbol?.getDeclarations() ?? [];
+  return declarations.length > 0 && declarations.every(isOriginalDataDeclaration);
+};
+
+export const isTrackedDataRead = (node: Node, field: string, scope: AggregateScope): boolean => {
+  if ((!Node.isPropertyAccessExpression(node) && !Node.isElementAccessExpression(node)) ||
+    node.hasQuestionDotToken() || fieldNameOf(node) !== field || hasForeignThis(node) ||
+    hasAmbiguousPrivateField(scope.cls, field) || inheritanceChain(scope.cls).some(hasAmbiguousInstanceShape)) return false;
+  const binder = node.getFirstAncestor(ancestor => bindsThis(ancestor) || Node.isClassStaticBlockDeclaration(ancestor));
+  if (Node.isClassStaticBlockDeclaration(binder) ||
+    ((Node.isMethodDeclaration(binder) || Node.isPropertyDeclaration(binder) || Node.isGetAccessorDeclaration(binder) || Node.isSetAccessorDeclaration(binder)) && binder.isStatic())) return false;
+  const holder = unwrap(node.getExpression());
+  const own = scope.cls.getType().getProperty(field);
+  if (Node.isThisExpression(holder)) {
+    return hasOriginalDataDeclarations(own) || scope.javascriptData.prove(scope.cls, own).kind === 'data';
+  }
+  if (own !== undefined || (!Node.isPropertyAccessExpression(holder) && !Node.isElementAccessExpression(holder)) ||
+    holder.hasQuestionDotToken() || memberName(holder) !== STATE_HOLDER || !Node.isThisExpression(unwrap(holder.getExpression()))) return false;
+  const props = scope.cls.getType().getProperty(STATE_HOLDER);
+  if (!hasOriginalDataDeclarations(props)) return false;
+  return hasOriginalDataDeclarations(props?.getTypeAtLocation(scope.cls).getProperty(field));
+};
+
 type MemberLookup =
   | { readonly kind: 'inert' }
   | { readonly kind: 'data'; readonly declarations: readonly Node[]; readonly initializer?: Node }
