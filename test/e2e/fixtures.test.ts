@@ -51,11 +51,10 @@ describe('fixture projects', () => {
     });
   });
 
-  it('boolean-rule: leaks past a rule-object guard on another field', async () => {
+  it('boolean-rule: leaves a foreign rule guard unknown and reports the unguarded leak', async () => {
     expect(await checkJson('boolean-rule')).toEqual({
       code: 1,
       findings: [
-        'error terminal-state-leak aggregate=test/fixtures/boolean-rule/src/todo.ts:Todo method=complete field=deleted values=true',
         'error terminal-state-leak aggregate=test/fixtures/boolean-rule/src/todo.ts:Todo method=delete field=deleted values=true',
         'error undispatched-events owner=test/fixtures/boolean-rule/src/aggregate-root.ts:AggregateRoot buffer=events',
       ],

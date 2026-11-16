@@ -80,6 +80,10 @@ type LiteralStates = { readonly kind: StateFieldKind; readonly values: readonly 
 const literalStates = (present: readonly Type[]): LiteralStates | undefined => {
   const [first] = present;
   if (first === undefined) return undefined;
+  if (present.every((member) => member.isBooleanLiteral())) {
+    const tokens = new Set(present.map(literalToken));
+    return { kind: 'boolean', values: BOOLEAN_VALUES.filter((value) => tokens.has(value.token)), enumReference: undefined };
+  }
   if (present.every((member) => member.isEnumLiteral())) {
     return { kind: 'enum', values: present.map(enumValue), enumReference: enumReferenceOf(first) };
   }
@@ -91,7 +95,7 @@ const literalStates = (present: readonly Type[]): LiteralStates | undefined => {
 
 const isFalsyLiteral = (member: Type): boolean => {
   const value = member.getLiteralValue();
-  return value === '' || value === 0;
+  return value === '' || value === 0 || (member.isBooleanLiteral() && literalToken(member) === 'false');
 };
 
 const resolvedLiterals = (name: string, states: LiteralStates): FieldResolution => ({
@@ -132,9 +136,6 @@ export const resolveStateField = (cls: ClassDeclaration, name: string, projectio
   const members = type.isUnion() ? type.getUnionTypes() : [type];
   const present = members.filter((member) => !isNullish(member));
   const nullable = present.length < members.length;
-  if (!nullable && present.length > 0 && present.every((member) => member.isBooleanLiteral())) {
-    return resolvedLiterals(name, { kind: 'boolean', values: BOOLEAN_VALUES, enumReference: undefined });
-  }
   const states = literalStates(present);
   if (!nullable && states !== undefined) return resolvedLiterals(name, states);
   if (nullable && states !== undefined && !namesUnset(states)) return resolvedUnsettableLiterals(name, states, members, present);

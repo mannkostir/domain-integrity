@@ -168,13 +168,10 @@ describe('resolveStateField', () => {
     });
   });
 
-  it.each([
-    ['InProps', 'note'],
-    ['OwnFields', 'maybe'],
-  ])('reports %s.%s as an unsupported type', (className, field) => {
-    expect(resolveStateField(cls(className), field)).toMatchObject({
+  it('reports an unconstrained string as an unsupported type', () => {
+    expect(resolveStateField(cls('InProps'), 'note')).toMatchObject({
       kind: 'problem',
-      problem: { code: 'state-field-unsupported-type', details: { aggregate: className, field } },
+      problem: { code: 'state-field-unsupported-type', details: { aggregate: 'InProps', field: 'note' } },
     });
   });
 
@@ -234,7 +231,7 @@ describe('resolveStateField', () => {
   });
 
   it('lists enums and literal unions that may be unset among the supported types', () => {
-    expect(resolveStateField(cls('OwnFields'), 'maybe')).toMatchObject({
+    expect(resolveStateField(cls('InProps'), 'note')).toMatchObject({
       kind: 'problem',
       problem: { message: expect.stringContaining('an enum or literal union that may be null or undefined') },
     });

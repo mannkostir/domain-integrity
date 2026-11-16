@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
+import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
 import { methodSources } from '../../../src/analyzers/lifecycle/guards';
 import { defaultScope, describeSources, resolvedField } from '../../helpers/describe';
 import { AGGREGATE_ROOT, inMemoryProject } from '../../helpers/in-memory';
@@ -469,8 +471,8 @@ describe('methodSources for an enum field', () => {
     ['unguarded', ['CLOSED', 'DRAFT', 'OPEN']],
     ['earlyReturn', ['OPEN']],
     ['earlyThrow', ['DRAFT', 'OPEN']],
-    ['viaGetter', ['OPEN']],
-    ['viaNestedGetter', ['DRAFT', 'OPEN']],
+    ['viaGetter', 'unknown'],
+    ['viaNestedGetter', 'unknown'],
     ['wrapped', ['DRAFT']],
     ['combined', ['DRAFT', 'OPEN']],
     ['throwHelper', ['DRAFT', 'OPEN']],
@@ -525,7 +527,7 @@ describe('methodSources for an enum field', () => {
     ['helperBeforeAssignment', ['DRAFT', 'OPEN']],
     ['exitThrowReadsField', ['DRAFT', 'OPEN']],
     ['exitReturnReadsField', ['DRAFT', 'OPEN']],
-    ['exitReadsThroughGetter', ['OPEN']],
+    ['exitReadsThroughGetter', 'unknown'],
     ['exitThrowingCallReadsField', 'unknown'],
     ['exitAssignsFromField', 'unknown'],
     ['exitDeclaresAlias', 'unknown'],
@@ -576,13 +578,10 @@ describe('methodSources for a state holder returned by a getter', () => {
 });
 
 describe('methodSources with an inherited getter', () => {
-  it('evaluates a single-return getter declared on a base class', () => {
+  it('keeps an inherited getter unknown beside shared receiver exposures', () => {
     const closable = project.getSourceFileOrThrow('/src/ticket.ts').getClassOrThrow('ClosableTicket');
     const closableStatus = resolvedField(closable, 'status');
-    expect(describeSources(methodSources(closable.getMethodOrThrow('rename'), closableStatus, defaultScope(closable)))).toEqual([
-      'DRAFT',
-      'OPEN',
-    ]);
+    expect(describeSources(methodSources(closable.getMethodOrThrow('rename'), closableStatus, defaultScope(closable)))).toEqual('unknown');
   });
 });
 
@@ -654,8 +653,8 @@ describe('methodSources for a nullable field whose set values may be falsy', () 
     ['readingTruthyAndFlag', ['set', 'unset']],
     ['readingTruthyOrNull', ['set']],
     ['readingWrapper', ['set']],
-    ['readingViaGetter', ['set', 'unset']],
-    ['readingViaValueGetter', ['set']],
+    ['readingViaGetter', 'unknown'],
+    ['readingViaValueGetter', 'unknown'],
     ['readingStrictNullReturn', ['set']],
     ['readingStrictNotNullWrapper', ['set']],
     ['readingExitReads', ['set']],
@@ -678,7 +677,7 @@ describe('methodSources for a nullable field whose set values may be falsy', () 
     ['closedTruthyAndFlag', ['set', 'unset']],
     ['closedFalsyOrNote', ['set']],
     ['closedWrapper', ['set']],
-    ['closedViaGetter', ['set']],
+    ['closedViaGetter', 'unknown'],
   ])('%s can run from %j when a date field cannot be falsy', (method, expected) => {
     expect(sourcesOf(method, 'closedAt')).toEqual(expected);
   });
@@ -709,7 +708,7 @@ describe('methodSources with an array-literal includes guard', () => {
     ['satisfiesReceiver', ['DRAFT', 'OPEN']],
     ['assertedReceiver', ['DRAFT', 'OPEN']],
     ['nonNullReceiver', ['DRAFT', 'OPEN']],
-    ['viaIncludesGetter', ['DRAFT', 'OPEN']],
+    ['viaIncludesGetter', 'unknown'],
   ])('%s can run from %j for an enum field', (method, expected) => {
     expect(sourcesOf(method, 'stage')).toEqual(expected);
   });
@@ -1002,5 +1001,93 @@ describe('methodSources with an assertion helper call', () => {
     ['DeclaredVisa', 'viaDeclared'],
   ])('%s.%s leaves the sources unknown', (className, method) => {
     expect(sourcesOf(className, method)).toEqual('unknown');
+  });
+});
+
+
+const isolatedGetterCases = [
+  { file: '/src/ticket.ts', cls: 'Ticket', method: 'viaGetter', getters: ['isOpen'], field: 'status', expected: ['OPEN'], inherited: false },
+  { file: '/src/ticket.ts', cls: 'Ticket', method: 'viaNestedGetter', getters: ['isOpen', 'isEditable'], field: 'status', expected: ['DRAFT', 'OPEN'], inherited: false },
+  { file: '/src/ticket.ts', cls: 'Ticket', method: 'exitReadsThroughGetter', getters: ['isOpen'], field: 'status', expected: ['OPEN'], inherited: false },
+  { file: '/src/ticket.ts', cls: 'ClosableTicket', method: 'rename', getters: ['isClosed'], field: 'status', expected: ['DRAFT', 'OPEN'], inherited: true },
+  { file: '/src/meter.ts', cls: 'Meter', method: 'readingViaGetter', getters: ['hasReading'], field: 'reading', expected: ['set', 'unset'], inherited: false },
+  { file: '/src/meter.ts', cls: 'Meter', method: 'readingViaValueGetter', getters: ['currentReading'], field: 'reading', expected: ['set'], inherited: false },
+  { file: '/src/meter.ts', cls: 'Meter', method: 'closedViaGetter', getters: ['hasClosed'], field: 'closedAt', expected: ['set'], inherited: false },
+  { file: '/src/rota.ts', cls: 'Rota', method: 'viaIncludesGetter', getters: ['isClosed'], field: 'stage', expected: ['DRAFT', 'OPEN'], inherited: false },
+] as const;
+
+const isolatedGetter = (entry: typeof isolatedGetterCases[number]) => {
+  const original = project.getSourceFileOrThrow(entry.file).getClassOrThrow(entry.cls);
+  const getterOwner = entry.inherited ? original.getBaseClassOrThrow() : original;
+  const props = getterOwner.getExtends()!.getTypeArguments()[0]!.getText();
+  const getters = entry.getters.map(name => getterOwner.getGetAccessorOrThrow(name).getText()).join('\n');
+  const method = original.getMethodOrThrow(entry.method).getText();
+  const base = `class DataRecord<P> { protected props: P; constructor(props: P) { this.props = props; } }`;
+  const enums = getterOwner.getSourceFile().getEnums().map(declaration => declaration.getText()).join('\n');
+  const parent = entry.inherited ? `class ${getterOwner.getNameOrThrow()} extends DataRecord<${props}> { ${getters} }` : '';
+  const extends_ = entry.inherited ? getterOwner.getNameOrThrow() : `DataRecord<${props}>`;
+  const mutation = entry.cls === 'Ticket' || entry.cls === 'ClosableTicket' ? "this.props.title = 'x';" : "this.props.note = 'x';";
+  const isolated = inMemoryProject({ '/isolated.ts': `${enums} ${base} ${parent} export class ${entry.cls} extends ${extends_} {
+    ${entry.inherited ? '' : getters}
+    ${method}
+    unguarded(): void { ${mutation} }
+  }` });
+  const file = isolated.getSourceFileOrThrow('/isolated.ts');
+  const cls = file.getClassOrThrow(entry.cls);
+  const field = resolvedField(cls, entry.field);
+  const scope = defaultScope(cls);
+  const terminal = entry.field === 'status' || entry.field === 'stage' ? 'CLOSED' : 'set';
+  const model = lifecycleAnalyzer.extract({
+    declaration: { ...DEFAULT_DECLARATION, lifecycles: [{ target: cls, fields: [{ name: entry.field, terminal: [terminal], transitions: undefined, allowAfterTerminal: [] }], allowAfterTerminal: [] }] },
+    files: [file], projectRoot: '/', repositoryRoot: '/',
+  });
+  return { project: isolated, cls, field, scope, model, terminal };
+};
+
+describe('same getter bodies in safe independent projects', () => {
+  it.each(isolatedGetterCases)('$cls.$method has diagnostic-free source', entry => {
+    const fixture = isolatedGetter(entry);
+
+    expect(fixture.project.getPreEmitDiagnostics().map(diagnostic => diagnostic.getMessageText())).toEqual([]);
+  });
+
+  it.each(isolatedGetterCases)('$cls.$method has no extraction problems', entry => {
+    const { model } = isolatedGetter(entry);
+
+    expect(model.problems).toEqual([]);
+  });
+
+  it.each(isolatedGetterCases)('$cls.$method has positive dispatch and receiver evidence', entry => {
+    const { cls, scope } = isolatedGetter(entry);
+
+    expect({ leaksThis: scope.leaksThis, stableDispatch: scope.scalarCallables.stable(cls) }).toEqual({ leaksThis: false, stableDispatch: true });
+  });
+
+  it.each(isolatedGetterCases)('$cls.$method preserves the original source claim', entry => {
+    const { cls, field, scope } = isolatedGetter(entry);
+
+    expect(describeSources(methodSources(cls.getMethodOrThrow(entry.method), field, scope))).toEqual(entry.expected);
+  });
+
+  it.each(isolatedGetterCases)('$cls.$method retains exact findings and the unguarded control', entry => {
+    const { model, terminal } = isolatedGetter(entry);
+    const findings = lifecycleAnalyzer.check(model).filter(finding => finding.ruleId === 'terminal-state-leak').map(finding => finding.details.method);
+    const expected = (entry.expected as readonly string[]).includes(terminal) ? [entry.method, 'unguarded'] : ['unguarded'];
+
+    expect(findings).toEqual(expected);
+  });
+});
+
+describe('legacy shared project receiver exposure evidence', () => {
+  it.each([
+    ['/src/ticket.ts', 'Ticket', true],
+    ['/src/ticket.ts', 'ClosableTicket', false],
+    ['/src/meter.ts', 'Meter', false],
+    ['/src/rota.ts', 'Rota', false],
+  ] as const)('%s %s retains its actual safety facts', (file, name, leaksThis) => {
+    const cls = project.getSourceFileOrThrow(file).getClassOrThrow(name);
+    const scope = defaultScope(cls);
+
+    expect({ leaksThis: scope.leaksThis, stableDispatch: scope.scalarCallables.stable(cls) }).toEqual({ leaksThis, stableDispatch: false });
   });
 });

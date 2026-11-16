@@ -1,24 +1,15 @@
-import { Node, Symbol as MorphSymbol, SyntaxKind } from 'ts-morph';
+import { Node, SyntaxKind } from 'ts-morph';
 import { SourceIndex } from '../../shared/source-index';
-import { isDefaultLibraryNode, isLibraryNode } from '../../shared/library';
+import { isDefaultLibraryNode } from '../../shared/library';
 import { isWritten } from '../../shared/writes';
 import { outermostWrapper } from '../../shared/wrappers';
 import { ScalarProjection, MAX_PROJECTION_DEPTH } from './model';
 import { refersTo, resolvedSymbol } from './identity';
+import { moduleMayExpose } from '../runtime-dependencies';
 import { proveWrapperPredicate } from './predicate';
 
 const typePosition = (node: Node): boolean => node.getAncestors().some(ancestor =>
   Node.isTypeNode(ancestor) || Node.isImportDeclaration(ancestor) || Node.isExportDeclaration(ancestor));
-
-const namespaceContains = (symbol: MorphSymbol | undefined, projection: ScalarProjection, seen = new Set<MorphSymbol>()): boolean => {
-  if (symbol === undefined || seen.has(symbol)) return false;
-  const declarations = symbol.getDeclarations();
-  if (declarations.includes(projection.wrapper) || declarations.includes(projection.enumDeclaration)) return true;
-  if (declarations.length === 0 || declarations.some(isLibraryNode) ||
-      !declarations.every(node => Node.isSourceFile(node) || Node.isModuleDeclaration(node))) return false;
-  if (seen.size >= MAX_PROJECTION_DEPTH) return true;
-  return declarations[0]!.getProject().getTypeChecker().getExportsOfModule(symbol).some(exported => namespaceContains(exported.getAliasedSymbol() ?? exported, projection, new Set([...seen, symbol])));
-};
 
 const libraryMember = (node: Node): boolean => {
   const declarations = node.getSymbol()?.getDeclarations() ?? [];
@@ -58,7 +49,7 @@ export const dependencyHazards = (projection: ScalarProjection, sources: SourceI
     if (refersTo(node, projection.enumDeclaration)) return isWritten(outermostWrapper(node)) || !pureEnumUse(node);
     const symbol = resolvedSymbol(node);
     const declarations = symbol?.getDeclarations() ?? [];
-    if (declarations.some(declaration => Node.isSourceFile(declaration) || Node.isModuleDeclaration(declaration)) && namespaceContains(symbol, projection)) {
+    if (declarations.some(declaration => Node.isSourceFile(declaration) || Node.isModuleDeclaration(declaration)) && moduleMayExpose(symbol, [projection.wrapper, projection.enumDeclaration])) {
       const parent = node.getParent();
       return !Node.isPropertyAccessExpression(parent) || parent.getExpression() !== node || parent.getNameNode().getSymbol() === undefined || isWritten(outermostWrapper(parent));
     }
