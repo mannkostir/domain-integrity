@@ -187,3 +187,128 @@ describe.each([...containerFixtures, ...prototypeFixtures, ...primitiveFixtures,
     expect(result.runtime.unguarded).toBe('unguarded');
   });
 });
+
+const originBoundary = (name: string, text: string, expected: readonly string[] | 'unknown', step = ''): Fixture => ({
+  name,
+  text,
+  runtime: `${text}\nconst instance = new Order(); instance.notify(); ${step}`,
+  expected,
+  guarded: 'renamed',
+});
+const originBoundaryFixtures: readonly Fixture[] = [
+  originBoundary('parenthesized literal payload', primitiveSource('').replace("{ kind: 'changed' }", "({ kind: ('changed') })"), ['false', 'true']),
+  originBoundary('literal payload at depth boundary', primitiveSource('').replace("{ kind: 'changed' }", "{ a: { b: { c: { d: { value: 'changed' } } } } }"), 'unknown'),
+  originBoundary('own primitive read beside literal helper', primitiveSource('read() { return this.label; }'), ['false', 'true'], 'instance.read();'),
+  originBoundary('literal receiver member beside literal helper', primitiveSource("read() { return ('ready').length; }"), 'unknown', 'instance.read();'),
+  originBoundary('dynamic own array read beside literal helper', primitiveSource('read(index: number) { return this.tags[index]; }'), 'unknown', 'instance.read(0);'),
+  originBoundary('bounded own nested data read', primitiveSource("private data = { a: { value: 'ready' } }; read() { return this.data.a.value; }"), ['false', 'true'], 'instance.read();'),
+  originBoundary('own nested data beyond path bound', primitiveSource("private data = { a: { b: { c: { d: { e: { value: 'ready' } } } } } }; read() { return this.data.a.b.c.d.e.value; }"), 'unknown', 'instance.read();'),
+  originBoundary('zero argument sibling invocation', primitiveSource('private idle() {} visit() { this.idle(); }'), ['false', 'true'], 'instance.visit();'),
+  originBoundary('async sibling invocation', primitiveSource('private async idle() {} visit() { this.idle(); }'), 'unknown', 'instance.visit();'),
+  originBoundary('project push method beside literal helper', primitiveSource("private output = { push(_value: string) {} }; append() { this.output.push('ready'); }"), 'unknown', 'instance.append();'),
+  originBoundary('mixed primitive array append', primitiveSource("append() { this.tags.push('ready'); }").replace('tags: string[]', 'tags: (string | number)[]'), 'unknown', 'instance.append();'),
+  originBoundary('computed primitive append argument', primitiveSource("append() { this.tags.push('ready' + 'now'); }"), 'unknown', 'instance.append();'),
+  originBoundary('literal typed append parameter', primitiveSource("append(value: 'ready') { this.tags.push(value); }"), 'unknown', "instance.append('ready');"),
+];
+
+const boundedDispatchFixtures: readonly Fixture[] = [
+  ...[1, 6].map((depth): Fixture => {
+    const parameters = Array.from({ length: depth }, (_, index) => `T${index} extends ${index === depth - 1 ? 'Order' : `T${index + 1}`}`).join(', ');
+    const text = `${order}\nfunction observe<${parameters}>(value: T0) { const alias = value; return alias.closed; }`;
+    return { name: `nominal parameter constraint depth ${depth}`, text, runtime: text, expected: depth === 1 ? ['false', 'true'] : 'unknown', guarded: 'renamed' };
+  }),
+  ...[12, 270].map((width): Fixture => {
+    const type = `${Array.from({ length: width }, (_, index) => `{ readonly tag${index}?: number }`).join(' & ')} & Order`;
+    return { name: `nominal intersection width ${width}`, text: `${order}\ntype Branded = ${type}; declare const target: Branded; const alias = target; alias.closed;`, runtime: `${order}\ntype Branded = ${type}; const target: Branded = instance; const alias = target; alias.closed;`, expected: width === 12 ? ['false', 'true'] : 'unknown', guarded: 'renamed' };
+  }),
+  ...[2, 6].map((depth): Fixture => {
+    const nested = `${'() => '.repeat(depth)}Order`;
+    const type = `(() => Order) | (${nested})`;
+    return { name: `factory union alias depth ${depth}`, text: `${order}\ndeclare const make: ${type}; const alias = make;`, runtime: `${order}\nconst make: ${type} = () => instance; const alias = make;`, expected: depth === 2 ? ['false', 'true'] : 'unknown', guarded: 'renamed' };
+  }),
+  ...[2, 6].map((depth): Fixture => {
+    const nested = `${'() => '.repeat(depth)}Order`;
+    const type = `(() => Order) | (${nested})`;
+    return { name: `selected factory union result depth ${depth}`, text: `${order}\ndeclare const make: ${type}; make().toString();`, runtime: `${order}\nconst make: ${type} = () => instance; make().toString();`, expected: depth === 2 ? ['false', 'true'] : 'unknown', guarded: 'renamed' };
+  }),
+  {
+    name: 'record intersection direct member invocation',
+    text: `${order}\ndeclare const holder: { get(): Order } & { tag: string }; holder.get().rename();`,
+    runtime: `${order}\nconst holder: { get(): Order } & { tag: string } = { get: () => instance, tag: 'ready' }; holder.get().rename();`,
+    expected: ['false', 'true'], guarded: 'renamed',
+  },
+  {
+    name: 'record intersection alias remains conservative',
+    text: `${order}\ndeclare const holder: { get(): Order } & { tag: string }; const alias = holder; alias.get().rename();`,
+    runtime: `${order}\nconst holder: { get(): Order } & { tag: string } = { get: () => instance, tag: 'ready' }; const alias = holder; alias.get().rename();`,
+    expected: 'unknown', guarded: 'renamed',
+  },
+  ...[false, true].map((alias): Fixture => {
+    const text = `${order}\nfunction observe<T extends { get(): Order }>(holder: T) { ${alias ? 'const selected = holder;' : ''} ${alias ? 'selected' : 'holder'}.get().rename(); }`;
+    return { name: `constrained record ${alias ? 'alias' : 'direct member'}`, text, runtime: text, expected: alias ? 'unknown' : ['false', 'true'], guarded: 'renamed' };
+  }),
+  {
+    name: 'returned receiver factory array length',
+    text: `${order}\ndeclare function make(): Array<() => Order>; make().length;`,
+    runtime: `${order}\nfunction make(): Array<() => Order> { return [() => instance]; } make().length;`,
+    expected: ['false', 'true'], guarded: 'renamed',
+  },
+  {
+    name: 'returned receiver factory array opaque exposure',
+    text: `${order}\ndeclare function make(): Array<() => Order>; declare function opaque(values: Array<() => Order>): void; opaque(make());`,
+    runtime: `${order}\nfunction make(): Array<() => Order> { return [() => instance]; } function opaque(values: Array<() => Order>) { Object.defineProperty(values[0](), 'isClosed', { value: () => true }); } opaque(make());`,
+    expected: 'unknown', guarded: '',
+  },
+];
+
+const operationGraph = (shape: 'star' | 'namespace', exposed: boolean): Fixture => {
+  const files: Record<string, string> = { '/native.ts': 'export const get = Object.getPrototypeOf;' };
+  for (let index = 5; index >= 0; index--) files[`/layer${index}.ts`] = shape === 'star'
+    ? `export * from './${index === 5 ? 'native' : `layer${index + 1}`}';`
+    : `export * as next from './${index === 5 ? 'native' : `layer${index + 1}`}';`;
+  const member = shape === 'star' ? 'ops.get' : `ops.${'next.'.repeat(6)}get`;
+  return {
+    name: `${shape} operation graph ${exposed ? 'opaque exposure' : 'selected primitive acquisition'}`,
+    text: `import * as ops from './layer0';\n${order.replace('return false;', 'return [false].includes(this.closed);')}\n${exposed ? 'declare function opaque(value: object): void; opaque(ops);' : `${member}(1);`}`,
+    extra: files,
+    runtime: `${order.replace('return false;', 'return [false].includes(this.closed);')}\n${exposed ? "function opaque(get: typeof Object.getPrototypeOf) { get([]).includes = () => true; } opaque(Object.getPrototypeOf);" : 'Object.getPrototypeOf(1);'}`,
+    expected: exposed ? 'unknown' : ['true'], guarded: exposed ? '' : 'renamed',
+  };
+};
+const prototypeBindingFixtures: readonly Fixture[] = [
+  ...(['star', 'namespace'] as const).flatMap(shape => [operationGraph(shape, false), operationGraph(shape, true)]),
+  ...[false, true].map((fallback): Fixture => {
+    const text = `${order.replace('return false;', 'return [false].includes(this.closed);')}\nconst { getPrototypeOf: get ${fallback ? '= Object.getPrototypeOf' : ''} } = Object; get(1);`;
+    return { name: `native operation destructuring ${fallback ? 'default' : 'required'}`, text, runtime: text, expected: fallback ? 'unknown' : ['true'], guarded: 'renamed' };
+  }),
+];
+
+describe.each([...originBoundaryFixtures, ...boundedDispatchFixtures, ...prototypeBindingFixtures])('$name', fixture => {
+  let result: ReturnType<typeof inspect>;
+  beforeAll(() => { result = inspect(fixture); });
+
+  it('has valid analysis input', () => {
+    expect(result.diagnostics).toEqual([]);
+  });
+  it('has valid authored runtime input', () => {
+    expect(result.runtimeDiagnostics).toEqual([]);
+  });
+  it('extracts without problems', () => {
+    expect(result.problems).toEqual([]);
+  });
+  it('retains the expected guarded sources', () => {
+    expect(result.sources).toEqual(fixture.expected);
+  });
+  it('retains the deliberate unguarded finding', () => {
+    expect(result.findings).toContain('unguarded');
+  });
+  it('retains the expected guarded finding decision', () => {
+    expect(result.findings.includes('rename')).toBe(Array.isArray(fixture.expected) && fixture.expected.includes(fixture.terminal ?? 'true'));
+  });
+  it('observes the authored guarded write behavior', () => {
+    expect(result.runtime.guarded).toBe(fixture.guarded);
+  });
+  it('observes the deliberately unguarded runtime write', () => {
+    expect(result.runtime.unguarded).toBe('unguarded');
+  });
+});
