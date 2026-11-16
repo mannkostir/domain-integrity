@@ -118,7 +118,37 @@ After merging main at aa2f19e into the arrow-method branch, the fourteen public 
 
 ## Public replay applier re-run (issue #126)
 
-The focused unresolved-delegate correction on integrated `e7ce5f5` (accepted main `96151f6`) reruns only the pinned sample `354ab3c160472e6676a5aeb06fad8e554cd4d689` in ordinary and declared modes, using its unchanged project/config. Exact nested class-transformer 0.5.1 operation identity resolves, but the bounded delegate-capability query is incomplete. It supplies only unresolved-delegate mutation evidence, without conditional-copy or freshness authority. All three Job appliers have explicit unknown entry-point roles, never proven replay; their assignments remain extracted and may-write evidence stays true. Both the rebuilt CLI and static model remove exactly the three original finding objects, with no additions, problems or stderr, and all extracted method field effects match the preceding integrated snapshot. Earlier stopped phases and three-removal receipts remain historical. The full fourteen-repository tables below do not verify this corrected integrated source. Independent review, final frozen-source six gates, both-mode whole-public comparison, current-base CI and maintainer private-reference validation remain outstanding.
+### Final integrated public comparison
+
+The reviewed implementation `203d2f7` was compared with accepted main `96151f6` on all fourteen pinned public repositories in both ordinary and declared-event modes. The candidate CLI SHA-256 is `8c2201bf264f55479617e74e4c5876a7495f7c95da376c4b180c0126b5b8955a`; the accepted-main CLI SHA-256 is `52e5c4dae86034af747d5a0487dba7e5d5497b011e41527a051f1e3e4d8e2c43`. Both immutable builds used the accepted comparison harness, project/config arguments, checkout pins and installed dependencies. The copied ordinary configs and tsconfigs follow the earlier event-declaration comparison; no source repository or shared harness was changed. The private reference repository was excluded before access and remains a maintainer verification gap.
+
+| Repository | Ordinary main / branch | Declared main / branch | Ordinary exits | Declared exits |
+|---|---:|---:|---|---|
+| kyhsa93 | 11 / 11 | 11 / 11 | 1 / 1 | 1 / 1 |
+| bitloops | 5 / 5 | 5 / 5 | 1 / 1 | 1 / 1 |
+| undb | 2 / 2 | 2 / 2 | 1 / 1 | 1 / 1 |
+| sairyss | 0 / 0 | 4 / 4 | 0 / 0 | 1 / 1 |
+| ddd-forum | 1 / 1 | 5 / 5 | 1 / 1 | 1 / 1 |
+| codely | 0 / 0 | 0 / 0 | 2 / 2 | 2 / 2 |
+| daruma | 4 / 4 | 4 / 4 | 1 / 1 | 1 / 1 |
+| booking | 1 / 1 | 13 / 13 | 1 / 1 | 1 / 1 |
+| ticket-sale | 6 / 6 | 6 / 6 | 1 / 1 | 1 / 1 |
+| schulcloud | 16 / 16 | 16 / 16 | 1 / 1 | 1 / 1 |
+| siwe | 3 / 3 | 3 / 3 | 1 / 1 | 1 / 1 |
+| es-sample | 3 / 0 | 3 / 0 | 1 / 0 | 1 / 0 |
+| adonisjs | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| openlayers | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| **Total** | **52 / 49** | **72 / 69** | | |
+
+All 28 comparisons checked complete finding objects, exit codes, problems and stderr. Exactly the same three `terminal-state-leak` objects disappear in each mode: `Job.applyJobCreated`, `Job.applyJobUpdated` and `Job.applyJobArchived` for status `ARCHIVED`. The sample exits 0 instead of 1. There are no added findings, no other removed findings, and no other exit, problem or stderr changes. This supersedes the earlier issue #126 public checkpoints for the integrated implementation.
+
+The pinned sample still has incomplete delegate-capability evidence for the exact nested class-transformer 0.5.1 operation. Its appliers remain unknown entry points, without a copy, freshness or replay-only guarantee. All extracted assignments and mutation effects are preserved. Independent review has no remaining must-fix findings; 36 adversarial cases and 290 replay tests pass. The complete CLI comparison receipts and source manifests are retained with the batch evidence. Private-reference validation remains separate.
+
+All six local gates pass on the test-only successor `24f60d8`: 6,969 tests in 173 files, typecheck, full lint, build, installed-package validation and full coverage (statements 97.04%, branches 92.87%, functions 99.04%, lines 99.12%). Its rebuilt CLI is byte-identical to the publicly compared implementation. Native cross-platform PR CI and exact-merge CI remain separate gates; the private reference remains maintainer-owned.
+
+### Historical focused and public checkpoints
+
+The focused unresolved-delegate correction on integrated `e7ce5f5` (accepted main `96151f6`) reruns only the pinned sample `354ab3c160472e6676a5aeb06fad8e554cd4d689` in ordinary and declared modes, using its unchanged project/config. Exact nested class-transformer 0.5.1 operation identity resolves, but the bounded delegate-capability query is incomplete. It supplies only unresolved-delegate mutation evidence, without conditional-copy or freshness authority. All three Job appliers have explicit unknown entry-point roles, never proven replay; their assignments remain extracted and may-write evidence stays true. Both the rebuilt CLI and static model remove exactly the three original finding objects, with no additions, problems or stderr, and all extracted method field effects match the preceding integrated snapshot. Earlier stopped phases and three-removal receipts remain historical. The full fourteen-repository tables below do not verify this corrected integrated source. These focused receipts did not establish whole-public or full-gate acceptance; the final integrated comparison above supersedes this checkpoint.
 
 The issue #126 re-run compared a fresh build of main `1514795` with the implementation branch on the fourteen public repositories in Setup, verifying each checkout against its recorded commit. It used the same project and config arguments from the existing validation manifest, with no config, repository, dependency or shared-harness changes. Each command was `node <build>/dist/cli.js check --format json -p <recorded-project> -c <recorded-config>`, run from that repository's recorded directory. The runner excluded the private reference repository and captured every JSON report, stderr and exit code outside the harness. The private reference repository was neither read nor rerun; its maintainer validation remains a separate gate.
 
