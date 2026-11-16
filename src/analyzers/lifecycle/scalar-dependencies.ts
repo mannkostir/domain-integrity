@@ -193,4 +193,3 @@ const enumLiteral = (node: Node): boolean => {
   return Node.isEnumMember(member) && member.getValue() !== undefined &&
     (resolvedSymbol(node.getExpression())?.getDeclarations() ?? []).includes(member.getParent());
 };
-
