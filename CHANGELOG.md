@@ -21,7 +21,7 @@ All notable changes to this project are documented here; the format follows [Kee
 
 ### Fixed
 
-- Public event-sourcing appliers identified by computed event dispatch and history replay are no longer judged as command entry points for terminal leaks, transition checks or transition seeding. Directly referenced commands remain eligible, and applier assignments still count. (#TBD)
+- Public event-sourcing appliers identified by computed event dispatch and history replay are no longer judged as command entry points for terminal leaks, transition checks or transition seeding. Directly referenced commands remain eligible, and applier assignments still count. Strict replay candidates whose sole unresolved mutation comes from the verified class-transformer 0.5.1 operation, through conditional-copy behavior or an incomplete delegate-capability scan, remain unjudged as unknown entry points; no freshness or replay-only guarantee is inferred. (#TBD)
 - Preserve entry guards before proven state-writing setters and carry their assigned values into lifecycle analysis. (#139)
 
 - Plain writes through a resolved setter that does not touch the tracked state field no longer trace its getter, so surrounding guards and terminal-state leaks remain visible. Compound and update assignments still trace the getter. Private accessors and their method or arrow helpers use their lexical declaration rather than an unrelated subclass accessor with the same spelling; ordinary string keys remain virtual. The plain-setter exemption stays disabled when the tracked private name represents multiple lexical brands. (#138)

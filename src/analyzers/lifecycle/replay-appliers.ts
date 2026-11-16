@@ -1,12 +1,13 @@
 import { ClassDeclaration, Node, ParameterDeclaration, SyntaxKind, VariableDeclarationKind } from 'ts-morph';
 import { sourceDeclaration } from '../../engine/source-declaration';
-import { MemberMutations } from '../shared/member-mutations';
+import { MemberMutations, MutationEvidence, mergedMutationEvidence } from '../shared/member-mutations';
 import { NameUses } from '../shared/name-uses';
 import { SourceIndex } from '../shared/source-index';
 import { isWritten } from '../shared/writes';
 import { outermostWrapper, unwrap } from '../shared/wrappers';
 import { InstanceMethod, resolveInstanceMethod } from './instance-method';
 import { AggregateScope } from './field-ref';
+import { EntryPoint } from './model';
 
 type Dispatch = {
   readonly method: InstanceMethod;
@@ -107,32 +108,43 @@ const replays = (method: InstanceMethod, dispatch: Dispatch): boolean =>
     });
   });
 
-const discriminatorValue = (method: InstanceMethod, name: string, mutations: MemberMutations): string | undefined => {
+const discriminatorValue = (method: InstanceMethod, name: string, mutations: MemberMutations): { readonly value: string; readonly mutation: MutationEvidence } | undefined => {
   const parameters = method.implementation.getParameters();
   if (parameters.length !== 1) return undefined;
   const parameter = parameters[0]!;
   const declarations = parameter.getType().getProperty(name)?.getDeclarations() ?? [];
   if (declarations.length !== 1) return undefined;
   const property = declarations[0]!;
-  if (!Node.isPropertyDeclaration(property) || mutations.mayWrite(property)) return undefined;
+  if (!Node.isPropertyDeclaration(property)) return undefined;
+  const mutation = mutations.evidenceOf(property);
   const initializer = property.getInitializer();
-  if (Node.isStringLiteral(initializer)) return initializer.getLiteralText();
+  if (Node.isStringLiteral(initializer)) return { value: initializer.getLiteralText(), mutation };
   if (!Node.isPropertyAccessExpression(initializer) || initializer.getName() !== 'name') return undefined;
   const owner = property.getParent();
   return Node.isClassDeclaration(owner) && !owner.getStaticMembers().some((member) => member.getName() === 'name') &&
-    initializer.getExpression().getSymbol() === owner.getSymbol() ? owner.getName() : undefined;
+    initializer.getExpression().getSymbol() === owner.getSymbol() && owner.getName() !== undefined ? { value: owner.getName()!, mutation } : undefined;
 };
 
-export const replayAppliers = (scope: AggregateScope, sources: SourceIndex, uses: NameUses, mutations: MemberMutations): ReadonlySet<string> => {
+export const replayAppliers = (scope: AggregateScope, sources: SourceIndex, uses: NameUses, mutations: MemberMutations): ReadonlyMap<string, EntryPoint> => {
   const chain = sourceChain(scope.cls, sources);
   const names = [...new Set(chain.flatMap((cls) => cls.getInstanceMethods().map((method) => method.getName())))];
   const methods = names.flatMap((name) => resolveInstanceMethod(chain, name, scope) ?? []);
   const candidates = methods.flatMap(dispatches);
-  if (candidates.length === 0) return new Set();
-  const evidence = methods.filter((method) => !mutations.mayWrite(method.member));
-  const dispatch = candidates.filter((candidate) => evidence.includes(candidate.method) && evidence.some((method) => replays(method, candidate)));
-  return new Set(methods.filter((method) => !uses.isReferenced(method.name) && dispatch.some((candidate) => {
-    const value = discriminatorValue(method, candidate.discriminator, mutations);
-    return value !== undefined && method.name === candidate.prefix + value + candidate.suffix;
-  })).map((method) => method.name));
+  const roles = new Map<string, EntryPoint>();
+  for (const method of methods) {
+    if (uses.isReferenced(method.name)) continue;
+    for (const candidate of candidates) {
+      const discriminator = discriminatorValue(method, candidate.discriminator, mutations);
+      if (discriminator === undefined || method.name !== candidate.prefix + discriminator.value + candidate.suffix) continue;
+      for (const replay of methods.filter((possible) => replays(possible, candidate))) {
+        const mutation = mergedMutationEvidence([
+          mutations.evidenceOf(candidate.method.member), mutations.evidenceOf(replay.member), discriminator.mutation,
+        ]);
+        if (mutation === 'other') continue;
+        if (mutation === 'none') roles.set(method.name, 'replay');
+        else if ((mutation === 'conditional-copy' || mutation === 'unresolved-delegate') && !roles.has(method.name)) roles.set(method.name, 'unknown');
+      }
+    }
+  }
+  return roles;
 };

@@ -45,7 +45,7 @@ export const method = (
   file: '/app/src/order.ts',
   line: 10,
   visibility,
-  entryPoint: visibility === 'public',
+  entryPoint: visibility === 'public' ? 'command' : 'unknown',
   mutates,
   fields: new Map(Object.entries(fields)),
   writtenAlongside,

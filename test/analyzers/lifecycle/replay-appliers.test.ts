@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { SyntaxKind } from 'ts-morph';
+import { SourceIndex } from '../../../src/analyzers/shared/source-index';
+import { ConditionalCopies } from '../../../src/analyzers/shared/conditional-copies';
+import { MemberMutations } from '../../../src/analyzers/shared/member-mutations';
 import { lifecycleAnalyzer } from '../../../src/analyzers/lifecycle/analyzer';
 import { suggestLifecycles } from '../../../src/analyzers/lifecycle/suggest';
 import { DEFAULT_DECLARATION } from '../../../src/engine/declaration';
@@ -63,6 +67,17 @@ const extract = (source = account, root = base, extra = '', transitions?: Readon
 
 const leaks = (source = account, root = base, extra = '', otherFiles: Readonly<Record<string, string>> = {}) =>
   lifecycleAnalyzer.check(extract(source, root, extra, undefined, false, otherFiles)).filter((finding) => finding.ruleId === 'terminal-state-leak').map((finding) => finding.details.method).sort();
+
+const transformerFiles = (version = '0.5.1'): Readonly<Record<string, string>> => ({
+  '/node_modules/class-transformer/package.json': JSON.stringify({ name: 'class-transformer', version, typings: './types/index.d.ts', main: './cjs/index.js' }),
+  '/node_modules/class-transformer/types/index.d.ts': 'export declare function instanceToPlain<T>(value: T, options?: unknown): Record<string, any>; export declare class ClassTransformer { instanceToPlain(value: unknown): unknown; }',
+});
+
+const serializedAccount = "import { instanceToPlain } from 'class-transformer';\n" + account;
+const serializedExtra = 'function serialize<T extends Event>(event: T) { const result = instanceToPlain(event); delete result.eventName; }';
+
+const roles = (model: ReturnType<typeof extract>): readonly string[] =>
+  model.aggregates[0]!.methods.filter((method) => method.name.startsWith('apply')).map((method) => method.entryPoint);
 
 describe('public replay appliers', () => {
   it('do not report appliers reached by event dispatch and history replay', () => {
@@ -543,6 +558,580 @@ class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }`;
     const extra = "function replace(label: {} = {}) { Object.assign(label, { eventName: 'Other' }); } class Reassigned { eventName = 'Archived'; constructor() { replace(this); } }";
 
     expect(leaks(source, base, extra)).toContain('applyArchived');
+  });
+
+  it('preserves unknown entry-point roles for conditional serializer roots', () => {
+    const model = extract(serializedAccount, base, serializedExtra, undefined, false, transformerFiles());
+
+    expect(roles(model)).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('does not report strict provisional appliers with only conditional root writes', () => {
+    expect(leaks(serializedAccount, base, serializedExtra, transformerFiles())).toEqual([]);
+  });
+
+  it('retains conditional-result writes as possible mutations', () => {
+    const model = extract(serializedAccount, base, serializedExtra, undefined, false, transformerFiles());
+    const archived = model.aggregates[0]!.methods.find((method) => method.name === 'applyArchived')!;
+
+    expect(archived.fields.get('status')!.sets.tokens).toContain('archived');
+  });
+
+  it('keeps proven replay and uncertain replay as distinct roles', () => {
+    expect(roles(extract())).toEqual(['replay', 'replay', 'replay']);
+  });
+
+  it('keeps mayWrite conservative beside a conditional-copy reason', () => {
+    const project = inMemoryProject({ '/src/account.ts': base + events + serializedAccount + serializedExtra, ...transformerFiles() });
+    const sources = new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile()));
+    const mutation = new MemberMutations(sources);
+    const property = project.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('Archived').getPropertyOrThrow('eventName');
+
+    expect([mutation.mayWrite(property), mutation.evidenceOf(property)]).toEqual([true, 'conditional-copy']);
+  });
+
+  it('accepts a renamed named import without assuming a fresh root', () => {
+    const source = serializedAccount.replace('instanceToPlain }', 'instanceToPlain as copy }');
+    const extra = serializedExtra.replace('instanceToPlain(event)', 'copy(event)');
+
+    expect(roles(extract(source, base, extra, undefined, false, transformerFiles()))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it.each([false, true])('preserves uncertain roles in direct and mapped replay source: %s', (mapped) => {
+    expect(roles(extract(serializedAccount, base, (mapped ? 'interface Event { eventName: string }' : '') + serializedExtra, undefined, mapped, transformerFiles())))
+      .toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it.each([
+    'event.eventName = "Other";',
+    'function raw(value: Event) { value.eventName = "Other"; }',
+    'function replace(target: {}) { Object.assign(target, { applyEvent: () => {} }); }',
+    'new Account().applyArchived(new Archived());',
+    'const extracted = new Account().applyArchived;',
+  ])('preserves independent blockers beside conditional roots: %s', (blocker) => {
+    const inside = blocker.startsWith('event.') ? serializedExtra.replace('const result', blocker + ' const result') : serializedExtra + blocker;
+    const model = extract(serializedAccount, base, inside, undefined, false, transformerFiles());
+
+    expect(model.aggregates[0]!.methods.find((method) => method.name === 'applyArchived')!.entryPoint).toBe('command');
+  });
+
+  it.each([
+    'function serialize<T extends Event>(event: T) { let result = instanceToPlain(event); result = event; delete result.eventName; }',
+    'declare function other(): Record<string, any>; function serialize<T extends Event>(event: T) { let result = instanceToPlain(event); result = other(); delete result.eventName; }',
+    'function serialize<T extends Event>(event: T) { const result = instanceToPlain(event); result.child.eventName = "Other"; }',
+    'declare function mutate(value: Event): Event; function serialize<T extends Event>(event: T) { const result = instanceToPlain(mutate(event)); delete result.eventName; }',
+    'function serialize<T extends Event>(event: T) { const callback = () => { event.eventName = "Other"; }; const result = instanceToPlain(event); callback(); delete result.eventName; }',
+    'function serialize<T extends Event>(event: T) { let result = instanceToPlain(event); ({ result } = { result: event }); delete result.eventName; }',
+  ])('does not hide binding, nested or input effects: %s', (extra) => {
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, transformerFiles())))
+      .toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    'instanceToPlain(event, undefined)',
+    'instanceToPlain(...[event])',
+    'copy(event)',
+    'library.instanceToPlain(event)',
+    'instanceToPlain(new External(event))',
+    'instanceToPlain(new Box(mutate(event)))',
+  ])('retains existing behavior for an unsupported call form: %s', (call) => {
+    const aliases = call === 'copy(event)' ? 'const copy = instanceToPlain; ' : call.startsWith('library.') ? 'const library = { instanceToPlain }; ' : '';
+    const extra = aliases + serializedExtra.replace('instanceToPlain(event)', call);
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, transformerFiles())))
+      .toEqual(['command', 'command', 'command']);
+  });
+
+  it.each(['0.4.0', '0.5.0', '0.5.2'])('retains existing behavior for version %s', (version) => {
+    expect(roles(extract(serializedAccount, base, serializedExtra, undefined, false, transformerFiles(version))))
+      .toEqual(['command', 'command', 'command']);
+  });
+
+  it('does not give a local identity function library authority', () => {
+    const source = 'function instanceToPlain<T>(value: T): Record<string, any> { return value as Record<string, any>; }' + account;
+
+    expect(roles(extract(source, base, serializedExtra))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    'import { ClassTransformer } from "class-transformer"; ClassTransformer.prototype.instanceToPlain = value => value;',
+    'import { ClassTransformer } from "class-transformer"; const alias = ClassTransformer; unknownConsumer(alias);',
+    'import * as module from "class-transformer"; Object.assign(module, { instanceToPlain: value => value });',
+    'import * as module from "class-transformer"; const alias = module; Reflect.defineProperty(alias, "instanceToPlain", { value: value => value });',
+    'import { ClassTransformer } from "class-transformer"; Object.setPrototypeOf(ClassTransformer.prototype, replacement);',
+    'const moduleName = "class-transformer"; const module = require(moduleName); unknownConsumer(module);',
+    'const load = require; const module = load("class-transformer"); unknownConsumer(module);',
+    'declare const moduleName: string; const module = import(moduleName);',
+    'import { ClassTransformer as Delegated } from "/node_modules/class-transformer/types/index"; Delegated.prototype.instanceToPlain = value => value;',
+    'const module = require("/node_modules/class-transformer/cjs/ClassTransformer"); unknownConsumer(module);',
+    'const module = require("../node_modules/class-transformer/cjs/ClassTransformer"); unknownConsumer(module);',
+  ])('withholds conditional semantics after delegated exposure: %s', (exposure) => {
+    expect(roles(extract(serializedAccount, base, serializedExtra + exposure, undefined, false, transformerFiles())))
+      .toEqual(['command', 'command', 'command']);
+  });
+
+  it('withholds semantics after a delegated class is re-exported by an external declaration', () => {
+    const files = { ...transformerFiles(),
+      '/node_modules/bridge/index.d.ts': 'export { ClassTransformer as Delegated } from "class-transformer";',
+    };
+    const extra = serializedExtra + 'import { Delegated } from "bridge"; Delegated.prototype.instanceToPlain = value => value;';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    'class StatefulArchived extends Archived { private reads = 0; get then() { return ++this.reads === 1 ? undefined : () => {}; } }',
+    'Object.defineProperty(Archived.prototype, "then", { get() { return nextThen(); } });',
+  ])('never turns a then hazard into proven replay or freshness: %s', (hazard) => {
+    expect(roles(extract(serializedAccount, base, serializedExtra + hazard, undefined, false, transformerFiles())))
+      .toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('keeps nearby ordinary commands judged beside uncertain appliers', () => {
+    const source = serializedAccount.replace('  updateInfo()', '  applyDiscount() { this.title = "discount"; }\n  updateInfo()');
+
+    expect(leaks(source, base, serializedExtra, transformerFiles())).toEqual(['applyDiscount']);
+  });
+
+  it('does not seed transitions from uncertain entry points', () => {
+    const model = extract(serializedAccount, base, serializedExtra, undefined, false, transformerFiles());
+
+    expect(suggestLifecycles({ ...model, aggregates: model.aggregates.map((aggregate) => ({ ...aggregate, declared: false })) })[0]!.fields[0]!.transitions).toEqual({ kind: 'none' });
+  });
+
+  it('retains unchanged aliases and root-local bulk writes as conditional', () => {
+    const extra = 'function serialize<T extends Event>(event: T) { const result = instanceToPlain(event); const alias = result; Object.assign(alias, { eventName: "Other" }); }';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, transformerFiles())))
+      .toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('preserves per-event isolation for independent getter effects', () => {
+    const extra = serializedExtra + 'class StatefulArchived extends Archived { get then() { this.eventName = "Other"; return undefined; } }';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, transformerFiles())))
+      .toEqual(['unknown', 'unknown', 'command']);
+  });
+
+  it('keeps transition checks quiet for uncertain entry points', () => {
+    const model = extract(serializedAccount, base, serializedExtra, new Map([['applyArchived', ['active']]]), false, transformerFiles());
+
+    expect(lifecycleAnalyzer.check(model)).toEqual([]);
+  });
+
+  it('uses the nested verified package beside an older root installation', () => {
+    const nested = Object.fromEntries(Object.entries(transformerFiles()).map(([path, text]) => [path.replace('/node_modules', '/packages/core/node_modules'), text]));
+    const files = { ...transformerFiles('0.4.0'), ...nested,
+      '/packages/core/serialize.ts': 'import { instanceToPlain } from "class-transformer"; export function serialize(event: object) { const result = instanceToPlain(event); delete result.eventName; }',
+    };
+
+    expect(roles(extract(account, base, '', undefined, false, files))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('does not grant a same-shaped export from another package authority', () => {
+    const files = Object.fromEntries(Object.entries(transformerFiles()).map(([path, text]) => [path.replace('class-transformer', 'lookalike'), text.replace('class-transformer', 'lookalike')]));
+    const source = serializedAccount.replace("from 'class-transformer'", "from 'lookalike'");
+
+    expect(roles(extract(source, base, serializedExtra, undefined, false, files))).toEqual(['command', 'command', 'command']);
+  });
+
+  it('does not confuse a shadowed import with the resolved export', () => {
+    const extra = 'function serialize(event: Event, instanceToPlain: (value: unknown) => Record<string, any>) { const result = instanceToPlain(event); delete result.eventName; }';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, transformerFiles())))
+      .toEqual(['command', 'command', 'command']);
+  });
+
+  it('does not confuse an unrelated package-name string with delegated exposure', () => {
+    expect(roles(extract(serializedAccount, base, serializedExtra + 'console.log("class-transformer");', undefined, false, transformerFiles())))
+      .toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it.each(['Delegated', 'bridge.Delegated'])('withholds semantics through typed constructor aliases: %s', (target) => {
+    const files = { ...transformerFiles(),
+      '/node_modules/bridge/index.d.ts': 'export declare const Delegated: typeof import("class-transformer").ClassTransformer;',
+    };
+    const imported = target === 'Delegated' ? 'import { Delegated } from "bridge";' : 'import * as bridge from "bridge";';
+    const extra = serializedExtra + imported + target + '.prototype.instanceToPlain = value => value;';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    ['export { ClassTransformer as default } from "class-transformer";', 'import Delegated from "bridge"; Delegated.prototype.instanceToPlain = value => value;'],
+    ['import { ClassTransformer } from "class-transformer"; export declare const internals: { Transformer: typeof ClassTransformer };', 'import { internals } from "bridge"; internals.Transformer.prototype.instanceToPlain = value => value;'],
+    ['import { ClassTransformer } from "class-transformer"; export declare const internals: { Transformer: typeof ClassTransformer };', 'import { internals } from "bridge"; unknownConsumer(internals);'],
+  ])('withholds delegated authority through a bridge: %s', (declaration, exposure) => {
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': declaration };
+
+    expect(roles(extract(serializedAccount, base, serializedExtra + exposure, undefined, false, files)))
+      .toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    'import * as loader from "node:module"; const load = loader.createRequire(import.meta.url); unknownConsumer(load("class-transformer"));',
+    'import loader from "node:module"; const load = loader.createRequire(import.meta.url); unknownConsumer(load("class-transformer"));',
+    'const loader = require("node:module"); const load = loader.createRequire(import.meta.url); unknownConsumer(load("class-transformer"));',
+    'const loader = import("node:module");',
+    'declare const loader: any; unknownConsumer(loader["require"]("class-transformer"));',
+  ])('withholds semantics after ambiguous native module-loader exposure: %s', (exposure) => {
+    expect(roles(extract(serializedAccount, base, serializedExtra + exposure, undefined, false, transformerFiles())))
+      .toEqual(['command', 'command', 'command']);
+  });
+
+  it.each(['string', 'number', 'boolean', 'null', 'undefined', 'string[]', 'Set<string>', 'Map<string, string>', 'Date', 'Promise<Event>', '() => void'])('does not extend conditional support to a known %s input', (type) => {
+    const extra = `function serialize(event: ${type}) { const result = instanceToPlain(event); delete result.eventName; }`;
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, transformerFiles())))
+      .toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    'delegated().prototype.instanceToPlain = value => value;',
+    'unknownConsumer(delegated);',
+  ])('withholds semantics for a bridge factory exposing the actual delegate: %s', (exposure) => {
+    const files = { ...transformerFiles(),
+      '/node_modules/bridge/index.d.ts': 'export declare function delegated(): typeof import("class-transformer").ClassTransformer;',
+    };
+    const extra = serializedExtra + 'import { delegated } from "bridge"; ' + exposure;
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['command', 'command', 'command']);
+  });
+
+  it('does not confuse an unrelated computed record property with a module loader', () => {
+    const extra = serializedExtra + 'const labels: Record<string,string> = {}; labels["require"] = "hello";';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, transformerFiles())))
+      .toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('does not interpret an unrelated recursive factory result as delegated exposure', () => {
+    const files = { ...transformerFiles(),
+      '/node_modules/bridge/index.d.ts': 'declare class Logger { child: Logger; info(): Logger; } export declare function logger(): Logger;',
+    };
+    const extra = serializedExtra + 'import { logger } from "bridge"; logger().info();';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('retains narrow authority beside an unrelated imported string array', () => {
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': 'export declare const metadata: string[];' };
+    const extra = 'import { metadata } from "bridge"; ' + serializedExtra.replace('delete result.eventName;', 'for (const key of metadata) { delete result[key]; }');
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('withholds authority for a named nested factory wrapper', () => {
+    const files = { ...transformerFiles(),
+      '/node_modules/bridge/index.d.ts': 'interface Inner { Transformer: typeof import("class-transformer").ClassTransformer } interface Outer { inner: Inner } export declare function delegated(): Outer;',
+    };
+    const extra = serializedExtra + 'import { delegated } from "bridge"; unknownConsumer(delegated());';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['command', 'command', 'command']);
+  });
+
+
+  it('keeps incomplete delegate authority distinct from conditional authority', () => {
+    const wide = Array.from({ length: 70 }, (_, i) => `p${i}: Wide${i}`).join(';');
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': `${Array.from({ length: 70 }, (_, i) => `interface Wide${i} { label: string }`).join(";")} export declare const metadata: { ${wide} };` };
+    const extra = 'import { metadata } from "bridge"; unknownConsumer(metadata); ' + serializedExtra;
+    const project = inMemoryProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
+    const sources = new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile()));
+    const copies = new ConditionalCopies(sources);
+    const call = project.getSourceFileOrThrow('/src/account.ts').getFunctionOrThrow('serialize').getDescendantsOfKind(SyntaxKind.CallExpression)[0]!;
+
+    expect([copies.isConditionalRoot(call), copies.authorityOf(call)]).toEqual([false, 'unresolved-delegate']);
+  });
+
+  it('keeps mayWrite true for incomplete delegate authority', () => {
+    const wide = Array.from({ length: 70 }, (_, i) => `p${i}: Wide${i}`).join(';');
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': `${Array.from({ length: 70 }, (_, i) => `interface Wide${i} { label: string }`).join(";")} export declare const metadata: { ${wide} };` };
+    const extra = 'import { metadata } from "bridge"; unknownConsumer(metadata); ' + serializedExtra;
+    const project = inMemoryProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
+    const mutations = new MemberMutations(new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile())));
+    const property = project.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('Archived').getPropertyOrThrow('eventName');
+
+    expect([mutations.mayWrite(property), mutations.evidenceOf(property)]).toEqual([true, 'unresolved-delegate']);
+  });
+
+  it.each(['', 'event.eventName = "Other";', 'import { delegated } from "exposure"; unknownConsumer(delegated);', 'unknownConsumer(require("class-transformer"));'])('aggregates incomplete delegate evidence with later causes: %s', (cause) => {
+    const wide = Array.from({ length: 70 }, (_, i) => `p${i}: Wide${i}`).join(';');
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': `${Array.from({ length: 70 }, (_, i) => `interface Wide${i} { label: string }`).join(";")} export declare const metadata: { ${wide} };`,
+      '/node_modules/exposure/index.d.ts': 'export declare function delegated(): typeof import("class-transformer").ClassTransformer;',
+    };
+    const extra = 'import { metadata } from "bridge"; unknownConsumer(metadata); ' + (cause.startsWith('event.') ? serializedExtra.replace('const result', cause + 'const result') : serializedExtra + cause);
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(Array(3).fill(cause ? 'command' : 'unknown'));
+  });
+
+  it('keeps wrong operation identity judged beside incomplete capability evidence', () => {
+    const wide = Array.from({ length: 70 }, (_, i) => `p${i}: Wide${i}`).join(';');
+    const files = { ...transformerFiles('0.4.0'), '/node_modules/bridge/index.d.ts': `${Array.from({ length: 70 }, (_, i) => `interface Wide${i} { label: string }`).join(";")} export declare const metadata: { ${wide} };` };
+    const extra = 'import { metadata } from "bridge"; unknownConsumer(metadata); ' + serializedExtra;
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['command', 'command', 'command']);
+  });
+
+
+  it.each([
+    ['export declare namespace internals { function delegated(): typeof import("class-transformer").ClassTransformer; }', 'import { internals } from "bridge"; unknownConsumer(internals);'],
+    ['export type * from "class-transformer"; export declare function label(): string;', 'import * as bridge from "bridge"; bridge.label();'],
+    ['export type { ClassTransformer } from "class-transformer"; export declare function label(): string;', 'import * as bridge from "bridge"; bridge.label();'],
+    ['export declare namespace internals { type Delegated = typeof import("class-transformer").ClassTransformer; function label(): string; }', 'import { internals } from "bridge"; internals.label();'],
+    ['declare function factory<T>(): T; export declare const delegated: typeof factory<typeof import("class-transformer").ClassTransformer>;', 'import { delegated } from "bridge"; unknownConsumer(delegated);'],
+    ['interface Cycle { child: Cycle; Transformer: typeof import("class-transformer").ClassTransformer } export declare function delegated(): Cycle;', 'import { delegated } from "bridge"; unknownConsumer(delegated);'],
+    ['export declare const delegated: Promise<typeof import("class-transformer").ClassTransformer>;', 'import { delegated } from "bridge"; unknownConsumer(delegated);'],
+  ])('follows runtime namespace and generic capability surfaces: %s', (declaration, exposure) => {
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': declaration };
+    const expected = declaration.includes('function label()') ? 'unknown' : 'command';
+
+    expect(roles(extract(serializedAccount, base, serializedExtra + exposure, undefined, false, files))).toEqual(Array(3).fill(expected));
+  });
+
+  it('withholds conditional authority for an unresolved written surface', () => {
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': 'export declare const metadata: MissingType;' };
+    const extra = 'import { metadata } from "bridge"; unknownConsumer(metadata); ' + serializedExtra;
+    const project = inMemoryProject({ '/src/account.ts': base + events + serializedAccount + extra, ...files });
+    const sources = new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile()));
+    const copies = new ConditionalCopies(sources);
+    const call = project.getSourceFileOrThrow('/src/account.ts').getFunctionOrThrow('serialize').getDescendantsOfKind(SyntaxKind.CallExpression)[0]!;
+
+    expect([copies.isConditionalRoot(call), copies.authorityOf(call)]).toEqual([false, 'unresolved-delegate']);
+  });
+
+
+  it('keeps a positively resolved older constructor separate from the nested verified root', () => {
+    const nested = Object.fromEntries(Object.entries(transformerFiles()).map(([path, text]) => [path.replace('/node_modules', '/packages/core/node_modules'), text]));
+    const files = { ...transformerFiles('0.4.0'), ...nested,
+      '/packages/core/serialize.ts': 'import { instanceToPlain } from "class-transformer"; export function serialize(event: object) { const result = instanceToPlain(event); delete result.eventName; }',
+    };
+    const extra = 'import { ClassTransformer } from "class-transformer"; unknownConsumer(ClassTransformer);';
+
+    expect(roles(extract(account, base, extra, undefined, false, files))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+
+  it('follows chained runtime stars without reviving erased constructor exports', () => {
+    const files = { ...transformerFiles(),
+      '/node_modules/bridge/index.d.ts': 'export * from "./types"; export declare function label(): string;',
+      '/node_modules/bridge/types.d.ts': 'export type * from "class-transformer";',
+    };
+    const extra = serializedExtra + 'import * as bridge from "bridge"; bridge.label();';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+
+  it.each([
+    'const load = module["require"]; const delegated = load("class-transformer");',
+    'const delegated = module["require"].bind(module)("class-transformer");',
+    'const delegated = module["require"].call(module, "class-transformer");',
+    'const delegated = module["require"].apply(module, ["class-transformer"]);',
+  ])('blocks review computed loader extraction and native invocation: %s', (load) => {
+    const extra = serializedExtra + 'declare const module: { [key: string]: (name: string) => any };' + load + 'delegated.ClassTransformer.prototype.instanceToPlain = (value: unknown) => value;';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, transformerFiles()))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    'const table = { require: "label" }; const load = table["require"];',
+    'const table = { require: (name: string) => name }; const load = table["require"]; load("class-transformer");',
+    'function require(name: string) { return name; } require("class-transformer");',
+    'const table = { require: (name: string) => ({ label: name }) }; const load = table["require"]; load("class-transformer");',
+  ])('keeps review unrelated require properties and shadowing quiet: %s', (extra) => {
+    expect(roles(extract(serializedAccount, base, serializedExtra + extra, undefined, false, transformerFiles()))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it.each([
+    ['export declare function delegated<T = typeof import("class-transformer").ClassTransformer>(): T;', 'command'],
+    ['export declare function delegated<T extends object = typeof import("class-transformer").ClassTransformer>(): T;', 'command'],
+    ['export declare function delegated<T = string>(): T;', 'unknown'],
+  ])('follows review outward generic defaults: %s', (declaration, expected) => {
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': declaration };
+    const extra = serializedExtra + 'import { delegated } from "bridge"; declare function consume(factory: () => any): void; consume(delegated);';
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(Array(3).fill(expected));
+  });
+
+  it.each([
+    ['Object.defineProperty(AggregateRoot.prototype, "applyEvent", { value: (event: Event) => {} });', 'command'],
+    ['Reflect.defineProperty(AggregateRoot.prototype, "loadFromHistory", { value: (events: Event[]) => {} });', 'command'],
+    ['Object.defineProperty(AggregateRoot.prototype, "label", { value: () => {} });', 'replay'],
+    ['class Other { applyEvent() {} } Object.defineProperty(Other.prototype, "applyEvent", { value: () => {} });', 'replay'],
+    ['Object.defineProperty(AggregateRoot.prototype, "applyEvent", { enumerable: true });', 'replay'],
+    ['Object.defineProperty(Archived.prototype, "eventName", { value: "Other" });', 'replay'],
+  ])('correlates review reflective replacement with protocol behavior: %s', (extra, expected) => {
+    expect(roles(extract(account, base, extra))).toEqual(Array(3).fill(expected));
+  });
+
+  it.each([
+    'declare const module: { [key: string]: (name: string) => any }; const load = module["require"]; const delegated = load("class-transformer"); delegated.ClassTransformer.prototype.instanceToPlain = (value: unknown) => value;',
+    'declare const module: { [key: string]: (name: string) => any }; const delegated = module["require"].bind(module)("class-transformer"); delegated.ClassTransformer.prototype.instanceToPlain = (value: unknown) => value;',
+    'Object.defineProperty(AggregateRoot.prototype, "applyEvent", { value: (event: Event) => {} });',
+    'function raw(event: Event) { event.eventName = "Other"; }',
+  ])('keeps review later blockers dominant over incomplete capability evidence: %s', (cause) => {
+    const wide = Array.from({ length: 70 }, (_, i) => `interface Wide${i} { label: string }`).join(';');
+    const shape = Array.from({ length: 70 }, (_, i) => `p${i}: Wide${i}`).join(';');
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': `${wide} export declare const metadata: { ${shape} };` };
+    const extra = 'import { metadata } from "bridge"; declare function consume(value: unknown): void; consume(metadata);' + serializedExtra + cause;
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['command', 'command', 'command']);
+  });
+
+
+  it.each([
+    ['interface Box<T = typeof import("class-transformer").ClassTransformer> { value: T } export declare const delegated: Box<string>;', 'declare function consume(value: unknown): void; consume(delegated);', 'unknown'],
+    ['interface Box<T = string> { value: T } export declare const delegated: Box<typeof import("class-transformer").ClassTransformer>;', 'declare function consume(value: unknown): void; consume(delegated);', 'command'],
+    ['export declare function delegated<T = string>(): T;', 'delegated<string>();', 'unknown'],
+    ['export declare function delegated<T = string>(): T;', 'declare function consume(value: unknown): void; consume(delegated<typeof import("class-transformer").ClassTransformer>);', 'command'],
+    ['interface Box<T = typeof import("class-transformer").ClassTransformer> { label: string } export declare const delegated: Box;', 'declare function consume(value: unknown): void; consume(delegated);', 'unknown'],
+    ['export declare function delegated<T = typeof import("class-transformer").ClassTransformer>(input?: T): string;', 'declare function consume(value: unknown): void; consume(delegated);', 'unknown'],
+    ['export declare function delegated(input: typeof import("class-transformer").ClassTransformer): string;', 'declare function consume(value: unknown): void; consume(delegated);', 'unknown'],
+  ])('preserves review actual generic arguments and input-only types: %s', (declaration, use, expected) => {
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': declaration };
+
+    expect(roles(extract(serializedAccount, base, serializedExtra + 'import { delegated } from "bridge";' + use, undefined, false, files))).toEqual(Array(3).fill(expected));
+  });
+
+  it('retains review own arrow protocol behavior after a prototype replacement', () => {
+    const root = base.replace('private applyEvent(event: Event, isNew = false) {', 'private applyEvent = (event: Event, isNew = false) => {');
+    const extra = 'Object.defineProperty(AggregateRoot.prototype, "applyEvent", { value: (event: Event) => {} });';
+
+    const project = inMemoryProject({ '/src/account.ts': root + events + account + extra });
+    const mutations = new MemberMutations(new SourceIndex(project.getSourceFiles().filter((file) => !file.isDeclarationFile())));
+    const member = project.getSourceFileOrThrow('/src/account.ts').getClassOrThrow('AggregateRoot').getPropertyOrThrow('applyEvent');
+
+    expect(mutations.evidenceOf(member)).toBe('none');
+  });
+
+  it('retains review own discriminator behavior through a prototype alias', () => {
+    const extra = 'const target = Archived.prototype; Object.defineProperty(target, "eventName", { value: "Other" });';
+
+    expect(roles(extract(account, base, extra))).toEqual(['replay', 'replay', 'replay']);
+  });
+
+  it('keeps review instance discriminator replacement judged', () => {
+    const extra = 'Object.defineProperty(new Archived(), "eventName", { value: "Other" });';
+
+    expect(roles(extract(account, base, extra))).toEqual(['replay', 'replay', 'command']);
+  });
+
+  it('keeps review reassigned prototype aliases judged', () => {
+    const extra = 'let target = Archived.prototype; target = new Archived(); Object.defineProperty(target, "eventName", { value: "Other" });';
+
+    expect(roles(extract(account, base, extra))).toEqual(['replay', 'replay', 'command']);
+  });
+
+  it('does not confuse review shadowed reflection with the built-in operation', () => {
+    const extra = 'function inspect(Object: { defineProperty(target: object, key: string, value: object): void }) { Object.defineProperty(AggregateRoot.prototype, "applyEvent", { value: () => {} }); }';
+
+    expect(roles(extract(account, base, extra))).toEqual(['replay', 'replay', 'replay']);
+  });
+
+
+  it.each(['["require"]', '[`require`]', '"require"'])('blocks round2 normalized loader bindings: %s', (key) => {
+    const extra = `declare const module: { [key: string]: (name: string) => any }; const { ${key}: load } = module; const delegated = load("class-transformer"); delegated.ClassTransformer.prototype.instanceToPlain = (value: unknown) => value;`;
+
+    expect(roles(extract(serializedAccount, base, serializedExtra + extra, undefined, false, transformerFiles()))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each(['Object', 'Reflect'])('keeps round2 reflected strings separate from %s private brands', (builtin) => {
+    const root = base.replace('private applyEvent', '#applyEvent').replaceAll('this.applyEvent(', 'this.#applyEvent(');
+
+    expect(roles(extract(account, root, `${builtin}.defineProperty(AggregateRoot.prototype, "#applyEvent", { value: () => {} });`))).toEqual(['replay', 'replay', 'replay']);
+  });
+
+  it.each([
+    '{ "value": () => {} }',
+    '{ ["value"]: () => {} }',
+    'descriptor',
+    '{ ...descriptor }',
+  ])('retains round2 opaque or normalized behavioral descriptors: %s', (descriptor) => {
+    const extra = `declare const descriptor: PropertyDescriptor; Object.defineProperty(AggregateRoot.prototype, "applyEvent", ${descriptor});`;
+
+    expect(roles(extract(account, base, extra))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([false, true])('aggregates round2 independent generic contexts in one named wrapper: %s', (reverse) => {
+    const members = ['safe: typeof delegated<string>', 'generic: typeof delegated'];
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': `declare function delegated<T = typeof import("class-transformer").ClassTransformer>(): T; interface Wrapper { ${(reverse ? [...members].reverse() : members).join(';')} } export declare const wrapper: Wrapper;` };
+    const extra = 'import { wrapper } from "bridge"; declare function consume(value: unknown): void; consume(wrapper);';
+
+    expect(roles(extract(serializedAccount, base, serializedExtra + extra, undefined, false, files))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    ['export declare function delegated<T = typeof import("class-transformer").ClassTransformer>(): T;', 'delegated<string>();', 'unknown'],
+    ['export declare function delegated<T = typeof import("class-transformer").ClassTransformer>(): number;', 'delegated<typeof import("class-transformer").ClassTransformer>();', 'unknown'],
+    ['interface Box<T = typeof import("class-transformer").ClassTransformer> { value: string } export declare const delegated: Box<typeof import("class-transformer").ClassTransformer>;', 'declare function consume(value: unknown): void; consume(delegated);', 'unknown'],
+    ['export declare function delegated<T = typeof import("class-transformer").ClassTransformer>(): T;', 'const safe = delegated<string>; declare function consume(value: unknown): void; consume(delegated);', 'command'],
+    ['export declare function delegated<T = typeof import("class-transformer").ClassTransformer>(): T;', 'declare function consume(value: unknown): void; consume(delegated); const safe = delegated<string>;', 'command'],
+  ])('follows round2 bound arguments only through outward uses: %s', (declaration, use, expected) => {
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': declaration };
+
+    expect(roles(extract(serializedAccount, base, serializedExtra + 'import { delegated } from "bridge";' + use, undefined, false, files))).toEqual(Array(3).fill(expected));
+  });
+
+
+  it.each([
+    'const module = { require: "label" }; const { ["require"]: load } = module;',
+    'const module = { require: (name: string) => name }; const { ["require"]: load } = module; load("class-transformer");',
+    'const descriptor = { ["enumerable"]: true }; Object.defineProperty(AggregateRoot.prototype, "applyEvent", descriptor);',
+  ])('keeps round2 normalized unrelated bindings and attribute descriptors quiet: %s', (extra) => {
+    expect(roles(extract(serializedAccount, base, serializedExtra + extra, undefined, false, transformerFiles()))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it.each([
+    ['Object', 'enumerable'],
+    ['Reflect', 'enumerable'],
+    ['Object', 'configurable'],
+    ['Reflect', 'configurable'],
+  ])('retains direct descriptor getter effects for %s %s', (builtin, attribute) => {
+    const extra = `${builtin}.defineProperty(AggregateRoot.prototype, "applyEvent", { get ${attribute}() { (this as PropertyDescriptor).value = (event: Event) => {}; return true; } });`;
+
+    expect(roles(extract(account, base, extra))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each(['Object', 'Reflect'])('keeps direct boolean attribute data quiet for %s', (builtin) => {
+    const extra = `${builtin}.defineProperty(AggregateRoot.prototype, "applyEvent", { ["enumerable"]: true, 'configurable': false, writable: true });`;
+
+    expect(roles(extract(account, base, extra))).toEqual(['replay', 'replay', 'replay']);
+  });
+
+  it.each(['Object', 'Reflect'])('keeps an isolated attribute descriptor alias quiet for %s', (builtin) => {
+    const extra = `const descriptor = { ["enumerable"]: true, 'configurable': false, writable: true }; ${builtin}.defineProperty(AggregateRoot.prototype, "applyEvent", descriptor);`;
+
+    expect(roles(extract(serializedAccount, base, serializedExtra + extra, undefined, false, transformerFiles()))).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it.each([
+    'let descriptor: PropertyDescriptor = { enumerable: true }; descriptor = { value: () => {} };',
+    'const descriptor: PropertyDescriptor = { enumerable: true }; Object.assign(descriptor, { value: () => {} });',
+    'const descriptor: PropertyDescriptor = { enumerable: true }; descriptor.value = () => {};',
+    'const descriptor: PropertyDescriptor = { enumerable: true }; descriptor["value"] = () => {};',
+    'const descriptor = { enumerable: true }; declare function consume(value: object): void; consume(descriptor);',
+    'const descriptor: PropertyDescriptor = { enumerable: true }; const alias = descriptor; alias.value = () => {};',
+    'export const descriptor = { enumerable: true };',
+    'const descriptor = { get enumerable() { return true; } };',
+    'declare const key: string; const descriptor = { [key]: true };',
+    'declare const other: PropertyDescriptor; const descriptor = { enumerable: true, ...other };',
+    'const descriptor = { ["value"]: () => {} };',
+  ])('retains mutation evidence for an unproved attribute descriptor alias: %s', (setup) => {
+    const extra = setup + 'Object.defineProperty(AggregateRoot.prototype, "applyEvent", descriptor);';
+
+    expect(roles(extract(serializedAccount, base, serializedExtra + extra, undefined, false, transformerFiles()))).toEqual(['command', 'command', 'command']);
+  });
+
+  it.each([
+    'declare const module: { [key: string]: (name: string) => any }; const { ["require"]: load } = module; load("class-transformer");',
+    'declare const descriptor: PropertyDescriptor; Reflect.defineProperty(AggregateRoot.prototype, "loadFromHistory", { ...descriptor });',
+  ])('keeps round2 positive causes dominant after incomplete queries: %s', (cause) => {
+    const wide = Array.from({ length: 70 }, (_, i) => `interface Wide${i} { label: string }`).join(';');
+    const fields = Array.from({ length: 70 }, (_, i) => `p${i}: Wide${i}`).join(';');
+    const files = { ...transformerFiles(), '/node_modules/bridge/index.d.ts': `${wide} export declare const metadata: { ${fields} };` };
+    const extra = 'import { metadata } from "bridge"; declare function consume(value: unknown): void; consume(metadata);' + serializedExtra + cause;
+
+    expect(roles(extract(serializedAccount, base, extra, undefined, false, files))).toEqual(['command', 'command', 'command']);
   });
 
   it('recognises literal event discriminators', () => {

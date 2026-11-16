@@ -126,7 +126,7 @@ const methodModels = (
   fields: readonly StateField[],
   declared: boolean,
   auditFields: readonly string[],
-  appliers: ReadonlySet<string>,
+  appliers: ReadonlyMap<string, MethodModel['entryPoint']>,
 ): MethodModel[] => {
   const stateFieldNames = new Set(fields.map((field) => field.name));
   const bookkeeping: Bookkeeping = {
@@ -139,7 +139,7 @@ const methodModels = (
     file: member.getSourceFile().getFilePath(),
     line: member.getStartLineNumber(),
     visibility: visibilityOf(member),
-    entryPoint: visibilityOf(member) === 'public' && !appliers.has(name),
+    entryPoint: appliers.get(name) ?? (visibilityOf(member) === 'public' ? 'command' : 'unknown'),
     mutates: mutating.has(name),
     fields: new Map(
       fields.map((field) => [

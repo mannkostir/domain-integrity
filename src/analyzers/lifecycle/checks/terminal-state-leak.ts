@@ -32,7 +32,7 @@ export const leakedTerminalTokens = (
   declaration: FieldDeclaration,
 ): string[] => {
   const sources = method.fields.get(field.name)?.sources;
-  const judged = method.visibility === 'public' && method.entryPoint && method.mutates && !exemptAfterTerminal(aggregate, declaration, method);
+  const judged = method.visibility === 'public' && method.entryPoint === 'command' && method.mutates && !exemptAfterTerminal(aggregate, declaration, method);
   if (!judged || sources?.kind !== 'known') return [];
   return field.values
     .map((value) => value.token)
