@@ -1,5 +1,5 @@
 import { runInNewContext } from 'node:vm';
-import { ts } from 'ts-morph';
+import { type Project, ts } from 'ts-morph';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { extractLifecycles } from '../../../src/analyzers/lifecycle/extract';
 import { terminalStateLeak } from '../../../src/analyzers/lifecycle/checks/terminal-state-leak';
@@ -137,6 +137,84 @@ const returnedUnionFixtures: readonly Fixture[] = [
   },
 ];
 
+const authoredInputDiagnostics = (project: Project) => project.getSourceFiles().flatMap(file => file.getPreEmitDiagnostics());
+
+describe('authored input diagnostics', () => {
+  it('accepts valid multi-file input with unreferenced and type-only files', () => {
+    const project = inMemoryProject({
+      '/main.ts': "import type { Value } from './types'; export const value: Value = 1;",
+      '/types.ts': 'export type Value = number;',
+      '/unused.ts': 'export const unused = true;',
+      '/authored.d.ts': 'export declare const value: number;',
+    });
+
+    const diagnostics = authoredInputDiagnostics(project);
+
+    expect(diagnostics).toEqual([]);
+  });
+
+  it('rejects an unreferenced authored semantic error', () => {
+    const project = inMemoryProject({
+      '/main.ts': 'export const value = 1;',
+      '/unused.ts': 'export const value: number = "invalid";',
+    });
+
+    const diagnostics = authoredInputDiagnostics(project);
+
+    expect(diagnostics.some(diagnostic => diagnostic.getCode() === 2322 && diagnostic.getSourceFile()?.getFilePath() === '/unused.ts')).toBe(true);
+  });
+
+  it('rejects an unreferenced authored syntax error', () => {
+    const project = inMemoryProject({
+      '/main.ts': 'export const value = 1;',
+      '/unused.ts': 'export const value = ;',
+    });
+
+    const diagnostics = authoredInputDiagnostics(project);
+
+    expect(diagnostics.some(diagnostic => diagnostic.getCode() === 1109 && diagnostic.getSourceFile()?.getFilePath() === '/unused.ts')).toBe(true);
+  });
+
+  it('rejects an authored declaration error', () => {
+    const project = inMemoryProject({
+      '/main.ts': 'export const value = 1;',
+      '/authored.d.ts': 'export type Value = MissingType;',
+    });
+
+    const diagnostics = authoredInputDiagnostics(project);
+
+    expect(diagnostics.some(diagnostic => diagnostic.getCode() === 2304 && diagnostic.getSourceFile()?.getFilePath() === '/authored.d.ts')).toBe(true);
+  });
+
+  it('rejects an error in the injected helper', () => {
+    const project = inMemoryProject({ '/main.ts': 'export const value = 1;' });
+    project.getSourceFileOrThrow('/lib/domain-integrity.ts').addStatements('const invalid: number = "invalid";');
+
+    const diagnostics = authoredInputDiagnostics(project);
+
+    expect(diagnostics.some(diagnostic => diagnostic.getCode() === 2322 && diagnostic.getSourceFile()?.getFilePath() === '/lib/domain-integrity.ts')).toBe(true);
+  });
+
+  it('rejects incompatible compiler options', () => {
+    const project = inMemoryProject({ '/main.ts': 'export const value = 1;' }, {
+      strictPropertyInitialization: true,
+      strictNullChecks: false,
+    });
+
+    const diagnostics = authoredInputDiagnostics(project);
+
+    expect(diagnostics.some(diagnostic => diagnostic.getCode() === 5052 && diagnostic.getSourceFile() === undefined)).toBe(true);
+  });
+
+  it('rejects missing global builtins', () => {
+    const project = inMemoryProject({ '/main.ts': 'export const value = 1;' }, { lib: [] });
+
+    const diagnostics = authoredInputDiagnostics(project);
+
+    expect(diagnostics.some(diagnostic => diagnostic.getCode() === 2318 && diagnostic.getSourceFile() === undefined)).toBe(true);
+  });
+});
+
 const inspect = (fixture: Fixture) => {
   const project = inMemoryProject({ '/order.ts': fixture.text, ...fixture.extra });
   const files = ['/order.ts', ...Object.keys(fixture.extra ?? {})].map(path => project.getSourceFileOrThrow(path));
@@ -149,8 +227,8 @@ const inspect = (fixture: Fixture) => {
   const runtimeProject = inMemoryProject({ '/runtime.ts': fixture.runtime });
   const runtime = ts.transpileModule(`${fixture.runtime}\ninstance.closed = ${fixture.runtimeTerminal ?? 'true'}; instance.label = ''; instance.rename(); const guarded = instance.label; instance.unguarded(); ({ guarded, unguarded: instance.label });`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   return {
-    diagnostics: project.getPreEmitDiagnostics().map(diagnostic => diagnostic.getMessageText()),
-    runtimeDiagnostics: runtimeProject.getPreEmitDiagnostics().map(diagnostic => diagnostic.getMessageText()),
+    diagnostics: authoredInputDiagnostics(project).map(diagnostic => diagnostic.getMessageText()),
+    runtimeDiagnostics: authoredInputDiagnostics(runtimeProject).map(diagnostic => diagnostic.getMessageText()),
     problems: model.problems,
     sources: describeSources(aggregate.methods.find(method => method.name === 'rename')!.fields.get('closed')!.sources),
     findings: terminalStateLeak(aggregate).map(finding => finding.details.method),
