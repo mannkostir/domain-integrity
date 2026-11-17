@@ -1,4 +1,5 @@
 import { SourceFile } from 'ts-morph';
+import { MemberMutations } from '../shared/member-mutations';
 import { NameUses } from '../shared/name-uses';
 import { SourceIndex } from '../shared/source-index';
 import { BracketWrites } from '../shared/writes';
@@ -13,6 +14,7 @@ export type ProjectIndex = {
   readonly javascriptData: JavaScriptDataProperties;
   readonly bracketWrites: BracketWrites;
   readonly nameUses: NameUses;
+  readonly memberMutations: MemberMutations;
   readonly enumReferences: EnumReferences;
   readonly subclasses: Subclasses;
 };
@@ -25,6 +27,7 @@ export const projectIndex = (files: readonly SourceFile[]): ProjectIndex => {
     javascriptData: new JavaScriptDataProperties(sources),
     bracketWrites: new BracketWrites(sources),
     nameUses: new NameUses(sources),
+    memberMutations: new MemberMutations(sources),
     enumReferences: new EnumReferences(sources),
     subclasses: new Subclasses(sources),
   };

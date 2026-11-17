@@ -116,6 +116,67 @@ The seeded-transitions run, in which `init` seeds `transitions` from the guards 
 
 After merging main at aa2f19e into the arrow-method branch, the fourteen public repositories were rerun with the same setup and configs. Their 76 findings, JSON apart from `tool`, stderr and exit codes are identical to the recorded d7a17b7 re-run. The private reference repository was not rerun during this shipping check; its two findings remain covered only by the earlier validation. A new out-of-repo probe ran `init --yes` on guarded and unguarded arrow commands, then read the generated config with `check`: the guarded command seeded only its allowed source, the unguarded command seeded both states and reported its terminal leak, and neither produced transition drift or a missing transition. An arrow read as a callback stayed unjudged.
 
+## Public replay applier re-run (issue #126)
+
+### Final integrated public comparison
+
+The reviewed implementation `203d2f7` was compared with accepted main `96151f6` on all fourteen pinned public repositories in both ordinary and declared-event modes. The candidate CLI SHA-256 is `8c2201bf264f55479617e74e4c5876a7495f7c95da376c4b180c0126b5b8955a`; the accepted-main CLI SHA-256 is `52e5c4dae86034af747d5a0487dba7e5d5497b011e41527a051f1e3e4d8e2c43`. Both immutable builds used the accepted comparison harness, project/config arguments, checkout pins and installed dependencies. The copied ordinary configs and tsconfigs follow the earlier event-declaration comparison; no source repository or shared harness was changed. The private reference repository was excluded before access and remains a maintainer verification gap.
+
+| Repository | Ordinary main / branch | Declared main / branch | Ordinary exits | Declared exits |
+|---|---:|---:|---|---|
+| kyhsa93 | 11 / 11 | 11 / 11 | 1 / 1 | 1 / 1 |
+| bitloops | 5 / 5 | 5 / 5 | 1 / 1 | 1 / 1 |
+| undb | 2 / 2 | 2 / 2 | 1 / 1 | 1 / 1 |
+| sairyss | 0 / 0 | 4 / 4 | 0 / 0 | 1 / 1 |
+| ddd-forum | 1 / 1 | 5 / 5 | 1 / 1 | 1 / 1 |
+| codely | 0 / 0 | 0 / 0 | 2 / 2 | 2 / 2 |
+| daruma | 4 / 4 | 4 / 4 | 1 / 1 | 1 / 1 |
+| booking | 1 / 1 | 13 / 13 | 1 / 1 | 1 / 1 |
+| ticket-sale | 6 / 6 | 6 / 6 | 1 / 1 | 1 / 1 |
+| schulcloud | 16 / 16 | 16 / 16 | 1 / 1 | 1 / 1 |
+| siwe | 3 / 3 | 3 / 3 | 1 / 1 | 1 / 1 |
+| es-sample | 3 / 0 | 3 / 0 | 1 / 0 | 1 / 0 |
+| adonisjs | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| openlayers | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| **Total** | **52 / 49** | **72 / 69** | | |
+
+All 28 comparisons checked complete finding objects, exit codes, problems and stderr. Exactly the same three `terminal-state-leak` objects disappear in each mode: `Job.applyJobCreated`, `Job.applyJobUpdated` and `Job.applyJobArchived` for status `ARCHIVED`. The sample exits 0 instead of 1. There are no added findings, no other removed findings, and no other exit, problem or stderr changes. This supersedes the earlier issue #126 public checkpoints for the integrated implementation.
+
+The pinned sample still has incomplete delegate-capability evidence for the exact nested class-transformer 0.5.1 operation. Its appliers remain unknown entry points, without a copy, freshness or replay-only guarantee. All extracted assignments and mutation effects are preserved. Independent review has no remaining must-fix findings; 36 adversarial cases and 290 replay tests pass. The complete CLI comparison receipts and source manifests are retained with the batch evidence. Private-reference validation remains separate.
+
+All six local gates pass on the test-only successor `24f60d8`: 6,969 tests in 173 files, typecheck, full lint, build, installed-package validation and full coverage (statements 97.04%, branches 92.87%, functions 99.04%, lines 99.12%). Its rebuilt CLI is byte-identical to the publicly compared implementation. Native cross-platform PR CI and exact-merge CI remain separate gates; the private reference remains maintainer-owned.
+
+### Historical focused and public checkpoints
+
+The focused unresolved-delegate correction on integrated `e7ce5f5` (accepted main `96151f6`) reruns only the pinned sample `354ab3c160472e6676a5aeb06fad8e554cd4d689` in ordinary and declared modes, using its unchanged project/config. Exact nested class-transformer 0.5.1 operation identity resolves, but the bounded delegate-capability query is incomplete. It supplies only unresolved-delegate mutation evidence, without conditional-copy or freshness authority. All three Job appliers have explicit unknown entry-point roles, never proven replay; their assignments remain extracted and may-write evidence stays true. Both the rebuilt CLI and static model remove exactly the three original finding objects, with no additions, problems or stderr, and all extracted method field effects match the preceding integrated snapshot. Earlier stopped phases and three-removal receipts remain historical. The full fourteen-repository tables below do not verify this corrected integrated source. These focused receipts did not establish whole-public or full-gate acceptance; the final integrated comparison above supersedes this checkpoint.
+
+The issue #126 re-run compared a fresh build of main `1514795` with the implementation branch on the fourteen public repositories in Setup, verifying each checkout against its recorded commit. It used the same project and config arguments from the existing validation manifest, with no config, repository, dependency or shared-harness changes. Each command was `node <build>/dist/cli.js check --format json -p <recorded-project> -c <recorded-config>`, run from that repository's recorded directory. The runner excluded the private reference repository and captured every JSON report, stderr and exit code outside the harness. The private reference repository was neither read nor rerun; its maintainer validation remains a separate gate.
+
+| Repository | Main findings | Branch findings | Main / branch exit |
+|---|---:|---:|---|
+| kyhsa93 | 11 | 11 | 1 / 1 |
+| bitloops | 5 | 5 | 1 / 1 |
+| undb | 2 | 2 | 1 / 1 |
+| Sairyss | 0 | 0 | 0 / 0 |
+| ddd-forum | 5 | 5 | 1 / 1 |
+| codely | 0 | 0 | 2 / 2 |
+| daruma | 13 | 13 | 1 / 1 |
+| Booking-System | 10 | 10 | 1 / 1 |
+| ticket-sale | 6 | 6 | 1 / 1 |
+| schulcloud-server | 18 | 18 | 1 / 1 |
+| SiweAuthMicroservice | 3 | 3 | 1 / 1 |
+| typescript-event-sourcing-sample-app | 3 | 0 | 1 / 0 |
+| adonisjs/application | 0 | 0 | 0 / 0 |
+| openlayers | 0 | 0 | 0 / 0 |
+| **Public total** | **76** | **73** | |
+
+The only delta is removal of the three false `terminal-state-leak` findings for `Job.applyJobCreated`, `applyJobUpdated` and `applyJobArchived`. The sample config has no `allowAfterTerminal` workaround. Its base `AggregateRoot` computes `apply` plus the event's `eventName`, calls that member on `this`, and forwards events from `loadFromHistory` to the same dispatcher. The workspace import resolves to a declaration file; its explicit declaration map points to the already-loaded project source containing those bodies. All three event types initialize `eventName` from their class's `.name`. Commands `updateInfo` and `archive` retain their existing analysis. Every other repository's full JSON, stderr and exit code is byte-identical to the rebuilt baseline; all stderr is unchanged, including codely's missing-config error. The historical totals below describe the earlier runs; this public-only comparison supersedes their sample-app triage without implying a private-repository rerun.
+
+Independent probes outside the repository use a different `when<EventName>` dispatcher and `restore(history)` replay method. They verify the false-finding target, ordinary similarly named commands, direct internal and external command calls, inherited dispatch and dispatcher overrides. Arbitrary dynamic keys, unresolved bases and declaration-only bases without mapped source retain their earlier results, rather than gaining an exemption based on method names. A combined probe retains its real outside mutation and unhandled-event finding while removing only the replay-applier leaks. Missing or ambiguous maps and unsupported replay shapes are not inferred. Focused tests also retain assignment facts, exclude replay-only appliers from transition checks and seeding, and reject evidence from nested foreign `this`, overwritten discriminators and replaced mapped-source dispatch/replay methods.
+
+The coordinator final-review fix re-run compared fresh main `0e57535` (PR135) with the corrected issue #126 branch at the same fourteen public commits and manifest configs. Main is byte-identical to the earlier rebuilt `1514795` baseline in every JSON report, stderr and exit code. The branch again reports 73 public findings against main's 76: exactly the three Job applier false leaks disappear, with the sample exiting 0, and every other finding, stderr and exit is unchanged. No private repository was read or rerun.
+
+This fix round also checks 28 independent external projects with both builds. Bulk dispatcher/replay/discriminator replacements, initializer aliases and native invocation wrappers, forwarded-binding reassignment and history mutations preserve ordinary command findings. Valid replay, known unrelated bulk keys and separate plain-result DTO writes preserve the applier exclusion. The latter has a focused regression because a project-wide unknown-key-write check initially rejected the sample's serializer copy; receiver member/type/alias correlation fixes that without a method or filename exception. Every non-terminal-leak finding remains identical across the probe builds, including the outside-mutation and unhandled-event controls. Coordinator independent final review, private-reference validation and complete CI remain separate gates.
 ## Event self-reference and import-order re-run
 
 The issue [#125](https://github.com/mannkostir/domain-integrity/issues/125) re-run compared accepted main `15147959bb608e2b001acfa8006e338ccf7d4ec2` with the fix on `batch-125`, using all fourteen public repositories at the Setup commits and their existing installed dependencies. The harness and repositories were read-only; no dependency, source or shared config changed. The private reference repository was not accessed and still needs a maintainer re-run. The historical counts below retain the setup of each earlier run.
@@ -132,6 +193,14 @@ All seven additions are real. The public declared-event total now contains 20 `u
 The declared comparisons used the original configs. The ordinary comparison copied only the three configs containing event declarations, removed those lists, made their imports absolute, and used explicit copies of the original tsconfig root-file lists excluding the original config. This avoids analysing the original config's event list as a value escape. The copied tsconfigs extend the originals, retain their project references, and set `rootDir` to `/` solely to allow the external config files; neither source roots nor analysis flags changed. Other ordinary comparisons used the original configs. An initial runner that left the original config in the program or could not resolve the helper package was corrected; its results are not used for these totals.
 
 Seventeen out-of-repository CLI probes cover both directions: plain construction, own generic parameter, own matching string, first/second/aliased/type imports, named re-export, external generic and union parameters, external string topics, external and self value escapes, `new this()`, self construction, `instanceof` and subclasses with handlers. All branch expectations pass. Behavioral tests also exercise `dead-handler`, both saga consumers, local and type re-exports, default-export escapes and self factories; the final 29-case regression spec has seven failures on accepted main and passes on the branch. A separate reference test preserves matching strings in another source file even when their text positions overlap the event declaration.
+
+### Historical receiver recovery checkpoint
+
+The focused receiver/target recovery re-run uses accepted main `4f2be2a` (PR137), after its event-reference fixes, and the same fourteen public commit pins and recorded declared configs. The freshly rebuilt main reports **83** findings and the receiver-scoped issue #126 branch reports **80**. Only the three Job applier leaks disappear, exit1 to0. Every other full JSON report and exit code, and every stderr, is unchanged. These accepted-base totals supersede the earlier issue #126 comparisons for current integration; ordinary-config counts were not rerun.
+
+The recovery checks 44 independent probe projects against both builds. Fresh bulk-copy targets, unrelated fresh records/arrays and unrelated class receivers (including classes with same-named protocol members) preserve quiet appliers. Actual constructor, external and declaration-mapped replacements remain judged. Receiver aliases include subsequent binding writes, so an initializer `{}` followed by `alias = this` cannot supply a freshness proof in direct or mapped bases. The write query carries the expected method/discriminator declaration and canonical class identity, and bulk targets survive aliases, native invocation wrappers and unknown source spreads. Event discriminator mutations affect only the corresponding event owner; unrelated event appliers stay quiet. Ordinary/direct commands and all unrelated-analysis findings remain present. All non-terminal-leak probe findings match between builds. Private validation, root independent re-review and final frozen-source full gates remain coordinator/maintainer work; this recovery ran focused verification only.
+
+The receiver-recovery totals above belong to that historical checkpoint. They do not verify the current integrated issue #126 candidate, whose actual pinned sample must be rechecked against the accepted post-#128 base.
 
 ## Guard and constructor-data re-run — 2026-11-16
 
@@ -208,7 +277,7 @@ Public validation does not establish the six local gates or installed-package ve
 
   The first run produced 66 findings. 27 of them were false positives from one pattern, private event-sourcing appliers. The leak and drift checks now judge only public methods, which removes all 27. The one remaining false positive, kyhsa93 `close` after `lockedAt`, goes away when `close` is listed in `allowAfterTerminal` inside the `lockedAt` field, which left 41 findings before methods that only keep books stopped being judged. All 5 earlier bitloops findings are reported again once its library members are listed in `inertMembers`.
 - **Event-flow findings:** 15 in the first ten repositories, all real: ddd-forum `handler-payload-mismatch` for `AfterPostVotesChanged.onPostVotesChanged`, Booking-System `undispatched-events` for `AggregateRoot._domainEvents`, and 13 `unhandled-event`, 4 in ddd-forum and 9 in Booking-System, with the `events.inProcess` lists of the event-flow declaration re-run. With lifecycle findings, 55 in total with ddd-forum listing `inertEventMethods`, and 54 without it. That run missed 7 declared events that are constructed and have no handler: 4 in domain-driven-hexagon and 3 in Booking-System; the issue #125 re-run above now reports all seven. `saga-missing-failure-path` has not run on a real repository, because none has a saga with a success and a failure outcome; it is marked experimental.
-- **Broadened set:** 24 more lifecycle findings and no event-flow finding in the five added repositories:
+- **Broadened set, before issue #126:** 24 more lifecycle findings and no event-flow finding in the five added repositories:
   - 13 real;
   - 8 intended;
   - 3 false positives, typescript-event-sourcing-sample-app's public `applyJobCreated`, `applyJobUpdated` and `applyJobArchived` after `ARCHIVED`, which go away when they are listed in `allowAfterTerminal`.
@@ -446,9 +515,9 @@ Event sourcing on a project `AggregateRoot` in the workspace package `@cqrs-es/c
 
 | check | aggregate.method | verdict | reason |
 |---|---|---|---|
-| terminal-state-leak (status) | Job.applyJobCreated | false positive (resolved by configuration) | an event applier, reached only through `applyChange` and `loadFromHistory`; it is public only because it has no modifier, the shape daruma-backend's private appliers had. Listing the three appliers in `allowAfterTerminal` leaves no finding |
-| terminal-state-leak (status) | Job.applyJobUpdated | false positive (resolved by configuration) | same |
-| terminal-state-leak (status) | Job.applyJobArchived | false positive (resolved by configuration) | same |
+| terminal-state-leak (status) | Job.applyJobCreated | false positive (resolved by analysis) | an event applier identified through computed dispatch and history replay; issue #126 removes the finding without an `allowAfterTerminal` workaround |
+| terminal-state-leak (status) | Job.applyJobUpdated | false positive (resolved by analysis) | same |
+| terminal-state-leak (status) | Job.applyJobArchived | false positive (resolved by analysis) | same |
 
 `init` suggested `status: JobStatus.ARCHIVED` and needed no edit. `updateInfo()` has a real leak, an archived job can still be updated, but it stays silent: `applyChange` exists only in a declaration file, so it counts as reading `status`. That silence is right, because `applyChange` runs the appliers, one of which writes `status`. `archive()` is guarded by `if (this.status === JobStatus.ARCHIVED) throw`.
 
@@ -540,13 +609,14 @@ A re-run with tsconfigs that include only each repository's `domain` directories
 The first was not fixed, because it needs a design change rather than a correction of an existing rule. Issues 2 to 4 were found by the broadened-set run, and 5 and 6 by the seeded-transitions run; neither run changes the analyzer.
 
 1. **Aggregates that leak `this` silence methods that read object fields.** An aggregate leaks `this` when its project class family (its project base classes and project subclasses) lets `this` or `this.props` escape anywhere, or contains an arrow function that references `this` other than a direct callback of `filter`, `map`, `some`, `every`, `find`, `findIndex`, `forEach`, `reduce`, `flatMap` or `sort` called on a built-in array or tuple. Factory members are static members and any member that calls `new` on a class in the family, such as `clone()`, including constructors, property initializers and accessors. Inside a factory member, a variable or parameter is treated like `this` when it is typed as the aggregate, initialized with `new` on a class in the family, or assigned one with `=`, `??=`, `||=` or `&&=`, whatever its declared type. It leaks when it escapes or is captured by any function other than a direct array callback, except in a bare `return v;`, which is how a factory hands back the instance it built; `return Result.ok(v)` is an escape. Two forms that only copy values are not leaks: `Object.assign(this, …)` or `Object.assign(this.props, …)` as a statement whose result is discarded, and a spread of `this` or `this.props` inside an object literal. In a leaking aggregate every project data field whose type is not primitive (string, number, boolean, bigint, symbol, literal, enum, or a built-in TypeScript library type such as `Date` whose type arguments are primitive and which has no index signature) counts as reading the state field. In an aggregate that does not leak, project data fields never count, whatever their type. The leak check does not see every way to wire a back-reference. These shapes are not seen, and a guard through a field wired by them is read as no guard, which can produce a false leak: a factory or service outside the class, for example `agg.policy = new Policy(agg)` or `agg.canEdit = () => agg.isOpen()`; the instance held inside another object (`box.o.policy.owner = box.o`); and a module-level factory function. None of the validation repositories is affected by the unseen shapes today.
-2. **Public event-sourcing appliers are judged as commands.** typescript-event-sourcing-sample-app's `applyJobCreated`, `applyJobUpdated` and `applyJobArchived` are public because they have no modifier, and are reached only through `applyChange` and `loadFromHistory`, which dispatch to `apply<EventName>` by a computed name. They are reported as `terminal-state-leak` after `ARCHIVED`, as daruma-backend's appliers were before they became private. Listing them in `allowAfterTerminal` resolves it by configuration.
 3. **`allowJs` fields assigned in a constructor are barely seen.** `init` suggests none of them, so openlayers gets no config, and a method that reads or writes one before it writes the declared state field is skipped as unknown, so an unguarded method that writes only such fields is never reported. The same class with class fields is analysed as in TypeScript.
 4. **`init` and `#private` fields or `noUnusedLocals`.** `init` writes `#private` field names as bare object keys, which do not type-check, so the config it writes makes `check` exit 2. With no existing config, `init --base-class` exits 2 in a project with `noUnusedLocals`, because its starting config imports `lifecycle` before any lifecycle is added.
 5. **`init` and symbol-keyed fields.** A field keyed by a `unique symbol`, such as one a library base class declares, is suggested under its internal name, for example `__@IS_AUTO_COMMIT_ENABLED@2676`, and written as a bare key, which is a syntax error. The seeded-transitions run met it in daruma and schulcloud-server.
 6. **`init` and classes a module does not export.** daruma's `Foo`, a class in a spec file that the file does not export, is discovered and declared, so the written import does not type-check and `check` exits 2.
 
 ## Resolved during validation
+
+- **Public replay appliers were judged as command entry points.** Issue #126 identifies them from project computed dispatch and a history-replay loop, including workspace sources linked by an explicit declaration map. The sample app now reports none of its three false leaks without config exemptions; direct references keep a method eligible as a command.
 
 - **Infrastructure methods were judged as domain commands.** Any write to `this` made a method a mutator, so kyhsa93 `clearEvents()`, which empties the outbox after persistence, and bitloops `commit()`, which stamps the stream version, were reported after the terminal state. A method whose only writes stamp an `auditFields` field or empty a proven private event array is no longer judged as a domain command; pushing an event still is ([issue #61](https://github.com/mannkostir/domain-integrity/issues/61)). kyhsa93 `clearEvents` is no longer reported, and bitloops `commit` is not once `eventStreamVersion` is listed in `auditFields`.
 - **Project-declared event methods that register `this` hid real leaks.** ddd-forum's `addDomainEvent` pushes the event, passes `this` to the static `DomainEvents.markAggregateForDispatch` registry and logs through `Reflect.getPrototypeOf(this)`, so it is not push-only and its callers, including `User.setAccessToken`, stayed unjudged. Resolved by configuration ([issue #33](https://github.com/mannkostir/domain-integrity/issues/33)): a project lists event methods known not to read aggregate state in `inertEventMethods`, and with `inertEventMethods: ['addDomainEvent']` ddd-forum reports `setAccessToken` after `isDeleted`. The assertion is switched off when the name is declared or written as anything other than a method, or when a class in the aggregate's family is decorated or calls `Object.assign(this, …)`.

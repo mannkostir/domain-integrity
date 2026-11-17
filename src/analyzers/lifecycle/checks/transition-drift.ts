@@ -59,6 +59,6 @@ export const transitionDrift = (aggregate: AggregateModel): TransitionFinding[] 
     if (!transitions) return [];
     const field = fieldOf(aggregate, name);
     return aggregate.methods
-      .filter((method) => method.visibility === 'public')
+      .filter((method) => method.visibility === 'public' && method.entryPoint === 'command')
       .flatMap((method) => driftOf({ aggregate, field, method }, transitions));
   });

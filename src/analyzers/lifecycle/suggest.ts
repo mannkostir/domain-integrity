@@ -90,7 +90,7 @@ type ClassifiedWriter =
 
 const publicWriters = (aggregate: AggregateModel, field: StateField): readonly Writer[] =>
   aggregate.methods
-    .filter((method) => method.visibility === 'public')
+    .filter((method) => method.visibility === 'public' && method.entryPoint === 'command')
     .map((method) => ({ name: method.name, behaviour: method.fields.get(field.name) }))
     .filter((writer): writer is Writer => writer.behaviour !== undefined && writesField(writer.behaviour.sets));
 
