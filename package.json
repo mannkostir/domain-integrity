@@ -71,7 +71,7 @@
     "ajv": "^8.20.0",
     "eslint": "^10.11.0",
     "publint": "^0.3.25",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
     "vitest": "^5.0.3"
